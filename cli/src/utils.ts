@@ -99,7 +99,7 @@ export async function cleanupRepo(repoDir: string, isLocal: boolean): Promise<vo
 }
 
 
-const EXCLUDE = new Set([
+export const EXCLUDE = new Set([
   "node_modules",
   "dist",
   "build",
@@ -237,6 +237,65 @@ export async function replaceInDir(
   }
 }
 
+export const COMPONENT_MARKER = ".projx-component";
+
+export async function readFileOrNull(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+export type ComponentPaths = Record<Component, string>;
+
+export async function writeComponentMarker(
+  dir: string,
+  component: Component,
+): Promise<void> {
+  await writeFile(
+    join(dir, COMPONENT_MARKER),
+    JSON.stringify({ component }, null, 2) + "\n",
+  );
+}
+
+export async function discoverComponentPaths(
+  cwd: string,
+  components: Component[],
+): Promise<ComponentPaths> {
+  const paths: Partial<ComponentPaths> = {};
+
+  const scan = async (dir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (EXCLUDE.has(entry.name)) continue;
+      if (entry.name.startsWith(".")) continue;
+
+      const full = join(dir, entry.name);
+      const marker = join(full, COMPONENT_MARKER);
+      if (existsSync(marker)) {
+        try {
+          const data = JSON.parse(await readFile(marker, "utf-8"));
+          if (components.includes(data.component)) {
+            paths[data.component as Component] = entry.name;
+          }
+        } catch {
+          // invalid marker, skip
+        }
+      }
+    }
+  };
+
+  await scan(cwd);
+
+  for (const c of components) {
+    if (!paths[c]) paths[c] = c;
+  }
+
+  return paths as ComponentPaths;
+}
+
 export function render(
   template: string,
   vars: Record<string, unknown>,
@@ -270,8 +329,15 @@ export function render(
     if (stack.length > 0 && stack.some((v) => !v)) continue;
 
     const replaced = line.replace(
-      /<%=\s*(\w+)\s*%>/g,
-      (_, key) => String(vars[key as string] ?? ""),
+      /<%=\s*([\w.]+)\s*%>/g,
+      (_, expr: string) => {
+        const parts = expr.split(".");
+        let val: unknown = vars;
+        for (const p of parts) {
+          val = (val as Record<string, unknown>)?.[p];
+        }
+        return String(val ?? "");
+      },
     );
     output.push(replaced);
   }

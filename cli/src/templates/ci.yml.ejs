@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: fastapi
+        working-directory: <%= paths.fastapi %>
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v4
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: fastify
+        working-directory: <%= paths.fastify %>
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: fastify/pnpm-lock.yaml
+          cache-dependency-path: <%= paths.fastify %>/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: npx prisma generate
       - run: npx prettier --check .
@@ -50,14 +50,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend
+        working-directory: <%= paths.frontend %>
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: <%= paths.frontend %>/package-lock.json
       - run: npm ci
       - run: npx prettier --check .
       - run: npx eslint 'src/**/*.{ts,tsx}'
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile
+        working-directory: <%= paths.mobile %>
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
@@ -86,14 +86,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: e2e
+        working-directory: <%= paths.e2e %>
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: <%= paths.e2e %>/package-lock.json
       - run: npm ci
       - run: npx prettier --check .
       - run: npx eslint '**/*.ts'
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra/stack
+        working-directory: <%= paths.infra %>/stack
     steps:
       - uses: actions/checkout@v5
       - uses: hashicorp/setup-terraform@v3

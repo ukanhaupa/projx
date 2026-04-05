@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
 import { COMPONENTS, type Component, type Options } from "./utils.js";
 
-const LABELS: Record<Component, { label: string; hint: string }> = {
+export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: "FastAPI", hint: "Python — SQLAlchemy, Alembic, uvicorn" },
   fastify: { label: "Fastify", hint: "Node.js — Prisma, TypeBox, TypeScript" },
   frontend: { label: "Frontend", hint: "React 19 + Vite + React Router" },

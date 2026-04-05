@@ -38,7 +38,7 @@ docker compose -f docker-compose.dev.yml up  # Start with Docker (dev mode)
 ### FastAPI
 
 ```bash
-cd fastapi && cp .env.example .env && uv sync && uv run main.py
+cd <%= paths.fastapi %> && cp .env.example .env && uv sync && uv run main.py
 ```
 
 API docs at `http://localhost:7860/docs`.
@@ -48,7 +48,7 @@ API docs at `http://localhost:7860/docs`.
 ### Fastify
 
 ```bash
-cd fastify && cp .env.example .env && pnpm install && npx prisma migrate dev && pnpm dev
+cd <%= paths.fastify %> && cp .env.example .env && pnpm install && npx prisma migrate dev && pnpm dev
 ```
 
 API docs at `http://localhost:3000/docs`.
@@ -58,7 +58,7 @@ API docs at `http://localhost:3000/docs`.
 ### Frontend
 
 ```bash
-cd frontend && cp .env.example .env && npm install && npm run dev
+cd <%= paths.frontend %> && cp .env.example .env && npm install && npm run dev
 ```
 <% } %>
 <% if (components.includes('mobile')) { %>
@@ -66,7 +66,7 @@ cd frontend && cp .env.example .env && npm install && npm run dev
 ### Mobile
 
 ```bash
-cd mobile && cp .env.example .env && flutter pub get && flutter run
+cd <%= paths.mobile %> && cp .env.example .env && flutter pub get && flutter run
 ```
 <% } %>
 
@@ -74,19 +74,19 @@ cd mobile && cp .env.example .env && flutter pub get && flutter run
 
 ```bash
 <% if (components.includes('fastapi')) { %>
-cd fastapi && uv run pytest
+cd <%= paths.fastapi %> && uv run pytest
 <% } %>
 <% if (components.includes('fastify')) { %>
-cd fastify && pnpm test
+cd <%= paths.fastify %> && pnpm test
 <% } %>
 <% if (components.includes('frontend')) { %>
-cd frontend && npx vitest run
+cd <%= paths.frontend %> && npx vitest run
 <% } %>
 <% if (components.includes('mobile')) { %>
-cd mobile && flutter test
+cd <%= paths.mobile %> && flutter test
 <% } %>
 <% if (components.includes('e2e')) { %>
-cd e2e && npx playwright test
+cd <%= paths.e2e %> && npx playwright test
 <% } %>
 ```
 
@@ -95,3 +95,7 @@ cd e2e && npx playwright test
 ```bash
 npx create-projx@latest update
 ```
+
+---
+
+Scaffolded with [create-projx](https://github.com/ukanhaupa/projx)

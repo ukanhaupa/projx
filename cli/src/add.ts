@@ -4,8 +4,10 @@ import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
   type Component,
+  type ComponentPaths,
   cleanupRepo,
   copyComponent,
+  discoverComponentPaths,
   downloadRepo,
   exec,
   hasCommand,
@@ -13,6 +15,7 @@ import {
   replaceInFile,
   toKebab,
   toSnake,
+  writeComponentMarker,
 } from "./utils.js";
 import {
   generateDockerCompose,
@@ -27,7 +30,8 @@ interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  files: string[];
+  paths?: Record<string, string>;
+  files?: string[];
 }
 
 export async function add(
@@ -84,18 +88,20 @@ async function doAdd(
   repoDir: string,
   skipInstall: boolean,
 ): Promise<void> {
-  const name = detectProjectName(cwd, config.components);
-  const nameSnake = toSnake(name);
   const allComponents = [...config.components, ...toAdd] as Component[];
-  const vars = { projectName: name, components: allComponents };
+  const existingPaths = await discoverComponentPaths(cwd, config.components);
+  const paths: ComponentPaths = { ...existingPaths };
+  for (const c of toAdd) paths[c] = c;
 
-  const newFiles: string[] = [];
+  const name = detectProjectName(cwd, config.components, paths);
+  const nameSnake = toSnake(name);
+  const vars = { projectName: name, components: allComponents, paths };
 
   for (const component of toAdd) {
     const spinner = p.spinner();
     spinner.start(`Adding ${component}/`);
-    const files = await copyComponent(repoDir, component, cwd);
-    newFiles.push(...files.map((f) => `${component}/${f}`));
+    await copyComponent(repoDir, component, cwd);
+    await writeComponentMarker(join(cwd, component), component);
     spinner.stop(`${component}/`);
   }
 
@@ -108,14 +114,8 @@ async function doAdd(
     allComponents.includes("fastapi") || allComponents.includes("fastify");
 
   if (hasBackend || allComponents.includes("frontend")) {
-    await writeFile(
-      join(cwd, "docker-compose.yml"),
-      await generateDockerCompose(vars),
-    );
-    await writeFile(
-      join(cwd, "docker-compose.dev.yml"),
-      await generateDockerComposeDev(vars),
-    );
+    await writeFile(join(cwd, "docker-compose.yml"), await generateDockerCompose(vars));
+    await writeFile(join(cwd, "docker-compose.dev.yml"), await generateDockerComposeDev(vars));
   }
 
   await writeFile(join(cwd, "README.md"), await generateReadme(vars));
@@ -125,10 +125,7 @@ async function doAdd(
   await chmod(join(cwd, ".githooks/pre-commit"), 0o755);
 
   await mkdir(join(cwd, ".github/workflows"), { recursive: true });
-  await writeFile(
-    join(cwd, ".github/workflows/ci.yml"),
-    await generateCiYml(vars),
-  );
+  await writeFile(join(cwd, ".github/workflows/ci.yml"), await generateCiYml(vars));
 
   await writeFile(join(cwd, "setup.sh"), await generateSetupSh(vars));
   await chmod(join(cwd, "setup.sh"), 0o755);
@@ -158,11 +155,11 @@ async function doAdd(
     version: pkg.version,
     components: allComponents,
     createdAt: config.createdAt,
-    files: [...new Set([...config.files, ...newFiles])].sort(),
+    paths,
   };
   await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2));
 
-  p.outro(`Added ${toAdd.join(", ")}. Shared files updated for all ${allComponents.length} components.`);
+  p.outro(`Added ${toAdd.join(", ")}. Shared files updated for all ${allComponents.length} components.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
 }
 
 async function substituteNames(
@@ -270,9 +267,14 @@ async function installDeps(
   }
 }
 
-function detectProjectName(cwd: string, components: Component[]): string {
+function detectProjectName(
+  cwd: string,
+  components: Component[],
+  paths: ComponentPaths,
+): string {
   for (const component of components) {
-    const pkgPath = join(cwd, component, "package.json");
+    const dir = paths[component] ?? component;
+    const pkgPath = join(cwd, dir, "package.json");
     if (existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(

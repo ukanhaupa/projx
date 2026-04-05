@@ -6,12 +6,15 @@ import * as p from "@clack/prompts";
 import {
   COMPONENTS,
   type Component,
+  type ComponentPaths,
   cleanupRepo,
   copyComponent,
+  discoverComponentPaths,
   downloadRepo,
   toKebab,
   toSnake,
   replaceInDir,
+  writeComponentMarker,
 } from "./utils.js";
 import {
   generateDockerCompose,
@@ -25,7 +28,8 @@ interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  files: string[];
+  paths?: Record<string, string>;
+  files?: string[];
 }
 
 const NEVER_OVERWRITE = [
@@ -33,6 +37,7 @@ const NEVER_OVERWRITE = [
   /\.env\.(dev|staging|prod)$/,
   /prisma\/migrations\//,
   /src\/migrations\/versions\//,
+  /\.projx-component$/,
 ];
 
 function isGitRepo(cwd: string): boolean {
@@ -91,9 +96,17 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       version: "0.0.0",
       components: detected,
       createdAt: "unknown",
-      files: [],
     };
     p.log.info(`Detected: ${detected.join(", ")}`);
+  }
+
+  const componentPaths = await discoverComponentPaths(cwd, config.components);
+
+  const remapped = config.components.filter((c) => componentPaths[c] !== c);
+  if (remapped.length > 0) {
+    for (const c of remapped) {
+      p.log.info(`${c} → ${componentPaths[c]}/`);
+    }
   }
 
   const useGitBranch = isGitRepo(cwd);
@@ -132,7 +145,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     p.log.info(`Created branch: ${branchName}`);
 
     try {
-      await doUpdate(cwd, config, repoDir, pkg.version);
+      await doUpdate(cwd, config, repoDir, pkg.version, componentPaths);
     } finally {
       await cleanupRepo(repoDir, isLocal);
     }
@@ -162,7 +175,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     );
 
     try {
-      await doUpdate(cwd, config, repoDir, pkg.version);
+      await doUpdate(cwd, config, repoDir, pkg.version, componentPaths);
     } finally {
       await cleanupRepo(repoDir, isLocal);
     }
@@ -176,20 +189,20 @@ async function doUpdate(
   config: ProjxConfig,
   repoDir: string,
   version: string,
+  componentPaths: ComponentPaths,
 ): Promise<void> {
-  const name = detectProjectName(cwd, config.components);
+  const name = detectProjectName(cwd, config.components, componentPaths);
   const nameSnake = toSnake(name);
-  const vars = { projectName: name, components: config.components };
-
-  const newManifest: string[] = [];
+  const vars = { projectName: name, components: config.components, paths: componentPaths };
 
   for (const component of config.components) {
+    const targetDir = componentPaths[component];
     const spinner = p.spinner();
-    spinner.start(`Updating ${component}/ template files`);
+    spinner.start(`Updating ${targetDir}/ (${component})`);
 
     const componentSrc = join(repoDir, component);
     if (!existsSync(componentSrc)) {
-      spinner.stop(`${component}/ template not found, skipping.`);
+      spinner.stop(`${component} template not found, skipping.`);
       continue;
     }
 
@@ -197,21 +210,24 @@ async function doUpdate(
     const files = await copyComponent(repoDir, component, tmpDest);
 
     for (const file of files) {
-      const rel = `${component}/${file}`;
       const src = join(tmpDest, component, file);
-      const dest = join(cwd, rel);
+      const destRel = `${targetDir}/${file}`;
+      const dest = join(cwd, destRel);
 
-      if (NEVER_OVERWRITE.some((re) => re.test(rel))) continue;
-      if (config.files.length > 0 && !config.files.includes(rel)) continue;
+      if (NEVER_OVERWRITE.some((re) => re.test(destRel))) continue;
 
       const dir = dest.substring(0, dest.lastIndexOf("/"));
       await mkdir(dir, { recursive: true });
       await cp(src, dest, { force: true });
-      newManifest.push(rel);
     }
 
     await rm(tmpDest, { recursive: true, force: true });
-    spinner.stop(`${component}/ updated.`);
+
+    if (!existsSync(join(cwd, targetDir, ".projx-component"))) {
+      await writeComponentMarker(join(cwd, targetDir), component);
+    }
+
+    spinner.stop(`${targetDir}/ updated.`);
   }
 
   const spinner = p.spinner();
@@ -226,38 +242,34 @@ async function doUpdate(
       join(cwd, "docker-compose.yml"),
       await generateDockerCompose(vars),
     );
-    newManifest.push("docker-compose.yml");
 
     await writeFile(
       join(cwd, "docker-compose.dev.yml"),
       await generateDockerComposeDev(vars),
     );
-    newManifest.push("docker-compose.dev.yml");
   }
 
   await mkdir(join(cwd, ".githooks"), { recursive: true });
   const preCommit = await generatePreCommit(vars);
   await writeFile(join(cwd, ".githooks/pre-commit"), preCommit);
   await chmod(join(cwd, ".githooks/pre-commit"), 0o755);
-  newManifest.push(".githooks/pre-commit");
 
   await mkdir(join(cwd, ".github/workflows"), { recursive: true });
   await writeFile(
     join(cwd, ".github/workflows/ci.yml"),
     await generateCiYml(vars),
   );
-  newManifest.push(".github/workflows/ci.yml");
 
   const setupSh = await generateSetupSh(vars);
   await writeFile(join(cwd, "setup.sh"), setupSh);
   await chmod(join(cwd, "setup.sh"), 0o755);
-  newManifest.push("setup.sh");
 
   spinner.stop("Shared files updated.");
 
   if (config.components.includes("mobile")) {
+    const mobilePath = componentPaths.mobile ?? "mobile";
     await replaceInDir(
-      join(cwd, "mobile"),
+      join(cwd, mobilePath),
       "package:projx_mobile/",
       `package:${nameSnake}_mobile/`,
       ".dart",
@@ -268,14 +280,19 @@ async function doUpdate(
     version,
     components: config.components,
     createdAt: config.createdAt,
-    files: [...new Set([...config.files, ...newManifest])].sort(),
+    paths: componentPaths,
   };
   await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2));
 }
 
-function detectProjectName(cwd: string, components: Component[]): string {
+function detectProjectName(
+  cwd: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+): string {
   for (const component of components) {
-    const pkgPath = join(cwd, component, "package.json");
+    const dir = componentPaths[component] ?? component;
+    const pkgPath = join(cwd, dir, "package.json");
     if (existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(

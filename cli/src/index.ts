@@ -6,11 +6,12 @@ import { runPrompts } from "./prompts.js";
 import { scaffold } from "./scaffold.js";
 import { update } from "./update.js";
 import { add } from "./add.js";
+import { init } from "./init.js";
 
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add";
+  command: "create" | "update" | "add" | "init";
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -18,7 +19,7 @@ interface ParsedArgs {
 }
 
 function parseArgs(): ParsedArgs {
-  let command: "create" | "update" | "add" = "create";
+  let command: "create" | "update" | "add" | "init" = "create";
   let name: string | undefined;
   let localRepo: string | undefined;
   const options: Partial<Options> = {};
@@ -34,6 +35,11 @@ function parseArgs(): ParsedArgs {
 
     if (arg === "add" && !name) {
       command = "add";
+      continue;
+    }
+
+    if (arg === "init" && !name) {
+      command = "init";
       continue;
     }
 
@@ -87,6 +93,7 @@ function printHelp(): void {
   console.log(`
   Usage:
     projx <name> [options]        Create a new project
+    projx init                    Adopt existing project into projx
     projx add <components...>     Add components to existing project
     projx update                  Update scaffolding to latest
 
@@ -109,6 +116,11 @@ function printHelp(): void {
 
 async function main(): Promise<void> {
   const { command, name, options, localRepo, extraArgs } = parseArgs();
+
+  if (command === "init") {
+    await init(process.cwd(), localRepo);
+    return;
+  }
 
   if (command === "update") {
     await update(process.cwd(), localRepo);

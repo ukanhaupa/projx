@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { render, sharedTemplateDir, type Component } from "../utils.js";
+import { render, sharedTemplateDir, type Component, type ComponentPaths } from "../utils.js";
 
 interface GeneratorVars {
   projectName: string;
   components: Component[];
+  paths: ComponentPaths;
   [key: string]: unknown;
 }
 

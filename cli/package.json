@@ -1,6 +1,6 @@
 {
   "name": "create-projx",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Scaffold production-grade projects. Pick your stack (FastAPI, Fastify, React, Flutter), get a fully wired template with auth, database, CI/CD, and E2E tests.",
   "type": "module",
   "bin": {
@@ -13,6 +13,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node18 --clean",
     "dev": "tsup src/index.ts --format esm --target node18 --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -26,6 +28,15 @@
     "fullstack",
     "create"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ukanhaupa/projx.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/ukanhaupa/projx#readme",
+  "bugs": {
+    "url": "https://github.com/ukanhaupa/projx/issues"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18"
@@ -39,6 +50,7 @@
     "eslint": "^10.2.0",
     "tsup": "^8",
     "typescript": "^5",
-    "typescript-eslint": "^8.58.0"
+    "typescript-eslint": "^8.58.0",
+    "vitest": "^4.1.2"
   }
 }

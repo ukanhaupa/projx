@@ -1,10 +1,10 @@
 services:
 <% if (components.includes('fastapi')) { %>
   migrate:
-    build: ./fastapi
+    build: ./<%= paths.fastapi %>
     command: ['uv', 'run', 'migrate.py']
     env_file:
-      - ./fastapi/.env
+      - ./<%= paths.fastapi %>/.env
     deploy:
       resources:
         limits:
@@ -14,11 +14,11 @@ services:
       - app-network
 
   backend:
-    build: ./fastapi
+    build: ./<%= paths.fastapi %>
     expose:
       - '7860'
     env_file:
-      - ./fastapi/.env
+      - ./<%= paths.fastapi %>/.env
     restart: unless-stopped
     depends_on:
       migrate:
@@ -52,11 +52,11 @@ services:
 <% } %>
 <% if (components.includes('fastify')) { %>
   backend-fastify:
-    build: ./fastify
+    build: ./<%= paths.fastify %>
     expose:
       - '3000'
     env_file:
-      - ./fastify/.env
+      - ./<%= paths.fastify %>/.env
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/health']
@@ -77,7 +77,7 @@ services:
 <% if (components.includes('frontend')) { %>
   frontend:
     build:
-      context: ./frontend
+      context: ./<%= paths.frontend %>
       args:
         VITE_API_URL: ''
     ports:

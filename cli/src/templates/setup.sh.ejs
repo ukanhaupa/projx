@@ -5,28 +5,28 @@ git config core.hooksPath .githooks
 echo "Git hooks configured."
 <% if (components.includes('fastapi')) { %>
 
-cd fastapi && uv sync --all-extras && cd ..
+cd <%= paths.fastapi %> && uv sync --all-extras && cd ..
 echo "FastAPI dependencies installed."
 <% } %>
 <% if (components.includes('fastify')) { %>
 
-cd fastify && pnpm install --frozen-lockfile && cd ..
+cd <%= paths.fastify %> && pnpm install --frozen-lockfile && cd ..
 echo "Fastify dependencies installed."
 <% } %>
 <% if (components.includes('frontend')) { %>
 
-cd frontend && npm ci && cd ..
+cd <%= paths.frontend %> && npm ci && cd ..
 echo "Frontend dependencies installed."
 <% } %>
 <% if (components.includes('e2e')) { %>
 
-cd e2e && npm ci && cd ..
+cd <%= paths.e2e %> && npm ci && cd ..
 echo "E2E dependencies installed."
 <% } %>
 <% if (components.includes('mobile')) { %>
 
 if command -v flutter &>/dev/null; then
-  cd mobile && flutter pub get && cd ..
+  cd <%= paths.mobile %> && flutter pub get && cd ..
   echo "Flutter dependencies installed."
 else
   echo "Flutter SDK not installed — skipping mobile."

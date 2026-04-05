@@ -25,7 +25,7 @@ services:
 <% } %>
 <% if (components.includes('fastapi')) { %>
   migrate:
-    build: ./fastapi
+    build: ./<%= paths.fastapi %>
     command: ['uv', 'run', 'migrate.py']
     environment:
       - SQLALCHEMY_DATABASE_URI=postgresql+asyncpg://dev:dev@db:5432/app
@@ -41,7 +41,7 @@ services:
       - app-network
 
   backend:
-    build: ./fastapi
+    build: ./<%= paths.fastapi %>
     command:
       [
         'uv', 'run', 'uvicorn', 'src.app:app',
@@ -57,9 +57,9 @@ services:
       - JWT_SECRET=dev-secret-that-is-at-least-32-bytes-long
       - JWT_ALGORITHMS=HS256
     volumes:
-      - ./fastapi/src:/app/src
-      - ./fastapi/alembic.ini:/app/alembic.ini
-      - ./fastapi/migrate.py:/app/migrate.py
+      - ./<%= paths.fastapi %>/src:/app/src
+      - ./<%= paths.fastapi %>/alembic.ini:/app/alembic.ini
+      - ./<%= paths.fastapi %>/migrate.py:/app/migrate.py
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -84,7 +84,7 @@ services:
 <% } %>
 <% if (components.includes('fastify')) { %>
   backend-fastify:
-    build: ./fastify
+    build: ./<%= paths.fastify %>
     command: ['pnpm', 'dev']
     ports:
       - '3000:3000'
@@ -94,7 +94,7 @@ services:
       - JWT_PROVIDER=shared_secret
       - JWT_SECRET=dev-secret-that-is-at-least-32-bytes-long
     volumes:
-      - ./fastify/src:/app/src
+      - ./<%= paths.fastify %>/src:/app/src
     depends_on:
       db:
         condition: service_healthy
@@ -128,7 +128,7 @@ services:
       - VITE_API_URL=http://localhost:3000
 <% } %>
     volumes:
-      - ./frontend:/app
+      - ./<%= paths.frontend %>:/app
       - frontend_node_modules:/app/node_modules
 <% if (components.includes('fastapi')) { %>
     depends_on:

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
   type Component,
+  type ComponentPaths,
   type Options,
   cleanupRepo,
   copyComponent,
@@ -15,6 +16,7 @@ import {
   replaceInFile,
   toKebab,
   toSnake,
+  writeComponentMarker,
 } from "./utils.js";
 import {
   generateDockerCompose,
@@ -28,7 +30,10 @@ import {
 export async function scaffold(opts: Options, dest: string, localRepo?: string): Promise<void> {
   const name = toKebab(opts.name);
   const nameSnake = toSnake(opts.name);
-  const vars = { projectName: name, components: opts.components };
+  const paths = Object.fromEntries(
+    opts.components.map((c) => [c, c]),
+  ) as ComponentPaths;
+  const vars = { projectName: name, components: opts.components, paths };
   const isLocal = !!localRepo;
 
   await mkdir(dest, { recursive: true });
@@ -55,17 +60,15 @@ async function doScaffold(
   repoDir: string,
   name: string,
   nameSnake: string,
-  vars: { projectName: string; components: Component[] },
+  vars: { projectName: string; components: Component[]; paths: ComponentPaths },
 ): Promise<void> {
   p.log.info(`Scaffolding project in ${dest}`);
-
-  const manifest: string[] = [];
 
   for (const component of opts.components) {
     const spinner = p.spinner();
     spinner.start(`Copying ${component}/`);
-    const files = await copyComponent(repoDir, component, dest);
-    manifest.push(...files.map((f) => `${component}/${f}`));
+    await copyComponent(repoDir, component, dest);
+    await writeComponentMarker(join(dest, component), component);
     spinner.stop(`${component}/`);
   }
 
@@ -76,37 +79,23 @@ async function doScaffold(
     opts.components.includes("fastify");
 
   if (hasBackend || opts.components.includes("frontend")) {
-    const dc = await generateDockerCompose(vars);
-    await writeFile(join(dest, "docker-compose.yml"), dc);
-    manifest.push("docker-compose.yml");
-
-    const dcDev = await generateDockerComposeDev(vars);
-    await writeFile(join(dest, "docker-compose.dev.yml"), dcDev);
-    manifest.push("docker-compose.dev.yml");
+    await writeFile(join(dest, "docker-compose.yml"), await generateDockerCompose(vars));
+    await writeFile(join(dest, "docker-compose.dev.yml"), await generateDockerComposeDev(vars));
   }
 
-  const readme = await generateReadme(vars);
-  await writeFile(join(dest, "README.md"), readme);
-  manifest.push("README.md");
+  await writeFile(join(dest, "README.md"), await generateReadme(vars));
 
   await mkdir(join(dest, ".githooks"), { recursive: true });
-  const preCommit = await generatePreCommit(vars);
-  await writeFile(join(dest, ".githooks/pre-commit"), preCommit);
+  await writeFile(join(dest, ".githooks/pre-commit"), await generatePreCommit(vars));
   await chmod(join(dest, ".githooks/pre-commit"), 0o755);
-  manifest.push(".githooks/pre-commit");
 
   await mkdir(join(dest, ".github/workflows"), { recursive: true });
-  const lintYml = await generateCiYml(vars);
-  await writeFile(join(dest, ".github/workflows/ci.yml"), lintYml);
-  manifest.push(".github/workflows/ci.yml");
+  await writeFile(join(dest, ".github/workflows/ci.yml"), await generateCiYml(vars));
 
-  const setupSh = await generateSetupSh(vars);
-  await writeFile(join(dest, "setup.sh"), setupSh);
+  await writeFile(join(dest, "setup.sh"), await generateSetupSh(vars));
   await chmod(join(dest, "setup.sh"), 0o755);
-  manifest.push("setup.sh");
 
-  const staticFiles = await copyStaticFiles(repoDir, dest);
-  manifest.push(...staticFiles);
+  await copyStaticFiles(repoDir, dest);
 
   const pkg = JSON.parse(
     await readFile(join(repoDir, "cli/package.json"), "utf-8"),
@@ -115,7 +104,7 @@ async function doScaffold(
     version: pkg.version,
     components: opts.components,
     createdAt: new Date().toISOString().split("T")[0],
-    files: manifest.sort(),
+    paths: vars.paths,
   };
   await writeFile(join(dest, ".projx"), JSON.stringify(projxConfig, null, 2));
 
@@ -145,7 +134,7 @@ async function doScaffold(
     }
   }
 
-  p.outro(`Done! Next steps:\n\n  cd ${name}\n  ./setup.sh`);
+  p.outro(`Done! Next steps:\n\n  cd ${name}\n  ./setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
 }
 
 async function substituteNames(
