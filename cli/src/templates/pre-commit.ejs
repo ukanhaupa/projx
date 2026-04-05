@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -e
+
+# ── Secret detection ──────────────────────────────────────────────
+STAGED_DIFF="$(git diff --cached --diff-filter=ACMR)"
+
+if echo "$STAGED_DIFF" | grep -qE '(AKIA|ASIA)[A-Z0-9]{16}'; then
+  echo "ERROR: Possible AWS access key detected in staged changes."
+  exit 1
+fi
+
+if echo "$STAGED_DIFF" | grep -qE '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' 2>/dev/null; then
+  REAL_SECRETS="$(echo "$STAGED_DIFF" | grep -E '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' | grep -vE '(test-secret|dev-secret|example|placeholder|your-|changeme|CHANGE_ME)' || true)"
+  if [ -n "$REAL_SECRETS" ]; then
+    echo "WARNING: Possible secret detected in staged changes:"
+    echo "$REAL_SECRETS" | head -5
+    echo "If intentional, commit with: git commit --no-verify"
+    exit 1
+  fi
+fi
+
+STAGED_ENV_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(\.env$|.*\/\.env$|.*\.env\.(prod|staging|dev)$)' || true)"
+if [ -n "$STAGED_ENV_FILES" ]; then
+  echo "ERROR: .env file(s) staged for commit:"
+  echo "$STAGED_ENV_FILES"
+  exit 1
+fi
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+<% if (components.includes('fastapi')) { %>
+
+FASTAPI_PY=$(echo "$STAGED_FILES" | grep '^<%= paths.fastapi %>/.*\.py$' || true)
+if [ -n "$FASTAPI_PY" ]; then
+  echo "Formatting & linting <%= paths.fastapi %>..."
+  cd <%= paths.fastapi %>
+  echo "$FASTAPI_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff format
+  echo "$FASTAPI_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff check --fix
+  cd ..
+  echo "$FASTAPI_PY" | xargs git add
+fi
+<% } %>
+<% if (components.includes('fastify')) { %>
+
+FASTIFY_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.fastify %>/.*\.ts$' || true)
+FASTIFY_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.fastify %>/' || true)
+if [ -n "$FASTIFY_ALL" ]; then
+  echo "Formatting <%= paths.fastify %>..."
+  cd <%= paths.fastify %>
+  echo "$FASTIFY_ALL" | sed 's|^<%= paths.fastify %>/||' | xargs npx prettier --write --ignore-unknown
+  if [ -n "$FASTIFY_TS" ]; then
+    echo "$FASTIFY_TS" | sed 's|^<%= paths.fastify %>/||' | xargs npx eslint --fix
+    npx tsc --noEmit
+  fi
+  cd ..
+  echo "$FASTIFY_ALL" | xargs git add
+fi
+<% } %>
+<% if (components.includes('frontend')) { %>
+
+FRONTEND_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.frontend %>/.*\.tsx\?$' || true)
+FRONTEND_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.frontend %>/' || true)
+if [ -n "$FRONTEND_ALL" ]; then
+  echo "Formatting <%= paths.frontend %>..."
+  cd <%= paths.frontend %>
+  echo "$FRONTEND_ALL" | sed 's|^<%= paths.frontend %>/||' | xargs npx prettier --write --ignore-unknown
+  if [ -n "$FRONTEND_TS" ]; then
+    echo "$FRONTEND_TS" | sed 's|^<%= paths.frontend %>/||' | xargs npx eslint --fix
+    npx tsc --noEmit
+  fi
+  cd ..
+  echo "$FRONTEND_ALL" | xargs git add
+fi
+<% } %>
+<% if (components.includes('e2e')) { %>
+
+E2E_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.e2e %>/.*\.ts$' || true)
+E2E_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.e2e %>/' || true)
+if [ -n "$E2E_ALL" ]; then
+  echo "Formatting <%= paths.e2e %>..."
+  cd <%= paths.e2e %>
+  echo "$E2E_ALL" | sed 's|^<%= paths.e2e %>/||' | xargs npx prettier --write --ignore-unknown
+  if [ -n "$E2E_TS" ]; then
+    echo "$E2E_TS" | sed 's|^<%= paths.e2e %>/||' | xargs npx eslint --fix
+    npx tsc --noEmit
+  fi
+  cd ..
+  echo "$E2E_ALL" | xargs git add
+fi
+<% } %>
+<% if (components.includes('mobile')) { %>
+
+MOBILE_DART=$(echo "$STAGED_FILES" | grep '^<%= paths.mobile %>/.*\.dart$' || true)
+if [ -n "$MOBILE_DART" ]; then
+  if command -v dart &> /dev/null; then
+    echo "Formatting <%= paths.mobile %>..."
+    cd <%= paths.mobile %>
+    echo "$MOBILE_DART" | sed 's|^<%= paths.mobile %>/||' | xargs dart format
+    if command -v flutter &> /dev/null; then
+      dart analyze --fatal-infos
+    fi
+    cd ..
+    echo "$MOBILE_DART" | xargs git add
+  else
+    echo "Skipping mobile lint (dart not installed)"
+  fi
+fi
+<% } %>
+<% if (components.includes('infra')) { %>
+
+INFRA_TF=$(echo "$STAGED_FILES" | grep '^<%= paths.infra %>/.*\.tf$' || true)
+if [ -n "$INFRA_TF" ]; then
+  if command -v terraform &> /dev/null; then
+    echo "Formatting <%= paths.infra %>..."
+    cd <%= paths.infra %>/stack
+    echo "$INFRA_TF" | sed 's|^<%= paths.infra %>/stack/||' | xargs terraform fmt
+    cd ../..
+    echo "$INFRA_TF" | xargs git add
+  else
+    echo "Skipping infra lint (terraform not installed)"
+  fi
+fi
+<% } %>

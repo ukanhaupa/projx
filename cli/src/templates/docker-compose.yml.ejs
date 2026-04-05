@@ -1,0 +1,108 @@
+services:
+<% if (components.includes('fastapi')) { %>
+  migrate:
+    build: ./<%= paths.fastapi %>
+    command: ["uv", "run", "migrate.py"]
+    env_file:
+      - ./<%= paths.fastapi %>/.env
+    networks:
+      - app-network
+
+  backend:
+    build: ./<%= paths.fastapi %>
+    expose:
+      - "7860"
+    env_file:
+      - ./<%= paths.fastapi %>/.env
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - app-network
+<% } %>
+<% if (components.includes('fastify')) { %>
+  backend-fastify:
+    build: ./<%= paths.fastify %>
+    expose:
+      - "3000"
+    env_file:
+      - ./<%= paths.fastify %>/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - app-network
+<% } %>
+<% if (components.includes('frontend')) { %>
+  frontend:
+    build:
+      context: ./<%= paths.frontend %>
+      args:
+        VITE_API_URL: ""
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+<% if (components.includes('fastapi')) { %>
+    depends_on:
+      backend:
+        condition: service_healthy
+<% } %>
+<% if (components.includes('fastify') && !components.includes('fastapi')) { %>
+    depends_on:
+      backend-fastify:
+        condition: service_healthy
+<% } %>
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+    profiles:
+      - ssl
+    networks:
+      - app-network
+<% } %>
+<% if (components.includes('frontend')) { %>
+volumes:
+  letsencrypt:
+  certbot-www:
+<% } %>
+
+networks:
+  app-network:
+    driver: bridge

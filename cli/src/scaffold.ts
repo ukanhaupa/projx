@@ -1,0 +1,142 @@
+import { copyFileSync, existsSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import * as p from "@clack/prompts";
+import {
+  type Component,
+  type ComponentPaths,
+  type Options,
+  cleanupRepo,
+  downloadRepo,
+  exec,
+  hasCommand,
+  toKebab,
+} from "./utils.js";
+import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
+
+export async function scaffold(opts: Options, dest: string, localRepo?: string): Promise<void> {
+  const name = toKebab(opts.name);
+  const paths = Object.fromEntries(
+    opts.components.map((c) => [c, c]),
+  ) as ComponentPaths;
+  const vars: GeneratorVars = { projectName: name, components: opts.components, paths };
+  const isLocal = !!localRepo;
+
+  await mkdir(dest, { recursive: true });
+
+  const dlSpinner = p.spinner();
+  dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");
+  const repoDir = await downloadRepo(localRepo).catch((err) => {
+    dlSpinner.stop("Failed.");
+    p.log.error(String(err));
+    process.exit(1);
+  });
+  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+
+  try {
+    const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
+    const version = pkg.version;
+
+    p.log.info(`Scaffolding project in ${dest}`);
+
+    if (opts.git) {
+      exec("git init", dest);
+      exec("git config core.hooksPath .githooks", dest);
+    }
+
+    const spinner = p.spinner();
+    spinner.start("Scaffolding project");
+    await applyTemplate(dest, repoDir, opts.components, paths, vars, version);
+    spinner.stop("Scaffold complete.");
+
+    if (opts.install) {
+      await installDeps(dest, opts.components);
+    }
+
+    copyEnvExamples(dest, opts.components);
+
+    if (opts.git) {
+      try {
+        exec("git add -A", dest);
+        exec('git commit --no-verify -m "Initial scaffold from projx"', dest);
+        saveBaselineRef(dest);
+      } catch {
+        // deps/env may add untracked files
+      }
+    }
+  } finally {
+    await cleanupRepo(repoDir, isLocal);
+  }
+
+  p.outro(`Done! Next steps:\n\n  cd ${name}\n  ./setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
+}
+
+async function installDeps(
+  dest: string,
+  components: Component[],
+): Promise<void> {
+  for (const component of components) {
+    const spinner = p.spinner();
+    try {
+      switch (component) {
+        case "fastapi":
+          if (hasCommand("uv")) {
+            spinner.start("Installing FastAPI dependencies (uv sync)");
+            exec("uv sync --all-extras", join(dest, "fastapi"));
+            spinner.stop("FastAPI dependencies installed.");
+          } else {
+            p.log.warn("uv not found — run 'cd fastapi && uv sync' manually.");
+          }
+          break;
+        case "fastify":
+          if (hasCommand("pnpm")) {
+            spinner.start("Installing Fastify dependencies (pnpm install)");
+            exec("pnpm install", join(dest, "fastify"));
+            spinner.stop("Fastify dependencies installed.");
+          } else {
+            spinner.start("Installing Fastify dependencies (npm install)");
+            exec("npm install", join(dest, "fastify"));
+            spinner.stop("Fastify dependencies installed.");
+          }
+          break;
+        case "frontend":
+          spinner.start("Installing Frontend dependencies (npm install)");
+          exec("npm install", join(dest, "frontend"));
+          spinner.stop("Frontend dependencies installed.");
+          break;
+        case "e2e":
+          spinner.start("Installing E2E dependencies (npm install)");
+          exec("npm install", join(dest, "e2e"));
+          spinner.stop("E2E dependencies installed.");
+          break;
+        case "mobile":
+          if (hasCommand("flutter")) {
+            spinner.start("Installing Flutter dependencies");
+            exec("flutter pub get", join(dest, "mobile"));
+            spinner.stop("Flutter dependencies installed.");
+          } else {
+            p.log.warn("Flutter not found — run 'cd mobile && flutter pub get' manually.");
+          }
+          break;
+        case "infra":
+          break;
+      }
+    } catch {
+      spinner.stop(`Failed to install ${component} dependencies.`);
+    }
+  }
+}
+
+function copyEnvExamples(dest: string, components: Component[]): void {
+  for (const component of components) {
+    const example = join(dest, component, ".env.example");
+    const env = join(dest, component, ".env");
+    if (existsSync(example) && !existsSync(env)) {
+      try {
+        copyFileSync(example, env);
+      } catch {
+        // non-critical
+      }
+    }
+  }
+}
