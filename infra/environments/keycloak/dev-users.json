@@ -1,0 +1,38 @@
+[
+    {
+        "username": "dev-admin",
+        "enabled": true,
+        "emailVerified": true,
+        "firstName": "Dev",
+        "lastName": "Admin",
+        "email": "dev-admin@example.local",
+        "groups": [
+            "/admins"
+        ],
+        "credentials": [
+            {
+                "type": "password",
+                "value": "ChangeMeDevAdmin!123",
+                "temporary": true
+            }
+        ]
+    },
+    {
+        "username": "dev-user",
+        "enabled": true,
+        "emailVerified": true,
+        "firstName": "Dev",
+        "lastName": "User",
+        "email": "dev-user@example.local",
+        "groups": [
+            "/readers"
+        ],
+        "credentials": [
+            {
+                "type": "password",
+                "value": "ChangeMeDevUser!123",
+                "temporary": true
+            }
+        ]
+    }
+]

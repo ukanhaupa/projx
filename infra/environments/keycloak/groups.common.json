@@ -1,0 +1,38 @@
+[
+    {
+        "name": "admins",
+        "realmRoles": [
+            "admin"
+        ]
+    },
+    {
+        "name": "shipper-admins",
+        "realmRoles": [
+            "shipper_admin"
+        ]
+    },
+    {
+        "name": "shipper-location-managers",
+        "realmRoles": [
+            "shipper_location_manager"
+        ]
+    },
+    {
+        "name": "carriers",
+        "realmRoles": [
+            "carrier"
+        ]
+    },
+    {
+        "name": "drivers",
+        "realmRoles": [
+            "driver"
+        ]
+    },
+    {
+        "name": "readers",
+        "realmRoles": [
+            "api_reader"
+        ]
+    }
+]

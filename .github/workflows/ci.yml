@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  cli:
+    name: CLI (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'cli/') }}
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci
+      - run: npx eslint 'src/**/*.ts'
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  fastapi:
+    name: FastAPI (format + lint)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'fastapi/') }}
+    defaults:
+      run:
+        working-directory: fastapi
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --group dev
+      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests
+
+  fastify:
+    name: Fastify (format + lint + typecheck)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'fastify/') }}
+    defaults:
+      run:
+        working-directory: fastify
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: fastify/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+      - run: npx prettier --check .
+      - run: npx eslint .
+      - run: npx tsc --noEmit
+
+  frontend:
+    name: Frontend (format + lint + typecheck)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'frontend/') }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npx eslint 'src/**/*.{ts,tsx}'
+      - run: npx tsc --noEmit
+
+  mobile:
+    name: Flutter (format + analyze)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'mobile/') }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart format --set-exit-if-changed .
+      - run: dart analyze --fatal-infos
+
+  e2e:
+    name: E2E (format + lint + typecheck)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'e2e/') }}
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npx eslint '**/*.ts'
+      - run: npx tsc --noEmit
+
+  infra:
+    name: Terraform (fmt + validate)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'infra/') }}
+    defaults:
+      run:
+        working-directory: infra/stack
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.11'
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate

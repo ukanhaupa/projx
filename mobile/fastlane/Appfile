@@ -1,0 +1,8 @@
+# iOS
+app_identifier("com.example.app")
+apple_id("dev@example.com")
+team_id("TEAM_ID")
+
+# Android
+json_key_file("./fastlane/play-store-key.json")
+package_name("com.example.app")
