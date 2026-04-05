@@ -12,7 +12,7 @@ import {
   hasCommand,
   toKebab,
 } from "./utils.js";
-import { createBaseline, mergeBaseline, type GeneratorVars } from "./baseline.js";
+import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
 
 export async function scaffold(opts: Options, dest: string, localRepo?: string): Promise<void> {
   const name = toKebab(opts.name);
@@ -42,26 +42,12 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
     if (opts.git) {
       exec("git init", dest);
       exec("git config core.hooksPath .githooks", dest);
-
-      const spinner = p.spinner();
-      spinner.start("Creating baseline and scaffold");
-      await createBaseline(dest, repoDir, opts.components, paths, vars, version);
-      const result = mergeBaseline(
-        dest,
-        `projx: initial scaffold from template v${version}`,
-        true,
-      );
-      spinner.stop("Scaffold complete.");
-
-      if (result.status === "conflicts") {
-        p.log.warn("Unexpected conflicts during scaffold — this shouldn't happen.");
-      }
-    } else {
-      const spinner = p.spinner();
-      spinner.start("Copying template files");
-      await createBaseline(dest, repoDir, opts.components, paths, vars, version);
-      spinner.stop("Template files copied.");
     }
+
+    const spinner = p.spinner();
+    spinner.start("Scaffolding project");
+    await applyTemplate(dest, repoDir, opts.components, paths, vars, version);
+    spinner.stop("Scaffold complete.");
 
     if (opts.install) {
       await installDeps(dest, opts.components);
@@ -73,6 +59,7 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
       try {
         exec("git add -A", dest);
         exec('git commit --no-verify -m "Initial scaffold from projx"', dest);
+        saveBaselineRef(dest);
       } catch {
         // deps/env may add untracked files
       }

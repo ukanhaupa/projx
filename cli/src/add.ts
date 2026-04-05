@@ -12,13 +12,7 @@ import {
   hasCommand,
   toKebab,
 } from "./utils.js";
-import {
-  hasBaseline,
-  addToBaseline,
-  mergeBaseline,
-  reconstructBaseline,
-  type GeneratorVars,
-} from "./baseline.js";
+import { writeTemplateToDir, type GeneratorVars } from "./baseline.js";
 
 interface ProjxConfig {
   version: string;
@@ -37,7 +31,7 @@ export async function add(
 
   const configPath = join(cwd, ".projx");
   if (!existsSync(configPath)) {
-    p.log.error("No .projx file found. Run 'projx <name>' to create a project first.");
+    p.log.error("No .projx file found. Run 'npx create-projx <name>' to create a project first.");
     process.exit(1);
   }
 
@@ -78,28 +72,10 @@ export async function add(
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
 
-    if (!hasBaseline(cwd)) {
-      const rebuildSpinner = p.spinner();
-      rebuildSpinner.start("Establishing baseline");
-      await reconstructBaseline(cwd, repoDir, existing, existingPaths,
-        { projectName: name, components: existing, paths: existingPaths }, config.version || version);
-      rebuildSpinner.stop("Baseline established.");
-    }
-
     const spinner = p.spinner();
-    spinner.start("Adding to baseline");
-    await addToBaseline(cwd, repoDir, toAdd, allComponents, paths, vars, version);
-    spinner.stop("Baseline updated.");
-
-    const result = mergeBaseline(cwd, `projx: add ${toAdd.join(", ")} from template v${version}`);
-
-    if (result.status === "conflicts") {
-      p.log.warn(`Merge conflicts in ${result.conflictedFiles!.length} file(s):`);
-      for (const f of result.conflictedFiles!) {
-        p.log.message(`  ${f}`);
-      }
-      p.log.info("Resolve conflicts, then: git add . && git commit");
-    }
+    spinner.start("Adding components");
+    await writeTemplateToDir(cwd, repoDir, allComponents, paths, vars, version, "scaffold");
+    spinner.stop("Components added.");
 
     if (!skipInstall) {
       await installDeps(cwd, toAdd);
@@ -116,11 +92,11 @@ export async function add(
         }
       }
     }
+
+    p.outro(`Added ${toAdd.join(", ")}.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
   } finally {
     await cleanupRepo(repoDir, isLocal);
   }
-
-  p.outro(`Added ${toAdd.join(", ")}.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
 }
 
 async function installDeps(

@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, unlink } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
   COMPONENTS,
+  COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
   cleanupRepo,
@@ -12,24 +13,14 @@ import {
   downloadRepo,
   readComponentMarker,
   toKebab,
-  writeComponentMarker,
 } from "./utils.js";
-import {
-  hasBaseline,
-  updateBaseline,
-  mergeBaseline,
-  reconstructBaseline,
-  type GeneratorVars,
-} from "./baseline.js";
+import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
 
 interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  baseline?: {
-    branch: string;
-    templateVersion: string;
-  };
+  skip?: string[];
 }
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {
@@ -37,8 +28,14 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
   const isLocal = !!localRepo;
 
   if (!isGitRepo(cwd)) {
-    p.log.error("projx update requires a git repo. Run 'git init && git add -A && git commit -m \"initial\"' first.");
+    p.log.error("projx update requires a git repo.");
     process.exit(1);
+  }
+
+  try {
+    execSync("git worktree prune", { cwd, stdio: "pipe" });
+  } catch {
+    // non-critical
   }
 
   if (hasUncommittedChanges(cwd)) {
@@ -59,19 +56,22 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       p.log.error("No projx components found. Run 'projx init' first.");
       process.exit(1);
     }
-    config = {
-      version: "0.0.0",
-      components: detected,
-      createdAt: "unknown",
-    };
+    config = { version: "0.0.0", components: detected, createdAt: "unknown" };
     p.log.info(`Detected: ${detected.join(", ")}`);
   }
 
   const componentPaths = await discoverComponentPaths(cwd, config.components);
-  const remapped = config.components.filter((c) => componentPaths[c] !== c);
-  if (remapped.length > 0) {
-    for (const c of remapped) {
-      p.log.info(`${c} → ${componentPaths[c]}/`);
+  for (const c of config.components) {
+    const dir = componentPaths[c];
+    p.log.info(dir !== c ? `${c} → ${dir}/` : `${c}/`);
+  }
+
+  const componentSkips: Record<string, string[]> = {};
+  for (const component of config.components) {
+    const dir = componentPaths[component];
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (marker?.skip && marker.skip.length > 0) {
+      componentSkips[component] = marker.skip;
     }
   }
 
@@ -91,78 +91,42 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const name = detectProjectName(cwd, config.components, componentPaths);
     const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
 
-    const componentSkips: Record<string, string[]> = {};
-    for (const component of config.components) {
-      const dir = componentPaths[component];
-      const marker = await readComponentMarker(join(cwd, dir));
-      if (marker?.skip && marker.skip.length > 0) {
-        componentSkips[component] = marker.skip;
-      } else if (marker?.origin === "init") {
-        componentSkips[component] = ["**"];
+    const spinner = p.spinner();
+    spinner.start("Applying template update");
+    const rootSkip = config.skip ?? [];
+    const result = await applyTemplate(cwd, repoDir, config.components, componentPaths, vars, version, "scaffold", componentSkips, rootSkip);
+    spinner.stop("Template applied.");
+
+    if (result.status === "merged") {
+      saveBaselineRef(cwd);
+      p.log.success(`${result.mergedFiles?.length ?? 0} file(s) merged cleanly.`);
+      p.outro(`Updated to template v${version}.`);
+    } else if (result.status === "conflicts") {
+      if (result.mergedFiles && result.mergedFiles.length > 0) {
+        p.log.success(`${result.mergedFiles.length} file(s) merged cleanly and staged.`);
       }
-    }
-
-    if (!hasBaseline(cwd)) {
-      const rebuildSpinner = p.spinner();
-      rebuildSpinner.start("Establishing baseline (first-time migration)");
-      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version, componentSkips);
-      rebuildSpinner.stop("Baseline established.");
-    }
-
-    const updateSpinner = p.spinner();
-    updateSpinner.start("Updating baseline to latest template");
-    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version, componentSkips);
-
-    if (!changed) {
-      updateSpinner.stop("Already up to date.");
-      p.outro("No template changes to apply.");
-      return;
-    }
-    updateSpinner.stop("Baseline updated.");
-
-    const mergeSpinner = p.spinner();
-    mergeSpinner.start("Merging template changes");
-    const result = mergeBaseline(cwd, `projx: update to template v${version}`);
-    mergeSpinner.stop("Merge complete.");
-
-    if (result.status === "clean") {
-      const { writeFile } = await import("node:fs/promises");
-
-      const updatedConfig = {
-        ...config,
-        version,
-        baseline: { branch: "projx/baseline", templateVersion: version },
-      };
-      await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2) + "\n");
-
-      for (const component of config.components) {
-        const dir = componentPaths[component];
-        const skip = componentSkips[component];
-        await writeComponentMarker(join(cwd, dir), component,
-          skip?.includes("**") ? "init" : "scaffold", skip);
+      const conflictCount = result.conflictedFiles?.length ?? 0;
+      if (conflictCount > 0) {
+        p.log.warn(`${conflictCount} file(s) need review:`);
+        for (const f of result.conflictedFiles!) {
+          p.log.info(`  ${f}`);
+        }
       }
-
-      execSync("git add -A && git commit --no-verify -m \"projx: post-update config\"", { cwd, stdio: "pipe" });
-    }
-
-    if (result.status === "conflicts") {
-      p.log.warn(`Merge conflicts in ${result.conflictedFiles!.length} file(s):`);
-      for (const f of result.conflictedFiles!) {
-        p.log.message(`  ${f}`);
+      const handled = await promptSkipLearning(cwd, componentPaths, version);
+      if (!handled) {
+        p.log.info("");
+        p.log.info("Review:  git diff");
+        p.log.info("Keep:    git add <file>");
+        p.log.info("Discard: git checkout -- <file>");
+        p.log.info(`Commit:  git add . && git commit -m "projx: update to v${version}"`);
+        p.outro(`Template v${version} applied. Review with git diff.`);
       }
-      p.outro(
-        "Resolve conflicts, then:\n" +
-        "  git add . && git commit\n\n" +
-        "Or abort:\n" +
-        "  git merge --abort"
-      );
     } else {
-      p.outro(`Updated to template v${version}. All changes merged cleanly.`);
+      saveBaselineRef(cwd);
+      p.outro(`Updated to template v${version}.`);
     }
   } catch (err) {
-    try { execSync("git merge --abort", { cwd, stdio: "pipe" }); } catch { /* may not be in merge */ }
     p.log.error(`Update failed: ${err}`);
-    p.log.info("Your code is safe. Run 'git merge --abort' if needed.");
     process.exit(1);
   } finally {
     await cleanupRepo(repoDir, isLocal);
@@ -184,6 +148,135 @@ function hasUncommittedChanges(cwd: string): boolean {
     return status.length > 0;
   } catch {
     return false;
+  }
+}
+
+async function promptSkipLearning(
+  cwd: string,
+  componentPaths: ComponentPaths,
+  version: string,
+): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+
+  const statusOutput = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+    .toString()
+    .trim();
+  if (!statusOutput) return false;
+
+  const entries = statusOutput.split("\n").filter(Boolean).map((line) => ({
+    status: line.slice(0, 2).trim(),
+    file: line.slice(3).trim(),
+  }));
+
+  const changedFiles = entries
+    .map((e) => e.file)
+    .filter((f) => {
+      const base = f.split("/").pop()!;
+      if (base === ".projx" || base === COMPONENT_MARKER) return false;
+      return true;
+    });
+
+  if (changedFiles.length === 0) return false;
+
+  p.log.warn(`${changedFiles.length} template file(s) differ from your code.`);
+
+  const selected = (await p.multiselect({
+    message:
+      "Select files to KEEP (unselected will be discarded and skipped on future updates)",
+    options: changedFiles.map((f) => ({ value: f, label: f })),
+    required: false,
+  })) as string[] | symbol;
+
+  if (p.isCancel(selected)) return false;
+
+  const kept = new Set(selected as string[]);
+  const discarded = changedFiles.filter((f) => !kept.has(f));
+
+  if (discarded.length > 0) {
+    for (const file of discarded) {
+      const entry = entries.find((e) => e.file === file);
+      try {
+        if (entry?.status === "??") {
+          await unlink(join(cwd, file));
+        } else {
+          execSync(`git checkout -- "${file}"`, { cwd, stdio: "pipe" });
+        }
+      } catch {
+        // best effort
+      }
+    }
+
+    await learnSkips(cwd, discarded, componentPaths);
+    p.log.success(
+      `Discarded ${discarded.length} file(s) and added to skip list.`,
+    );
+  }
+
+  if (kept.size > 0) {
+    p.log.info(`${kept.size} file(s) kept — commit when ready:`);
+    p.log.info(
+      `  git add . && git commit -m "projx: update to v${version}"`,
+    );
+    p.outro(`Template v${version} applied.`);
+  } else {
+    p.outro("All template changes discarded. Skip list updated.");
+  }
+
+  return true;
+}
+
+export async function learnSkips(
+  cwd: string,
+  files: string[],
+  componentPaths: ComponentPaths,
+): Promise<void> {
+  const componentSkipAdds: Record<string, string[]> = {};
+  const rootSkipAdds: string[] = [];
+
+  const dirToComponent: Record<string, string> = {};
+  for (const [component, dir] of Object.entries(componentPaths)) {
+    dirToComponent[dir] = component;
+  }
+
+  for (const file of files) {
+    let matched = false;
+    for (const [dir, component] of Object.entries(dirToComponent)) {
+      if (file.startsWith(dir + "/")) {
+        const relative = file.slice(dir.length + 1);
+        if (!componentSkipAdds[component]) componentSkipAdds[component] = [];
+        componentSkipAdds[component].push(relative);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      rootSkipAdds.push(file);
+    }
+  }
+
+  for (const [component, additions] of Object.entries(componentSkipAdds)) {
+    const dir = componentPaths[component as Component];
+    const markerPath = join(cwd, dir, COMPONENT_MARKER);
+    try {
+      const data = JSON.parse(await readFile(markerPath, "utf-8"));
+      const existing: string[] = data.skip ?? [];
+      data.skip = [...new Set([...existing, ...additions])];
+      await writeFile(markerPath, JSON.stringify(data, null, 2) + "\n");
+    } catch {
+      // marker missing or invalid
+    }
+  }
+
+  if (rootSkipAdds.length > 0) {
+    const configPath = join(cwd, ".projx");
+    try {
+      const data = JSON.parse(await readFile(configPath, "utf-8"));
+      const existing: string[] = data.skip ?? [];
+      data.skip = [...new Set([...existing, ...rootSkipAdds])];
+      await writeFile(configPath, JSON.stringify(data, null, 2) + "\n");
+    } catch {
+      // config missing or invalid
+    }
   }
 }
 

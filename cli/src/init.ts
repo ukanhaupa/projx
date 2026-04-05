@@ -13,7 +13,7 @@ import {
 } from "./utils.js";
 import { LABELS } from "./prompts.js";
 import { detectComponents, type DetectedComponent } from "./detect.js";
-import { createBaseline, mergeBaseline, type GeneratorVars } from "./baseline.js";
+import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
 
 export async function init(
   cwd: string,
@@ -23,7 +23,7 @@ export async function init(
   const isLocal = !!localRepo;
 
   if (existsSync(join(cwd, ".projx"))) {
-    p.log.error("This project is already initialized. Use 'projx update' or 'projx add' instead.");
+    p.log.error("This project is already initialized. Use 'npx create-projx update' or 'npx create-projx add' instead.");
     process.exit(1);
   }
 
@@ -80,39 +80,41 @@ export async function init(
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
 
-    const componentSkips: Record<string, string[]> = {};
-    for (const c of components) {
-      componentSkips[c] = ["**"];
-    }
+    const applySpinner = p.spinner();
+    applySpinner.start("Applying template");
+    const result = await applyTemplate(cwd, repoDir, components, paths, vars, version, "init");
+    applySpinner.stop("Template applied.");
 
-    const baselineSpinner = p.spinner();
-    baselineSpinner.start("Creating template baseline");
-    await createBaseline(cwd, repoDir, components, paths, vars, version, "init", componentSkips);
-    baselineSpinner.stop("Baseline created.");
-
-    const mergeSpinner = p.spinner();
-    mergeSpinner.start("Merging baseline (preserving your code)");
-    mergeBaseline(
-      cwd,
-      `projx: adopt template v${version} as baseline`,
-      true,
-      true,
-    );
-    mergeSpinner.stop("Baseline merged. Your code is preserved.");
-
-    if (!existsSync(join(cwd, ".githooks"))) {
+    if (existsSync(join(cwd, ".githooks"))) {
       try {
         execSync("git config core.hooksPath .githooks", { cwd, stdio: "pipe" });
-        p.log.success("Git hooks configured.");
       } catch {
-        p.log.warn("Failed to configure git hooks.");
+        // non-critical
       }
+    }
+
+    if (result.status === "clean" || result.status === "merged") {
+      saveBaselineRef(cwd);
+    }
+
+    if (result.status === "conflicts") {
+      p.log.warn("Some template files differ from your code. Changes written directly.");
+      p.log.info("Review changes:");
+      p.log.info("  git diff");
+      p.log.info("");
+      p.log.info("Keep a change:  git add <file>");
+      p.log.info("Discard a change:  git checkout -- <file>");
+      p.log.info("Commit when ready:  git add . && git commit -m \"projx: init\"");
+      p.log.info("");
+      p.log.info("To skip files on future updates, add to .projx-component:");
+      p.log.info('  { "skip": ["src/**", "tests/**"] }');
+      p.outro("Template applied. Review with git diff.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx");
+    } else {
+      p.outro("Project initialized.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx");
     }
   } finally {
     await cleanupRepo(repoDir, isLocal);
   }
-
-  p.outro("Project initialized. Run './setup.sh' to install dependencies.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx");
 }
 
 async function confirmDetections(

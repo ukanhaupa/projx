@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import { scaffold } from "../src/scaffold.js";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
@@ -17,7 +16,6 @@ describe("scaffold", () => {
 
   it("scaffolds a project with fastify + frontend", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "test-app", components: ["fastify", "frontend"], git: true, install: false },
       dest,
@@ -29,22 +27,8 @@ describe("scaffold", () => {
     expect(existsSync(join(dest, "frontend"))).toBe(true);
   });
 
-  it("creates projx/baseline branch", async () => {
+  it("writes correct .projx config", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
-    await scaffold(
-      { name: "my-app", components: ["fastify"], git: true, install: false },
-      dest,
-      REPO_DIR,
-    );
-
-    const branches = execSync("git branch", { cwd: dest, stdio: "pipe" }).toString();
-    expect(branches).toContain("projx/baseline");
-  });
-
-  it("writes correct .projx config with baseline", async () => {
-    dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,
@@ -53,14 +37,11 @@ describe("scaffold", () => {
 
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     expect(config.components).toEqual(["fastify"]);
-    expect(config.baseline).toBeDefined();
-    expect(config.baseline.branch).toBe("projx/baseline");
-    expect(config.paths).toBeUndefined();
+    expect(config.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("writes .projx-component markers", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify", "frontend"], git: true, install: false },
       dest,
@@ -77,12 +58,10 @@ describe("scaffold", () => {
       await readFile(join(dest, "frontend/.projx-component"), "utf-8"),
     );
     expect(frontendMarker.components).toEqual(["frontend"]);
-    expect(frontendMarker.origin).toBe("scaffold");
   });
 
   it("generates shared files", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,
@@ -98,7 +77,6 @@ describe("scaffold", () => {
 
   it("substitutes project name in package.json", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,
@@ -111,7 +89,6 @@ describe("scaffold", () => {
 
   it("does not create docker-compose without backend or frontend", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["e2e"], git: true, install: false },
       dest,

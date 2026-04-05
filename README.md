@@ -87,23 +87,37 @@ cd my-app
 npx create-projx@latest update
 ```
 
-Uses a `projx/baseline` branch that tracks the raw template state. When you update, the baseline advances to the new template version and merges into your branch using git's three-way merge:
+Updates use a 3-tier merge strategy:
 
-- **Files only the template changed** — auto-merged, no action needed
-- **Files only you changed** — preserved, untouched
-- **Files both sides changed** — git conflict, you resolve
-
-```bash
-# If conflicts occur:
-git status                    # see conflicted files
-# resolve conflicts in your editor
-git add . && git commit       # finish the merge
-
-# Or abort:
-git merge --abort
-```
+1. **Git merge** — if the template merges cleanly with your code, it's auto-committed. Done.
+2. **3-way merge** — if git merge fails, each file is merged individually using `git merge-file`. Your additions (extra deps, env vars, custom config) are preserved alongside template updates. Clean merges are auto-staged; only true conflicts need review.
+3. **Direct copy** — if no merge baseline exists, template files are written directly. You pick which changes to keep via an interactive prompt, and discarded files are automatically added to your skip list.
 
 Your custom files (controllers, pages, middleware) are never deleted. Files you created that don't exist in the template are always preserved.
+
+### Skip Files
+
+To skip component source files, add `skip` to `.projx-component`:
+
+```json
+{
+  "components": ["fastapi"],
+  "origin": "init",
+  "skip": ["src/**", "tests/**"]
+}
+```
+
+To skip root-level files (docker-compose, README), add `skip` to `.projx`:
+
+```json
+{
+  "version": "1.3.6",
+  "components": ["fastapi", "frontend"],
+  "skip": ["docker-compose.yml", "README.md"]
+}
+```
+
+Skipped files are excluded from template updates.
 
 ## Options
 
