@@ -12,24 +12,13 @@ import {
   downloadRepo,
   readComponentMarker,
   toKebab,
-  writeComponentMarker,
 } from "./utils.js";
-import {
-  hasBaseline,
-  updateBaseline,
-  mergeBaseline,
-  reconstructBaseline,
-  type GeneratorVars,
-} from "./baseline.js";
+import { applyTemplate, type GeneratorVars } from "./baseline.js";
 
 interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  baseline?: {
-    branch: string;
-    templateVersion: string;
-  };
 }
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {
@@ -37,8 +26,14 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
   const isLocal = !!localRepo;
 
   if (!isGitRepo(cwd)) {
-    p.log.error("projx update requires a git repo. Run 'git init && git add -A && git commit -m \"initial\"' first.");
+    p.log.error("projx update requires a git repo.");
     process.exit(1);
+  }
+
+  try {
+    execSync("git worktree prune", { cwd, stdio: "pipe" });
+  } catch {
+    // non-critical
   }
 
   if (hasUncommittedChanges(cwd)) {
@@ -59,19 +54,22 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       p.log.error("No projx components found. Run 'projx init' first.");
       process.exit(1);
     }
-    config = {
-      version: "0.0.0",
-      components: detected,
-      createdAt: "unknown",
-    };
+    config = { version: "0.0.0", components: detected, createdAt: "unknown" };
     p.log.info(`Detected: ${detected.join(", ")}`);
   }
 
   const componentPaths = await discoverComponentPaths(cwd, config.components);
   const remapped = config.components.filter((c) => componentPaths[c] !== c);
-  if (remapped.length > 0) {
-    for (const c of remapped) {
-      p.log.info(`${c} → ${componentPaths[c]}/`);
+  for (const c of remapped) {
+    p.log.info(`${c} → ${componentPaths[c]}/`);
+  }
+
+  const componentSkips: Record<string, string[]> = {};
+  for (const component of config.components) {
+    const dir = componentPaths[component];
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (marker?.skip && marker.skip.length > 0) {
+      componentSkips[component] = marker.skip;
     }
   }
 
@@ -91,78 +89,28 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const name = detectProjectName(cwd, config.components, componentPaths);
     const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
 
-    const componentSkips: Record<string, string[]> = {};
-    for (const component of config.components) {
-      const dir = componentPaths[component];
-      const marker = await readComponentMarker(join(cwd, dir));
-      if (marker?.skip && marker.skip.length > 0) {
-        componentSkips[component] = marker.skip;
-      } else if (marker?.origin === "init") {
-        componentSkips[component] = ["**"];
-      }
-    }
-
-    if (!hasBaseline(cwd)) {
-      const rebuildSpinner = p.spinner();
-      rebuildSpinner.start("Establishing baseline (first-time migration)");
-      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version, componentSkips);
-      rebuildSpinner.stop("Baseline established.");
-    }
-
-    const updateSpinner = p.spinner();
-    updateSpinner.start("Updating baseline to latest template");
-    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version, componentSkips);
-
-    if (!changed) {
-      updateSpinner.stop("Already up to date.");
-      p.outro("No template changes to apply.");
-      return;
-    }
-    updateSpinner.stop("Baseline updated.");
-
-    const mergeSpinner = p.spinner();
-    mergeSpinner.start("Merging template changes");
-    const result = mergeBaseline(cwd, `projx: update to template v${version}`);
-    mergeSpinner.stop("Merge complete.");
-
-    if (result.status === "clean") {
-      const { writeFile } = await import("node:fs/promises");
-
-      const updatedConfig = {
-        ...config,
-        version,
-        baseline: { branch: "projx/baseline", templateVersion: version },
-      };
-      await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2) + "\n");
-
-      for (const component of config.components) {
-        const dir = componentPaths[component];
-        const skip = componentSkips[component];
-        await writeComponentMarker(join(cwd, dir), component,
-          skip?.includes("**") ? "init" : "scaffold", skip);
-      }
-
-      execSync("git add -A && git commit --no-verify -m \"projx: post-update config\"", { cwd, stdio: "pipe" });
-    }
+    const spinner = p.spinner();
+    spinner.start("Applying template update");
+    const result = await applyTemplate(cwd, repoDir, config.components, componentPaths, vars, version, "scaffold", componentSkips);
+    spinner.stop("Template applied.");
 
     if (result.status === "conflicts") {
-      p.log.warn(`Merge conflicts in ${result.conflictedFiles!.length} file(s):`);
-      for (const f of result.conflictedFiles!) {
-        p.log.message(`  ${f}`);
-      }
-      p.outro(
-        "Resolve conflicts, then:\n" +
-        "  git add . && git commit\n\n" +
-        "Or abort:\n" +
-        "  git merge --abort"
-      );
+      p.log.warn("Some template files differ from your code. Changes written directly.");
+      p.log.info("Review changes:");
+      p.log.info("  git diff");
+      p.log.info("");
+      p.log.info("Keep a change:  git add <file>");
+      p.log.info("Discard a change:  git checkout -- <file>");
+      p.log.info("Commit when ready:  git add . && git commit -m \"projx: update to v" + version + "\"");
+      p.log.info("");
+      p.log.info("To skip files on future updates, add to .projx-component:");
+      p.log.info('  { "skip": ["src/**", "tests/**"] }');
+      p.outro(`Template v${version} applied. Review with git diff.`);
     } else {
-      p.outro(`Updated to template v${version}. All changes merged cleanly.`);
+      p.outro(`Updated to template v${version}.`);
     }
   } catch (err) {
-    try { execSync("git merge --abort", { cwd, stdio: "pipe" }); } catch { /* may not be in merge */ }
     p.log.error(`Update failed: ${err}`);
-    p.log.info("Your code is safe. Run 'git merge --abort' if needed.");
     process.exit(1);
   } finally {
     await cleanupRepo(repoDir, isLocal);

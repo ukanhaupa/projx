@@ -3,7 +3,6 @@ import { chmod, mkdir, writeFile, rm } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import * as p from "@clack/prompts";
 import {
   type Component,
   type ComponentPaths,
@@ -25,8 +24,6 @@ import {
   generateVscodeSettings,
 } from "./generators/index.js";
 
-const BASELINE_BRANCH = "projx/baseline";
-
 export interface GeneratorVars {
   projectName: string;
   components: Component[];
@@ -35,54 +32,8 @@ export interface GeneratorVars {
 }
 
 export interface MergeResult {
-  status: "clean" | "conflicts" | "up-to-date";
+  status: "clean" | "conflicts";
   conflictedFiles?: string[];
-}
-
-export function hasBaseline(cwd: string): boolean {
-  try {
-    execSync(`git show-ref --verify --quiet refs/heads/${BASELINE_BRANCH}`, {
-      cwd,
-      stdio: "pipe",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function createWorktree(cwd: string, branch: string, orphan: boolean): string {
-  const worktree = join(tmpdir(), `projx-baseline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-
-  if (orphan) {
-    execSync(`git worktree add --orphan -b ${branch} "${worktree}"`, {
-      cwd,
-      stdio: "pipe",
-    });
-  } else {
-    execSync(`git worktree add "${worktree}" ${branch}`, {
-      cwd,
-      stdio: "pipe",
-    });
-  }
-
-  return worktree;
-}
-
-function removeWorktree(cwd: string, worktree: string): void {
-  try {
-    execSync(`git worktree remove "${worktree}" --force`, {
-      cwd,
-      stdio: "pipe",
-    });
-  } catch {
-    try {
-      rm(worktree, { recursive: true, force: true });
-      execSync("git worktree prune", { cwd, stdio: "pipe" });
-    } catch {
-      // best effort
-    }
-  }
 }
 
 export function matchesSkip(filePath: string, patterns: string[]): boolean {
@@ -110,6 +61,44 @@ export function matchesSkip(filePath: string, patterns: string[]): boolean {
   return false;
 }
 
+function createOrphanWorktree(cwd: string): { worktree: string; branch: string } {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const branch = `projx/tmp-${id}`;
+  const worktree = join(tmpdir(), `projx-wt-${id}`);
+
+  try {
+    execSync("git worktree prune", { cwd, stdio: "pipe" });
+  } catch {
+    // non-critical
+  }
+
+  execSync(`git worktree add --orphan -b ${branch} "${worktree}"`, {
+    cwd,
+    stdio: "pipe",
+  });
+
+  return { worktree, branch };
+}
+
+function cleanupWorktree(cwd: string, worktree: string, branch: string): void {
+  try {
+    execSync(`git worktree remove "${worktree}" --force`, { cwd, stdio: "pipe" });
+  } catch {
+    try {
+      rm(worktree, { recursive: true, force: true });
+      execSync("git worktree prune", { cwd, stdio: "pipe" });
+    } catch {
+      // best effort
+    }
+  }
+
+  try {
+    execSync(`git branch -D ${branch}`, { cwd, stdio: "pipe" });
+  } catch {
+    // branch may already be gone
+  }
+}
+
 async function removeSkippedFiles(
   dir: string,
   skipPatterns: string[],
@@ -135,7 +124,7 @@ async function removeSkippedFiles(
   await walk(dir, dir);
 }
 
-async function writeTemplateToDir(
+export async function writeTemplateToDir(
   dest: string,
   repoDir: string,
   components: Component[],
@@ -150,24 +139,24 @@ async function writeTemplateToDir(
 
   for (const component of components) {
     const targetDir = componentPaths[component];
-
-    if (targetDir === component) {
-      await copyComponent(repoDir, component, dest);
-    } else {
-      await copyComponent(repoDir, component, join(dest, "__tmp__"));
-      const { cp } = await import("node:fs/promises");
-      const srcDir = join(dest, "__tmp__", component);
-      const outDir = join(dest, targetDir);
-      if (existsSync(srcDir)) {
-        await cp(srcDir, outDir, { recursive: true, force: true });
-      }
-      await rm(join(dest, "__tmp__"), { recursive: true, force: true });
-    }
-
     const skipPatterns = componentSkips?.[component] ?? [];
+
+    // Copy to temp first, remove skipped files, then copy to target
+    const tmpDir = join(dest, "__cptmp__");
+    await copyComponent(repoDir, component, tmpDir);
+    const srcDir = join(tmpDir, component);
+
     if (skipPatterns.length > 0) {
-      await removeSkippedFiles(join(dest, targetDir), skipPatterns);
+      await removeSkippedFiles(srcDir, skipPatterns);
     }
+
+    const outDir = join(dest, targetDir);
+    await mkdir(outDir, { recursive: true });
+    const { cp } = await import("node:fs/promises");
+    if (existsSync(srcDir)) {
+      await cp(srcDir, outDir, { recursive: true, force: true });
+    }
+    await rm(tmpDir, { recursive: true, force: true });
 
     await writeComponentMarker(join(dest, targetDir), component, origin, skipPatterns.length > 0 ? skipPatterns : undefined);
   }
@@ -203,10 +192,6 @@ async function writeTemplateToDir(
     version,
     components,
     createdAt: new Date().toISOString().split("T")[0],
-    baseline: {
-      branch: BASELINE_BRANCH,
-      templateVersion: version,
-    },
   };
   await writeFile(join(dest, ".projx"), JSON.stringify(projxConfig, null, 2) + "\n");
 }
@@ -236,7 +221,7 @@ async function substituteNames(
   }
 }
 
-export async function createBaseline(
+export async function applyTemplate(
   cwd: string,
   repoDir: string,
   components: Component[],
@@ -245,140 +230,87 @@ export async function createBaseline(
   version: string,
   origin: ComponentOrigin = "scaffold",
   componentSkips?: Record<string, string[]>,
-): Promise<void> {
-  const worktree = createWorktree(cwd, BASELINE_BRANCH, true);
+): Promise<MergeResult> {
+  const hasHead = (() => {
+    try {
+      execSync("git rev-parse HEAD", { cwd, stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  if (!hasHead) {
+    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, origin, componentSkips);
+    return { status: "clean" };
+  }
+
+  // Try merge first — if clean, commit automatically
+  const { worktree, branch } = createOrphanWorktree(cwd);
 
   try {
     await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, origin, componentSkips);
 
     execSync("git add -A", { cwd: worktree, stdio: "pipe" });
-    execSync(
-      `git commit --no-verify -m "projx: baseline template v${version} [${components.join(", ")}]"`,
-      { cwd: worktree, stdio: "pipe" },
-    );
-  } finally {
-    removeWorktree(cwd, worktree);
-  }
-}
-
-export async function updateBaseline(
-  cwd: string,
-  repoDir: string,
-  components: Component[],
-  componentPaths: ComponentPaths,
-  vars: GeneratorVars,
-  version: string,
-  componentSkips?: Record<string, string[]>,
-): Promise<{ changed: boolean }> {
-  const worktree = createWorktree(cwd, BASELINE_BRANCH, false);
-
-  try {
-    execSync("git rm -rf .", { cwd: worktree, stdio: "pipe" });
-
-    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, "scaffold", componentSkips);
-
-    execSync("git add -A", { cwd: worktree, stdio: "pipe" });
 
     const diff = execSync("git diff --cached --stat", { cwd: worktree, stdio: "pipe" }).toString().trim();
     if (!diff) {
-      return { changed: false };
-    }
-
-    execSync(
-      `git commit --no-verify -m "projx: update baseline to template v${version}"`,
-      { cwd: worktree, stdio: "pipe" },
-    );
-
-    return { changed: true };
-  } finally {
-    removeWorktree(cwd, worktree);
-  }
-}
-
-export async function addToBaseline(
-  cwd: string,
-  repoDir: string,
-  newComponents: Component[],
-  allComponents: Component[],
-  componentPaths: ComponentPaths,
-  vars: GeneratorVars,
-  version: string,
-): Promise<void> {
-  const worktree = createWorktree(cwd, BASELINE_BRANCH, false);
-
-  try {
-    await writeTemplateToDir(worktree, repoDir, allComponents, componentPaths, vars, version, "scaffold");
-
-    execSync("git add -A", { cwd: worktree, stdio: "pipe" });
-    execSync(
-      `git commit --no-verify -m "projx: add ${newComponents.join(", ")} template v${version}"`,
-      { cwd: worktree, stdio: "pipe" },
-    );
-  } finally {
-    removeWorktree(cwd, worktree);
-  }
-}
-
-export function mergeBaseline(
-  cwd: string,
-  message: string,
-  allowUnrelated = false,
-  oursOnConflict = false,
-): MergeResult {
-  const args = [`git merge ${BASELINE_BRANCH}`];
-  args.push(`-m "${message}"`);
-  if (allowUnrelated) args.push("--allow-unrelated-histories");
-
-  if (oursOnConflict) {
-    try {
-      execSync(`${args.join(" ")} --no-commit`, { cwd, stdio: "pipe" });
-    } catch {
-      // conflicts expected
-    }
-    execSync("git checkout --ours .", { cwd, stdio: "pipe" });
-    execSync("git add -A", { cwd, stdio: "pipe" });
-    execSync(`git commit --no-verify --no-edit -m "${message}"`, { cwd, stdio: "pipe" });
-    return { status: "clean" };
-  }
-
-  try {
-    execSync(args.join(" "), { cwd, stdio: "pipe" });
-    return { status: "clean" };
-  } catch {
-    const conflicted = execSync("git diff --name-only --diff-filter=U", { cwd, stdio: "pipe" })
-      .toString()
-      .trim();
-
-    if (!conflicted) {
+      cleanupWorktree(cwd, worktree, branch);
       return { status: "clean" };
     }
 
-    return {
-      status: "conflicts",
-      conflictedFiles: conflicted.split("\n").filter(Boolean),
-    };
+    execSync(
+      `git commit --no-verify -m "projx: template v${version} [${components.join(", ")}]"`,
+      { cwd: worktree, stdio: "pipe" },
+    );
+
+    // Remove worktree but keep branch for merging
+    try {
+      execSync(`git worktree remove "${worktree}" --force`, { cwd, stdio: "pipe" });
+    } catch {
+      try {
+        await rm(worktree, { recursive: true, force: true });
+        execSync("git worktree prune", { cwd, stdio: "pipe" });
+      } catch {
+        // best effort
+      }
+    }
+
+    // Attempt merge
+    let mergeClean = false;
+    try {
+      execSync(
+        `git merge ${branch} --allow-unrelated-histories -m "projx: update to template v${version}"`,
+        { cwd, stdio: "pipe" },
+      );
+      mergeClean = true;
+    } catch {
+      // Conflicts — abort and fall back to direct copy
+      try {
+        execSync("git merge --abort", { cwd, stdio: "pipe" });
+      } catch {
+        // may not be in merge state
+      }
+    }
+
+    // Delete temp branch
+    try {
+      execSync(`git branch -D ${branch}`, { cwd, stdio: "pipe" });
+    } catch {
+      // non-critical
+    }
+
+    if (mergeClean) {
+      return { status: "clean" };
+    }
+
+    // Merge had conflicts — fall back to direct file copy
+    // User reviews with git diff, commits what they want
+    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, origin, componentSkips);
+    return { status: "conflicts" };
+
+  } catch (err) {
+    cleanupWorktree(cwd, worktree, branch);
+    throw err;
   }
-}
-
-export async function reconstructBaseline(
-  cwd: string,
-  repoDir: string,
-  components: Component[],
-  componentPaths: ComponentPaths,
-  vars: GeneratorVars,
-  version: string,
-  componentSkips?: Record<string, string[]>,
-): Promise<void> {
-  p.log.warn("projx/baseline branch not found. Reconstructing...");
-
-  await createBaseline(cwd, repoDir, components, componentPaths, vars, version, "scaffold", componentSkips);
-
-  mergeBaseline(
-    cwd,
-    `projx: reconstructed baseline for template v${version}`,
-    true,
-    true,
-  );
-
-  p.log.success("Baseline reconstructed.");
 }

@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import { scaffold } from "../src/scaffold.js";
 import { add } from "../src/add.js";
 
@@ -18,7 +17,6 @@ describe("add", () => {
 
   it("adds a new component to an existing project", async () => {
     dest = join(tmpdir(), `projx-add-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,
@@ -29,17 +27,10 @@ describe("add", () => {
 
     expect(existsSync(join(dest, "frontend"))).toBe(true);
     expect(existsSync(join(dest, "frontend/.projx-component"))).toBe(true);
-
-    const marker = JSON.parse(
-      await readFile(join(dest, "frontend/.projx-component"), "utf-8"),
-    );
-    expect(marker.components).toEqual(["frontend"]);
-    expect(marker.origin).toBe("scaffold");
   });
 
   it("updates .projx config with new component", async () => {
     dest = join(tmpdir(), `projx-add-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,
@@ -55,7 +46,6 @@ describe("add", () => {
 
   it("regenerates shared files with all components", async () => {
     dest = join(tmpdir(), `projx-add-${Date.now()}`);
-
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
       dest,

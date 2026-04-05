@@ -87,23 +87,29 @@ cd my-app
 npx create-projx@latest update
 ```
 
-Uses a `projx/baseline` branch that tracks the raw template state. When you update, the baseline advances to the new template version and merges into your branch using git's three-way merge:
-
-- **Files only the template changed** — auto-merged, no action needed
-- **Files only you changed** — preserved, untouched
-- **Files both sides changed** — git conflict, you resolve
+If the template merges cleanly with your code, it's auto-committed — done. If there are differences, template files are written directly and you review with `git diff`:
 
 ```bash
-# If conflicts occur:
-git status                    # see conflicted files
-# resolve conflicts in your editor
-git add . && git commit       # finish the merge
-
-# Or abort:
-git merge --abort
+git diff                              # see what changed
+git checkout -- path/to/file          # discard a change you don't want
+git add . && git commit -m "projx: update to vX.X.X"  # commit when ready
 ```
 
 Your custom files (controllers, pages, middleware) are never deleted. Files you created that don't exist in the template are always preserved.
+
+### Skip Files
+
+If a file keeps getting overwritten on every update, add it to `.projx-component`:
+
+```json
+{
+  "components": ["fastapi"],
+  "origin": "init",
+  "skip": ["src/**", "tests/**"]
+}
+```
+
+Skipped files are excluded from template updates. Tooling files (Dockerfile, eslint, tsconfig) still get updated.
 
 ## Options
 

@@ -171,11 +171,6 @@ export async function copyStaticFiles(
     }
   }
 
-  const gitignore = join(tpl, ".gitignore");
-  if (existsSync(gitignore)) {
-    await cp(gitignore, join(dest, ".gitignore"));
-    manifest.push(".gitignore");
-  }
 
   const extensionsJson = join(tpl, ".vscode/extensions.json");
   if (existsSync(extensionsJson)) {
@@ -254,7 +249,7 @@ export type ComponentOrigin = "scaffold" | "init";
 
 export interface ComponentMarkerData {
   components: string[];
-  origin: ComponentOrigin;
+  origin?: ComponentOrigin;
   skip?: string[];
 }
 
@@ -265,7 +260,7 @@ export async function readComponentMarker(dir: string): Promise<ComponentMarkerD
     const data = JSON.parse(raw);
     return {
       components: data.components ?? (data.component ? [data.component] : []),
-      origin: data.origin ?? "scaffold",
+      origin: data.origin,
       skip: data.skip,
     };
   } catch {
