@@ -126,6 +126,11 @@ npx create-projx <name> [options]
 npx create-projx init
 npx create-projx add <components...>
 npx create-projx update
+npx create-projx diff
+npx create-projx pin <patterns...>
+npx create-projx unpin <patterns...>
+npx create-projx pin --list
+npx create-projx doctor [--fix]
 
 --components <list>    Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
 --no-git               Skip git init
@@ -133,6 +138,41 @@ npx create-projx update
 -y, --yes              Accept defaults (fastify + frontend + e2e)
 -h, --help             Show help
 ```
+
+### Preview Changes
+
+See what `update` would change before applying:
+
+```bash
+cd my-app
+npx create-projx diff
+```
+
+Shows file-by-file analysis: clean updates, files needing merge, user-only changes, and skipped files.
+
+### Pin / Unpin Files
+
+Skip files from future template updates without editing JSON:
+
+```bash
+npx create-projx pin backend/pyproject.toml      # skip this file
+npx create-projx pin "backend/src/**"             # skip with glob
+npx create-projx unpin backend/pyproject.toml     # allow updates again
+npx create-projx pin --list                       # show all pinned files
+```
+
+Files inside a component directory are added to that component's `.projx-component` skip list. Root-level files are added to `.projx` skip.
+
+### Health Check
+
+Diagnose issues with your projx setup:
+
+```bash
+npx create-projx doctor         # check everything
+npx create-projx doctor --fix   # auto-fix what's possible
+```
+
+Checks: config validity, component markers, baseline ref, stale worktrees, skip pattern coverage.
 
 ## Rename Component Directories
 

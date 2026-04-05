@@ -7,41 +7,42 @@ import { scaffold } from "./scaffold.js";
 import { update } from "./update.js";
 import { add } from "./add.js";
 import { init } from "./init.js";
+import { pin, unpin, listPins } from "./pin.js";
+import { doctor } from "./doctor.js";
+import { diff } from "./diff.js";
 
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add" | "init";
+  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor";
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
   extraArgs: string[];
+  flags: {
+    list?: boolean;
+    fix?: boolean;
+  };
 }
 
 function parseArgs(): ParsedArgs {
-  let command: "create" | "update" | "add" | "init" = "create";
+  let command: ParsedArgs["command"] = "create";
   let name: string | undefined;
   let localRepo: string | undefined;
   const options: Partial<Options> = {};
   const extraArgs: string[] = [];
+  const flags: ParsedArgs["flags"] = {};
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === "update" && !name) {
-      command = "update";
-      continue;
-    }
-
-    if (arg === "add" && !name) {
-      command = "add";
-      continue;
-    }
-
-    if (arg === "init" && !name) {
-      command = "init";
-      continue;
-    }
+    if (arg === "update" && !name) { command = "update"; continue; }
+    if (arg === "add" && !name) { command = "add"; continue; }
+    if (arg === "init" && !name) { command = "init"; continue; }
+    if (arg === "pin" && !name) { command = "pin"; continue; }
+    if (arg === "unpin" && !name) { command = "unpin"; continue; }
+    if (arg === "diff" && !name) { command = "diff"; continue; }
+    if (arg === "doctor" && !name) { command = "doctor"; continue; }
 
     if (arg === "--components") {
       const val = args[++i];
@@ -58,19 +59,16 @@ function parseArgs(): ParsedArgs {
       continue;
     }
 
-    if (arg === "--no-git") {
-      options.git = false;
-      continue;
-    }
-    if (arg === "--no-install") {
-      options.install = false;
-      continue;
-    }
+    if (arg === "--no-git") { options.git = false; continue; }
+    if (arg === "--no-install") { options.install = false; continue; }
 
     if (arg === "-y" || arg === "--yes") {
       options.components = options.components ?? ["fastify", "frontend", "e2e"];
       continue;
     }
+
+    if (arg === "--list" || arg === "-l") { flags.list = true; continue; }
+    if (arg === "--fix") { flags.fix = true; continue; }
 
     if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -78,7 +76,7 @@ function parseArgs(): ParsedArgs {
     }
 
     if (!arg.startsWith("-")) {
-      if (command === "add") {
+      if (command === "add" || command === "pin" || command === "unpin") {
         extraArgs.push(arg);
       } else if (!name) {
         name = arg;
@@ -86,7 +84,7 @@ function parseArgs(): ParsedArgs {
     }
   }
 
-  return { command, name, options, localRepo, extraArgs };
+  return { command, name, options, localRepo, extraArgs, flags };
 }
 
 function printHelp(): void {
@@ -96,6 +94,11 @@ function printHelp(): void {
     projx init                    Adopt existing project into projx
     projx add <components...>     Add components to existing project
     projx update                  Update scaffolding to latest
+    projx diff                    Preview what update would change
+    projx pin <patterns...>       Skip files on future updates
+    projx unpin <patterns...>     Remove files from skip list
+    projx pin --list              Show all skip patterns
+    projx doctor [--fix]          Health check for projx project
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
@@ -111,11 +114,14 @@ function printHelp(): void {
     npx create-projx my-app -y
     npx create-projx add frontend mobile
     npx create-projx@latest update
+    npx create-projx diff
+    npx create-projx pin backend/pyproject.toml
+    npx create-projx doctor --fix
 `);
 }
 
 async function main(): Promise<void> {
-  const { command, name, options, localRepo, extraArgs } = parseArgs();
+  const { command, name, options, localRepo, extraArgs, flags } = parseArgs();
 
   if (command === "init") {
     await init(process.cwd(), localRepo);
@@ -139,6 +145,35 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "pin") {
+    if (flags.list || extraArgs.length === 0) {
+      await listPins(process.cwd());
+    } else {
+      await pin(process.cwd(), extraArgs);
+    }
+    return;
+  }
+
+  if (command === "unpin") {
+    if (extraArgs.length === 0) {
+      console.error("Error: specify patterns to unpin. Usage: projx unpin <patterns...>");
+      process.exit(1);
+    }
+    await unpin(process.cwd(), extraArgs);
+    return;
+  }
+
+  if (command === "diff") {
+    await diff(process.cwd(), localRepo);
+    return;
+  }
+
+  if (command === "doctor") {
+    await doctor(process.cwd(), flags.fix);
+    return;
+  }
+
+  // Default: create
   let opts: Options;
 
   if (options.components) {

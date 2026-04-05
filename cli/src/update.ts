@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
@@ -9,10 +9,10 @@ import {
   type Component,
   type ComponentPaths,
   cleanupRepo,
+  detectProjectName,
   discoverComponentPaths,
   downloadRepo,
   readComponentMarker,
-  toKebab,
 } from "./utils.js";
 import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
 
@@ -280,25 +280,3 @@ export async function learnSkips(
   }
 }
 
-function detectProjectName(
-  cwd: string,
-  components: Component[],
-  componentPaths: ComponentPaths,
-): string {
-  for (const component of components) {
-    const dir = componentPaths[component] ?? component;
-    const pkgPath = join(cwd, dir, "package.json");
-    if (existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-        const n = pkg.name as string;
-        if (n && n.includes("-")) {
-          return n.substring(0, n.lastIndexOf("-"));
-        }
-      } catch {
-        // continue
-      }
-    }
-  }
-  return toKebab(cwd.split("/").pop()!);
-}

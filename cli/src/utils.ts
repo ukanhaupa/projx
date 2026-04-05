@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -389,4 +389,27 @@ export function render(
   }
 
   return output.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+export function detectProjectName(
+  cwd: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+): string {
+  for (const component of components) {
+    const dir = componentPaths[component] ?? component;
+    const pkgPath = join(cwd, dir, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+        const n = pkg.name as string;
+        if (n && n.includes("-")) {
+          return n.substring(0, n.lastIndexOf("-"));
+        }
+      } catch {
+        // continue
+      }
+    }
+  }
+  return toKebab(cwd.split("/").pop()!);
 }

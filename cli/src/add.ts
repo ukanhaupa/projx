@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
@@ -6,11 +6,11 @@ import {
   type Component,
   type ComponentPaths,
   cleanupRepo,
+  detectProjectName,
   discoverComponentPaths,
   downloadRepo,
   exec,
   hasCommand,
-  toKebab,
 } from "./utils.js";
 import { writeTemplateToDir, type GeneratorVars } from "./baseline.js";
 
@@ -155,25 +155,3 @@ async function installDeps(
   }
 }
 
-function detectProjectName(
-  cwd: string,
-  components: Component[],
-  paths: ComponentPaths,
-): string {
-  for (const component of components) {
-    const dir = paths[component] ?? component;
-    const pkgPath = join(cwd, dir, "package.json");
-    if (existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-        const n = pkg.name as string;
-        if (n && n.includes("-")) {
-          return n.substring(0, n.lastIndexOf("-"));
-        }
-      } catch {
-        // continue
-      }
-    }
-  }
-  return toKebab(cwd.split("/").pop()!);
-}

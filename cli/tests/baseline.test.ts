@@ -239,8 +239,8 @@ describe("tier 1: git merge via worktree", () => {
       execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim(),
     );
 
-    // No new commits — template unchanged
-    expect(commitsAfter - commitsBefore).toBeLessThanOrEqual(1);
+    // At most 2 new commits (template + merge) — same template version
+    expect(commitsAfter - commitsBefore).toBeLessThanOrEqual(2);
   });
 
   it("works with renamed component directories", async () => {

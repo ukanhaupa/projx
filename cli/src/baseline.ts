@@ -37,7 +37,7 @@ export interface MergeResult {
   conflictedFiles?: string[];
 }
 
-const BASELINE_REF = "refs/projx/baseline";
+export const BASELINE_REF = "refs/projx/baseline";
 
 export function matchesSkip(filePath: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
@@ -75,7 +75,7 @@ export function saveBaselineRef(cwd: string): void {
   }
 }
 
-function getBaselineRef(cwd: string): string | null {
+export function getBaselineRef(cwd: string): string | null {
   // Try explicit ref first
   try {
     return execSync(`git rev-parse --verify ${BASELINE_REF}`, { cwd, stdio: "pipe" }).toString().trim();
@@ -94,7 +94,7 @@ function getBaselineRef(cwd: string): string | null {
   return null;
 }
 
-function getFileAtRef(cwd: string, ref: string, filePath: string): string | null {
+export function getFileAtRef(cwd: string, ref: string, filePath: string): string | null {
   try {
     return execSync(`git show ${ref}:"${filePath}"`, { cwd, stdio: "pipe" }).toString();
   } catch {
@@ -126,7 +126,7 @@ function mergeFileThreeWay(
   }
 }
 
-async function collectAllFiles(dir: string, base: string): Promise<string[]> {
+export async function collectAllFiles(dir: string, base: string): Promise<string[]> {
   const { readdir } = await import("node:fs/promises");
   const results: string[] = [];
 
