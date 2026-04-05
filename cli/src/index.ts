@@ -10,11 +10,12 @@ import { init } from "./init.js";
 import { pin, unpin, listPins } from "./pin.js";
 import { doctor } from "./doctor.js";
 import { diff } from "./diff.js";
+import { gen } from "./gen.js";
 
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor";
+  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor" | "gen";
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -43,6 +44,7 @@ function parseArgs(): ParsedArgs {
     if (arg === "unpin" && !name) { command = "unpin"; continue; }
     if (arg === "diff" && !name) { command = "diff"; continue; }
     if (arg === "doctor" && !name) { command = "doctor"; continue; }
+    if (arg === "gen" && !name) { command = "gen"; continue; }
 
     if (arg === "--components") {
       const val = args[++i];
@@ -75,8 +77,14 @@ function parseArgs(): ParsedArgs {
       process.exit(0);
     }
 
+    if (arg === "--fields") {
+      const val = args[++i];
+      if (val) extraArgs.push(`--fields=${val}`);
+      continue;
+    }
+
     if (!arg.startsWith("-")) {
-      if (command === "add" || command === "pin" || command === "unpin") {
+      if (command === "add" || command === "pin" || command === "unpin" || command === "gen") {
         extraArgs.push(arg);
       } else if (!name) {
         name = arg;
@@ -99,6 +107,7 @@ function printHelp(): void {
     projx unpin <patterns...>     Remove files from skip list
     projx pin --list              Show all skip patterns
     projx doctor [--fix]          Health check for projx project
+    projx gen entity <name>       Generate a new entity
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
@@ -117,6 +126,8 @@ function printHelp(): void {
     npx create-projx diff
     npx create-projx pin backend/pyproject.toml
     npx create-projx doctor --fix
+    npx create-projx gen entity invoice
+    npx create-projx gen entity invoice --fields "name:string,amount:number,status:string"
 `);
 }
 
@@ -170,6 +181,19 @@ async function main(): Promise<void> {
 
   if (command === "doctor") {
     await doctor(process.cwd(), flags.fix);
+    return;
+  }
+
+  if (command === "gen") {
+    const subcommand = extraArgs[0];
+    if (subcommand !== "entity" || !extraArgs[1]) {
+      console.error("Usage: projx gen entity <name> [--fields \"name:string,amount:number\"]");
+      process.exit(1);
+    }
+    const entityName = extraArgs[1];
+    const fieldsArg = extraArgs.find((a) => a.startsWith("--fields="));
+    const fieldsFlag = fieldsArg ? fieldsArg.split("=").slice(1).join("=") : undefined;
+    await gen(process.cwd(), entityName, fieldsFlag);
     return;
   }
 
