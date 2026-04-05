@@ -1,0 +1,10 @@
+node_modules/
+playwright-report/
+test-results/
+blob-report/
+.env
+.env.*
+!.env.example
+test-config.ts
+test-config.*.ts
+playwright/.auth/*.json

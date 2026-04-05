@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# tf <command> <environment>
+# Commands: plan | apply | destroy | output
+# Environments: dev | staging | prod
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+STACK_DIR="${TERRAFORM_ROOT}/stack"
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+
+usage() {
+  cat <<'EOF'
+Usage: tf <command> <environment>
+
+Commands:
+  plan     terraform init + plan  (saves plan to environments/<env>.tfplan)
+  apply    terraform init + apply
+  destroy  terraform init + destroy
+  output   show terraform outputs for the given state
+  exec     pass-through: terraform init + run any terraform subcommand
+           e.g. ./bin/tf exec dev apply -replace='module.compose[0].aws_instance.compose'
+                ./bin/tf exec dev state list
+
+Environments: dev | staging | prod
+
+Environment variables:
+  TERRAFORM_ENV_FILE   Override the default .env.<environment> file path
+
+Examples:
+  ./bin/tf plan dev
+  ./bin/tf apply staging
+  ./bin/tf destroy prod
+  ./bin/output prod
+EOF
+}
+
+cmd="${1:-}"
+target_env="${2:-}"
+
+if [[ -z "$cmd" || -z "$target_env" ]]; then
+  usage; exit 1
+fi
+
+case "$cmd" in
+  plan|apply|destroy|output|exec) ;;
+  *) echo "error: unknown command '$cmd'" >&2; usage; exit 1 ;;
+esac
+
+case "$target_env" in
+  dev|staging|prod) ;;
+  *) echo "error: environment must be dev, staging, or prod (got '$target_env')" >&2; exit 1 ;;
+esac
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "error: missing required command: $1" >&2; exit 1; }
+}
+
+version_ge() {
+  [[ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" == "$2" ]]
+}
+
+require_terraform_version() {
+  local current
+  current="$(terraform version -json 2>/dev/null \
+    | sed -n 's/.*"terraform_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  [[ -z "$current" ]] && current="$(terraform version | head -n1 | sed 's/^Terraform v//')"
+  version_ge "$current" "1.11.0" || {
+    echo "error: Terraform >= 1.11.0 required, found $current" >&2
+    echo "       Tip: tfenv install 1.11.0 && tfenv use 1.11.0" >&2
+    exit 1
+  }
+}
+
+require_aws_credentials() {
+  aws sts get-caller-identity >/dev/null 2>&1 || {
+    echo "error: AWS credentials not configured." >&2
+    echo "       Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in ${ENV_FILE}." >&2
+    exit 1
+  }
+}
+
+ensure_backend_bucket() {
+  if aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then return 0; fi
+  local err
+  err=$(aws s3api head-bucket --bucket "$bucket" 2>&1 || true)
+  if echo "$err" | grep -qiE "(Not Found|404|NoSuchBucket)"; then
+    echo "Creating backend S3 bucket: $bucket (region=$region)"
+    if [[ "$region" == "us-east-1" ]]; then
+      aws s3api create-bucket --bucket "$bucket"
+    else
+      aws s3api create-bucket --bucket "$bucket" \
+        --create-bucket-configuration LocationConstraint="$region"
+    fi
+  else
+    echo "error: cannot access S3 bucket $bucket: $err" >&2; exit 1
+  fi
+}
+
+validate_inputs() {
+  [[ -f "$tfvars_file" ]] || { echo "error: missing $tfvars_file" >&2; exit 1; }
+  if grep -q "YOUR_IP" "$ENV_FILE" 2>/dev/null; then
+    echo "error: $ENV_FILE still contains YOUR_IP placeholder — replace with your actual IP" >&2; exit 1
+  fi
+  if grep -q "<your-access-key-id>" "$ENV_FILE" 2>/dev/null; then
+    echo "error: $ENV_FILE still contains placeholder credentials" >&2; exit 1
+  fi
+}
+
+# ── Load environment file ─────────────────────────────────────────────────────
+
+ENV_FILE="${TERRAFORM_ENV_FILE:-${TERRAFORM_ROOT}/.env.${target_env}}"
+
+[[ -f "$ENV_FILE" ]] || {
+  echo "error: env file not found: $ENV_FILE" >&2
+  echo "       Copy .env.example → .env.${target_env} and fill in the values." >&2
+  exit 1
+}
+
+set -a; source "$ENV_FILE"; set +a
+
+# ── Derived backend config ────────────────────────────────────────────────────
+
+[[ -n "${TF_VAR_project:-}" ]] || {
+  echo "error: TF_VAR_project must be set in $ENV_FILE" >&2; exit 1
+}
+
+region="${AWS_REGION:-${TF_VAR_aws_region:-}}"
+[[ -n "$region" ]] || { echo "error: AWS_REGION must be set in $ENV_FILE" >&2; exit 1; }
+region_sanitized="${region//-/}"
+# Ensure TF_VAR_aws_region is set so Terraform's aws_region variable gets the value
+# even when only AWS_REGION is defined in the .env file.
+export TF_VAR_aws_region="${TF_VAR_aws_region:-$region}"
+
+account_id="${AWS_ACCOUNT_ID:-${TF_VAR_aws_account_id:-}}"
+if [[ -z "$account_id" ]]; then
+  account_id=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)
+fi
+account_id="${account_id:-000000000000}"
+
+backend_mode="${TF_VAR_deployment_mode:-compose}"
+bucket="${TF_VAR_project}-${region_sanitized}-${account_id}"
+key="terraform/state/${target_env}/${backend_mode}.tfstate"
+tfvars_file="${TERRAFORM_ROOT}/environments/${target_env}.tfvars"
+plan_out="${TERRAFORM_ROOT}/environments/${target_env}.tfplan"
+
+# Write a temporary backend config file
+backend_config=$(mktemp)
+cat > "$backend_config" <<EOF
+bucket         = "${bucket}"
+key            = "${key}"
+region         = "${region}"
+encrypt        = true
+use_lockfile   = true
+EOF
+trap 'rm -f "$backend_config"' EXIT
+
+# ── Pre-flight checks ─────────────────────────────────────────────────────────
+
+require_cmd terraform
+require_cmd aws
+require_terraform_version
+
+tf_init() {
+  if ! terraform -chdir="$STACK_DIR" init \
+      -backend-config="$backend_config" -migrate-state -upgrade -input=false; then
+    terraform -chdir="$STACK_DIR" init \
+      -backend-config="$backend_config" -reconfigure -upgrade -input=false
+  fi
+}
+
+# ── Execute command ───────────────────────────────────────────────────────────
+
+case "$cmd" in
+  plan)
+    validate_inputs
+    require_aws_credentials
+    ensure_backend_bucket
+    tf_init
+    terraform -chdir="$STACK_DIR" plan \
+      -var-file="../environments/${target_env}.tfvars" \
+      -out="../environments/${target_env}.tfplan"
+    echo "Plan saved → $plan_out"
+    ;;
+
+  apply)
+    validate_inputs
+    require_aws_credentials
+    ensure_backend_bucket
+    tf_init
+    terraform -chdir="$STACK_DIR" apply \
+      -var-file="../environments/${target_env}.tfvars" \
+      -auto-approve
+    ;;
+
+  destroy)
+    validate_inputs
+    require_aws_credentials
+    ensure_backend_bucket
+    tf_init
+    terraform -chdir="$STACK_DIR" destroy \
+      -var-file="../environments/${target_env}.tfvars" \
+      -auto-approve
+    ;;
+
+  output)
+    ensure_backend_bucket
+    tf_init > /dev/null 2>&1 || \
+      terraform -chdir="$STACK_DIR" init \
+        -backend-config="$backend_config" -reconfigure -upgrade > /dev/null
+    terraform -chdir="$STACK_DIR" output
+    ;;
+
+  exec)
+    # Pass remaining args directly to terraform after init.
+    # Usage: ./bin/tf exec <env> <terraform-args...>
+    # Example: ./bin/tf exec dev apply -replace='module.compose[0].aws_instance.compose'
+    shift 2
+    validate_inputs
+    require_aws_credentials
+    ensure_backend_bucket
+    tf_init
+    terraform -chdir="$STACK_DIR" "$@"
+    ;;
+esac

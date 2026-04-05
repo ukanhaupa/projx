@@ -1,0 +1,77 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - curl -fsSL "https://releases.hashicorp.com/terraform/1.11.4/terraform_1.11.4_linux_amd64.zip" -o /tmp/terraform.zip
+      - unzip -o /tmp/terraform.zip -d /usr/local/bin/
+      - terraform version
+      - curl -fsSL https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      - curl -fsSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+  pre_build:
+    commands:
+      - LAST_DEPLOYED_COMMIT="$(aws ssm get-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --query 'Parameter.Value' --output text 2>/dev/null || true)"
+      - SHOULD_DEPLOY="true"
+      - |
+        if [ -n "$LAST_DEPLOYED_COMMIT" ] && [ "$LAST_DEPLOYED_COMMIT" != "INITIAL" ] && [ -n "$CODEBUILD_RESOLVED_SOURCE_VERSION" ]; then
+          CHANGED_PATHS="$(aws codecommit get-differences --region "$CICD_REGION" --repository-name "$CODECOMMIT_REPO_NAME" --before-commit-specifier "$LAST_DEPLOYED_COMMIT" --after-commit-specifier "$CODEBUILD_RESOLVED_SOURCE_VERSION" --query 'differences[].afterBlob.path' --output text || true)"
+          CHANGED_PATHS="$CHANGED_PATHS $(aws codecommit get-differences --region "$CICD_REGION" --repository-name "$CODECOMMIT_REPO_NAME" --before-commit-specifier "$LAST_DEPLOYED_COMMIT" --after-commit-specifier "$CODEBUILD_RESOLVED_SOURCE_VERSION" --query 'differences[].beforeBlob.path' --output text || true)"
+          if ! echo "$CHANGED_PATHS" | tr '\t' '\n' | grep -qE "^infra/"; then
+            SHOULD_DEPLOY="false"
+          fi
+        fi
+      - echo "$SHOULD_DEPLOY" > /tmp/should_deploy
+      - |
+        if [ "$SHOULD_DEPLOY" != "true" ]; then
+          echo "No changes in infra/. Skipping terraform apply."
+        fi
+
+  build:
+    commands:
+      - |
+        if [ "$(cat /tmp/should_deploy)" = "true" ]; then
+          cd infra
+          echo "Running terraform fmt check..."
+          terraform fmt -check -recursive stack/ || { echo "Terraform files are not formatted. Run 'terraform fmt -recursive'."; exit 1; }
+
+          echo "Running tflint..."
+          cd stack
+          tflint --init
+          tflint --recursive || { echo "tflint found issues."; exit 1; }
+
+          echo "Running tfsec..."
+          tfsec . --soft-fail || true
+
+          echo "Running terraform validate..."
+          terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="key=$TF_STATE_KEY" -backend-config="region=$TARGET_AWS_REGION" -backend-config="encrypt=true" -input=false
+          terraform validate
+
+          echo "Running terraform plan..."
+          terraform plan -var-file="../environments/${ENVIRONMENT}.tfvars" -out=plan.tfplan -detailed-exitcode || PLAN_EXIT=$?
+          if [ "${PLAN_EXIT:-0}" -eq 2 ]; then
+            if [ "$ENVIRONMENT" != "dev" ]; then
+              echo "CHANGES DETECTED for $ENVIRONMENT — review the plan above."
+              echo "Auto-apply is disabled for non-dev environments."
+              echo "Run 'infra/bin/apply $ENVIRONMENT' manually after reviewing the plan."
+              exit 0
+            fi
+            echo "Changes detected. Applying..."
+            terraform apply plan.tfplan
+          elif [ "${PLAN_EXIT:-0}" -eq 0 ]; then
+            echo "No infrastructure changes needed."
+          else
+            echo "Terraform plan failed."
+            exit 1
+          fi
+        else
+          echo "Skipping build phase."
+        fi
+
+  post_build:
+    commands:
+      - |
+        if [ "$(cat /tmp/should_deploy)" = "true" ]; then
+          aws ssm put-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --type String \
+            --value "$CODEBUILD_RESOLVED_SOURCE_VERSION" --overwrite
+        fi

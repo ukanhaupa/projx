@@ -1,0 +1,93 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      # kubectl only used in k8s mode — harmless to install for compose
+      - curl -sSL -o kubectl "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - install -m 0755 kubectl /usr/local/bin/kubectl
+
+  pre_build:
+    commands:
+      - IMAGE_TAG="$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)"
+      - if [ -z "$IMAGE_TAG" ]; then IMAGE_TAG="latest"; fi
+
+      # Skip deploy if no files changed under frontend/
+      - LAST_DEPLOYED_COMMIT="$(aws ssm get-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --query 'Parameter.Value' --output text 2>/dev/null || true)"
+      - SHOULD_DEPLOY="true"
+      - |
+        if [ -n "$LAST_DEPLOYED_COMMIT" ] && [ "$LAST_DEPLOYED_COMMIT" != "INITIAL" ] && [ -n "$CODEBUILD_RESOLVED_SOURCE_VERSION" ]; then
+          CHANGED_PATHS="$(aws codecommit get-differences --region "$CICD_REGION" --repository-name "$CODECOMMIT_REPO_NAME" --before-commit-specifier "$LAST_DEPLOYED_COMMIT" --after-commit-specifier "$CODEBUILD_RESOLVED_SOURCE_VERSION" --query 'differences[].afterBlob.path' --output text || true)"
+          CHANGED_PATHS="$CHANGED_PATHS $(aws codecommit get-differences --region "$CICD_REGION" --repository-name "$CODECOMMIT_REPO_NAME" --before-commit-specifier "$LAST_DEPLOYED_COMMIT" --after-commit-specifier "$CODEBUILD_RESOLVED_SOURCE_VERSION" --query 'differences[].beforeBlob.path' --output text || true)"
+          if ! echo "$CHANGED_PATHS" | tr '\t' '\n' | grep -qE "^${FOLDER_PATH}/"; then
+            SHOULD_DEPLOY="false"
+          fi
+        fi
+      - echo "$SHOULD_DEPLOY" > /tmp/should_deploy
+      - |
+        if [ "$SHOULD_DEPLOY" = "true" ]; then
+          aws ecr get-login-password --region "$TARGET_AWS_REGION" \
+            | docker login --username AWS --password-stdin "$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)"
+        else
+          echo "No changes in ${FOLDER_PATH}/. Skipping frontend deploy."
+        fi
+
+  build:
+    commands:
+      - |
+        if [ "$(cat /tmp/should_deploy)" = "true" ]; then
+          docker build -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" frontend
+          docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+          docker tag "$ECR_REPOSITORY_URL:$IMAGE_TAG" "$ECR_REPOSITORY_URL:latest"
+          docker push "$ECR_REPOSITORY_URL:latest"
+        else
+          echo "Skipping build phase."
+        fi
+
+  post_build:
+    commands:
+      - |
+        if [ "$(cat /tmp/should_deploy)" != "true" ]; then
+          echo "Skipping deploy phase."
+          exit 0
+        fi
+
+        if [ -n "$EKS_CLUSTER_NAME" ]; then
+          # ── k8s deploy ────────────────────────────────────────────────────────
+          aws eks update-kubeconfig --region "$TARGET_AWS_REGION" --name "$EKS_CLUSTER_NAME"
+          kubectl -n "$APPS_NAMESPACE" set image deployment/frontend frontend="$ECR_REPOSITORY_URL:$IMAGE_TAG"
+          kubectl -n "$APPS_NAMESPACE" rollout status deployment/frontend --timeout=300s
+        else
+          # ── compose deploy via SSM RunCommand ─────────────────────────────────
+          INSTANCE_IDS="$(aws ec2 describe-instances \
+            --region "$TARGET_AWS_REGION" \
+            --filters "Name=tag:Name,Values=$COMPOSE_INSTANCE_TAG" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --output text)"
+          if [ -z "$INSTANCE_IDS" ]; then
+            echo "ERROR: No running compose instance found with tag Name=$COMPOSE_INSTANCE_TAG"
+            exit 1
+          fi
+          INSTANCE_ID="$(echo "$INSTANCE_IDS" | awk '{print $1}')"
+          COMMAND_ID="$(aws ssm send-command \
+            --region "$TARGET_AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["aws ecr get-login-password --region '"$TARGET_AWS_REGION"' | docker login --username AWS --password-stdin '"$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)"' && docker-compose -f /opt/docker-compose.yml pull frontend && docker-compose -f /opt/docker-compose.yml up -d --no-deps frontend"]' \
+            --query 'Command.CommandId' \
+            --output text)"
+          echo "SSM command sent: $COMMAND_ID — waiting for completion..."
+          aws ssm wait command-executed \
+            --region "$TARGET_AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || \
+          (aws ssm get-command-invocation \
+            --region "$TARGET_AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query 'StandardErrorContent' \
+            --output text && exit 1)
+        fi
+
+        aws ssm put-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --type String \
+          --value "$CODEBUILD_RESOLVED_SOURCE_VERSION" --overwrite

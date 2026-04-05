@@ -1,0 +1,287 @@
+#!/bin/bash
+set -euo pipefail
+
+# ── Install Docker + Compose + PostgreSQL client ──────────────────────────────
+dnf install -y docker postgresql15
+systemctl enable --now docker
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
+  -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose
+
+# ── Bootstrap databases and users ────────────────────────────────────────────
+export PGPASSWORD="${db_master_password}"
+until pg_isready -h "${db_host}" -p "${db_port}" -U "${db_master_user}" -d "postgres"; do
+  echo "waiting for postgres..."
+  sleep 5
+done
+
+psql -h "${db_host}" -p "${db_port}" -U "${db_master_user}" -d "postgres" -v ON_ERROR_STOP=1 <<'BOOTSTRAP_SQL'
+-- Backend app user
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${backend_db_username}')
+  THEN format('ALTER ROLE %I WITH LOGIN PASSWORD %L CREATEDB', '${backend_db_username}', '${backend_db_password}')
+  ELSE format('CREATE ROLE %I LOGIN PASSWORD %L CREATEDB', '${backend_db_username}', '${backend_db_password}')
+END\gexec
+
+-- Reader user
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${db_reader_username}')
+  THEN format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${db_reader_username}', '${db_reader_password}')
+  ELSE format('CREATE ROLE %I LOGIN PASSWORD %L', '${db_reader_username}', '${db_reader_password}')
+END\gexec
+
+%{ if enable_keycloak ~}
+-- Keycloak user
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${keycloak_db_username}')
+  THEN format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${keycloak_db_username}', '${keycloak_db_password}')
+  ELSE format('CREATE ROLE %I LOGIN PASSWORD %L', '${keycloak_db_username}', '${keycloak_db_password}')
+END\gexec
+%{ endif ~}
+
+-- Databases
+SELECT format('CREATE DATABASE %I OWNER %I', '${backend_db_name}', '${backend_db_username}')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${backend_db_name}')\gexec
+
+%{ if enable_keycloak ~}
+SELECT format('CREATE DATABASE %I OWNER %I', '${keycloak_db_name}', '${keycloak_db_username}')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${keycloak_db_name}')\gexec
+%{ endif ~}
+
+-- Reader: connect access to both databases
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', '${backend_db_name}', '${db_reader_username}')\gexec
+%{ if enable_keycloak ~}
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', '${keycloak_db_name}', '${db_reader_username}')\gexec
+%{ endif ~}
+BOOTSTRAP_SQL
+
+# Backend + reader: schema-level privileges inside backend DB (must connect to that DB)
+psql -h "${db_host}" -p "${db_port}" -U "${db_master_user}" -d "${backend_db_name}" -v ON_ERROR_STOP=1 <<'BACKEND_DB_SQL'
+-- Backend app: full ownership of public schema (required on PostgreSQL 15+)
+SELECT format('GRANT ALL PRIVILEGES ON SCHEMA public TO %I', '${backend_db_username}')\gexec
+SELECT format('GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %I', '${backend_db_username}')\gexec
+SELECT format('GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %I', '${backend_db_username}')\gexec
+
+-- Reader: read-only access on existing objects
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', '${db_reader_username}')\gexec
+SELECT format('GRANT SELECT ON ALL TABLES IN SCHEMA public TO %I', '${db_reader_username}')\gexec
+SELECT format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', '${db_reader_username}')\gexec
+
+-- Allow master user to act as backend user so it can set future-table defaults
+SELECT format('GRANT %I TO %I', '${backend_db_username}', '${db_master_user}')\gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON TABLES TO %I', '${backend_db_username}', '${db_reader_username}')\gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON SEQUENCES TO %I', '${backend_db_username}', '${db_reader_username}')\gexec
+SELECT format('REVOKE %I FROM %I', '${backend_db_username}', '${db_master_user}')\gexec
+BACKEND_DB_SQL
+
+unset PGPASSWORD
+
+# ── Authenticate to ECR (if images are ECR URLs) ─────────────────────────────
+ECR_REGISTRY=$(echo "${backend_image}" | cut -d/ -f1)
+if [[ "$ECR_REGISTRY" == *.amazonaws.com ]]; then
+  aws ecr get-login-password --region "${aws_region}" \
+    | docker login --username AWS --password-stdin "$ECR_REGISTRY" || true
+fi
+
+# ── nginx config ──────────────────────────────────────────────────────────────
+mkdir -p /etc/nginx/conf.d
+cat > /etc/nginx/conf.d/default.conf <<'NGINX'
+server {
+  listen 80;
+  client_max_body_size 10m;
+
+  # Security headers
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header X-XSS-Protection "1; mode=block" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  # Gzip
+  gzip on;
+  gzip_vary on;
+  gzip_proxied any;
+  gzip_comp_level 4;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml application/xml;
+  gzip_min_length 256;
+
+  # Health check endpoint (bypass proxy for monitoring)
+  location = /nginx-health {
+    access_log off;
+    return 200 "ok";
+    add_header Content-Type text/plain;
+  }
+
+%{ if environment == "dev" ~}
+  # Swagger UI — dev only
+  location /docs {
+    proxy_pass http://backend:${backend_port};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-ID $request_id;
+  }
+%{ endif ~}
+
+  location /api/ {
+    proxy_pass http://backend:${backend_port};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 30s;
+    proxy_send_timeout 10s;
+  }
+
+%{ if enable_keycloak ~}
+  location /auth/ {
+    proxy_pass http://keycloak:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffer_size 128k;
+    proxy_buffers 4 256k;
+    proxy_busy_buffers_size 256k;
+  }
+%{ endif ~}
+
+  location / {
+    proxy_pass http://frontend:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+NGINX
+
+# ── Docker Compose stack ──────────────────────────────────────────────────────
+cat > /opt/docker-compose.yml <<'COMPOSE'
+services:
+%{ if backend_image != "" ~}
+  backend:
+    image: "${backend_image}"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://${backend_db_username}:${backend_db_password_encoded}@${db_host}:${db_port}/${backend_db_name}?sslmode=require"
+      PORT: "${backend_port}"
+      HOST: "0.0.0.0"
+      NODE_ENV: "${node_env}"
+    ports:
+      - "127.0.0.1:${backend_port}:${backend_port}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:${backend_port}/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "${log_group_name}"
+        awslogs-region: "${aws_region}"
+        awslogs-stream: backend
+
+%{ endif ~}
+%{ if frontend_image != "" ~}
+  frontend:
+    image: "${frontend_image}"
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "http://localhost/api"
+    ports:
+      - "127.0.0.1:3000:3000"
+%{ if backend_image != "" ~}
+    depends_on:
+      - backend
+%{ endif ~}
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "${log_group_name}"
+        awslogs-region: "${aws_region}"
+        awslogs-stream: frontend
+
+%{ endif ~}
+%{ if enable_keycloak ~}
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    restart: unless-stopped
+    command: ${environment != "prod" ? "start-dev" : "start --proxy-headers=xforwarded --http-enabled=true"} --http-relative-path=/auth
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://${db_host}:${db_port}/${keycloak_db_name}"
+      KC_DB_USERNAME: "${keycloak_db_username}"
+      KC_DB_PASSWORD: "${keycloak_db_password}"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: "${keycloak_admin_password}"
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "${log_group_name}"
+        awslogs-region: "${aws_region}"
+        awslogs-stream: keycloak
+
+%{ endif ~}
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    volumes:
+      - /etc/nginx/conf.d:/etc/nginx/conf.d:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "${log_group_name}"
+        awslogs-region: "${aws_region}"
+        awslogs-stream: nginx
+COMPOSE
+
+docker-compose -f /opt/docker-compose.yml down 2>/dev/null || true
+docker-compose -f /opt/docker-compose.yml up -d
+%{ if backend_image == "" || frontend_image == "" ~}
+echo "INFO: backend_image or frontend_image is empty — app services not started."
+echo "      Push to the CI/CD branch to deploy backend/frontend."
+%{ endif ~}
+%{ if enable_keycloak ~}
+echo "Waiting for Keycloak to be ready..."
+until curl -sf http://localhost:8080/auth/realms/master/.well-known/openid-configuration > /dev/null 2>&1; do
+  sleep 5
+done
+
+KC_TOKEN=$(curl -sf -X POST http://localhost:8080/auth/realms/master/protocol/openid-connect/token \
+  -d "client_id=admin-cli&username=admin&password=${keycloak_admin_password}&grant_type=password" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST http://localhost:8080/auth/admin/realms \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @/opt/keycloak-import/realm.json)
+
+if [ "$HTTP_CODE" = "201" ]; then
+  echo "Realm imported successfully (201)."
+elif [ "$HTTP_CODE" = "409" ]; then
+  echo "Realm already exists (409). Skipping import."
+else
+  echo "WARNING: Realm import returned HTTP $HTTP_CODE"
+fi
+%{ endif ~}

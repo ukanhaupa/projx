@@ -1,0 +1,65 @@
+{
+  "name": "create-projx",
+  "version": "1.3.0",
+  "description": "Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.",
+  "type": "module",
+  "bin": {
+    "create-projx": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "src/templates"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target node18 --clean",
+    "dev": "tsup src/index.ts --format esm --target node18 --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "projx",
+    "scaffold",
+    "template",
+    "boilerplate",
+    "starter-kit",
+    "project-generator",
+    "fullstack",
+    "fastapi",
+    "fastify",
+    "react",
+    "flutter",
+    "terraform",
+    "docker",
+    "typescript",
+    "create",
+    "cli",
+    "monorepo",
+    "scaffolding"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ukanhaupa/projx.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/ukanhaupa/projx#readme",
+  "bugs": {
+    "url": "https://github.com/ukanhaupa/projx/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.2",
+    "eslint": "^10.2.0",
+    "tsup": "^8",
+    "typescript": "^5",
+    "typescript-eslint": "^8.58.0",
+    "vitest": "^4.1.2"
+  }
+}
