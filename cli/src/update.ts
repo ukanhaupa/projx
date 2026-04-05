@@ -97,7 +97,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       const marker = await readComponentMarker(join(cwd, dir));
       if (marker?.skip && marker.skip.length > 0) {
         componentSkips[component] = marker.skip;
-      } else if (marker?.origin === "init") {
+      } else if (marker?.origin === "init" || !marker?.origin) {
         componentSkips[component] = ["**"];
       }
     }
