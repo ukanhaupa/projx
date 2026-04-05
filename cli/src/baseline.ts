@@ -85,6 +85,51 @@ function removeWorktree(cwd: string, worktree: string): void {
   }
 }
 
+function matchesSkip(filePath: string, patterns: string[]): boolean {
+  for (const pattern of patterns) {
+    if (pattern === "**") return true;
+    if (pattern.endsWith("/**")) {
+      const prefix = pattern.slice(0, -3);
+      if (filePath.startsWith(prefix + "/") || filePath === prefix) return true;
+    }
+    if (pattern.startsWith("**/")) {
+      const suffix = pattern.slice(3);
+      if (filePath.endsWith(suffix) || filePath.includes("/" + suffix)) return true;
+    }
+    if (pattern.startsWith("*.")) {
+      const ext = pattern.slice(1);
+      if (filePath.endsWith(ext)) return true;
+    }
+    if (filePath === pattern) return true;
+  }
+  return false;
+}
+
+async function removeSkippedFiles(
+  dir: string,
+  skipPatterns: string[],
+): Promise<void> {
+  if (skipPatterns.length === 0) return;
+
+  const { readdir, unlink } = await import("node:fs/promises");
+
+  const walk = async (current: string, base: string): Promise<void> => {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(current, entry.name);
+      const rel = full.slice(base.length + 1);
+
+      if (entry.isDirectory()) {
+        await walk(full, base);
+      } else if (entry.name !== ".projx-component" && matchesSkip(rel, skipPatterns)) {
+        await unlink(full);
+      }
+    }
+  };
+
+  await walk(dir, dir);
+}
+
 async function writeTemplateToDir(
   dest: string,
   repoDir: string,
@@ -93,6 +138,7 @@ async function writeTemplateToDir(
   vars: GeneratorVars,
   version: string,
   origin: ComponentOrigin,
+  componentSkips?: Record<string, string[]>,
 ): Promise<void> {
   const name = vars.projectName;
   const nameSnake = toSnake(name);
@@ -113,7 +159,12 @@ async function writeTemplateToDir(
       await rm(join(dest, "__tmp__"), { recursive: true, force: true });
     }
 
-    await writeComponentMarker(join(dest, targetDir), component, origin);
+    const skipPatterns = componentSkips?.[component] ?? [];
+    if (skipPatterns.length > 0) {
+      await removeSkippedFiles(join(dest, targetDir), skipPatterns);
+    }
+
+    await writeComponentMarker(join(dest, targetDir), component, origin, skipPatterns.length > 0 ? skipPatterns : undefined);
   }
 
   await substituteNames(dest, components, componentPaths, name, nameSnake);
@@ -188,11 +239,12 @@ export async function createBaseline(
   vars: GeneratorVars,
   version: string,
   origin: ComponentOrigin = "scaffold",
+  componentSkips?: Record<string, string[]>,
 ): Promise<void> {
   const worktree = createWorktree(cwd, BASELINE_BRANCH, true);
 
   try {
-    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, origin);
+    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, origin, componentSkips);
 
     execSync("git add -A", { cwd: worktree, stdio: "pipe" });
     execSync(
@@ -211,13 +263,14 @@ export async function updateBaseline(
   componentPaths: ComponentPaths,
   vars: GeneratorVars,
   version: string,
+  componentSkips?: Record<string, string[]>,
 ): Promise<{ changed: boolean }> {
   const worktree = createWorktree(cwd, BASELINE_BRANCH, false);
 
   try {
     execSync("git rm -rf .", { cwd: worktree, stdio: "pipe" });
 
-    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, "scaffold");
+    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, "scaffold", componentSkips);
 
     execSync("git add -A", { cwd: worktree, stdio: "pipe" });
 
@@ -309,10 +362,11 @@ export async function reconstructBaseline(
   componentPaths: ComponentPaths,
   vars: GeneratorVars,
   version: string,
+  componentSkips?: Record<string, string[]>,
 ): Promise<void> {
   p.log.warn("projx/baseline branch not found. Reconstructing...");
 
-  await createBaseline(cwd, repoDir, components, componentPaths, vars, version);
+  await createBaseline(cwd, repoDir, components, componentPaths, vars, version, "scaffold", componentSkips);
 
   mergeBaseline(
     cwd,

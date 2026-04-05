@@ -255,16 +255,34 @@ export type ComponentOrigin = "scaffold" | "init";
 export interface ComponentMarkerData {
   components: string[];
   origin: ComponentOrigin;
+  skip?: string[];
+}
+
+export async function readComponentMarker(dir: string): Promise<ComponentMarkerData | null> {
+  const raw = await readFileOrNull(join(dir, COMPONENT_MARKER));
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    return {
+      components: data.components ?? (data.component ? [data.component] : []),
+      origin: data.origin ?? "scaffold",
+      skip: data.skip,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function writeComponentMarker(
   dir: string,
   component: Component,
   origin: ComponentOrigin = "scaffold",
+  skip?: string[],
 ): Promise<void> {
   const markerPath = join(dir, COMPONENT_MARKER);
   let components: string[] = [component];
   let existingOrigin: ComponentOrigin = origin;
+  let existingSkip: string[] | undefined = skip;
 
   const existing = await readFileOrNull(markerPath);
   if (existing) {
@@ -272,6 +290,7 @@ export async function writeComponentMarker(
       const data = JSON.parse(existing);
       const prev: string[] = data.components ?? (data.component ? [data.component] : []);
       existingOrigin = data.origin ?? origin;
+      existingSkip = skip ?? data.skip;
       if (!prev.includes(component)) {
         components = [...prev, component];
       } else {
@@ -282,10 +301,10 @@ export async function writeComponentMarker(
     }
   }
 
-  await writeFile(
-    markerPath,
-    JSON.stringify({ components, origin: existingOrigin }, null, 2) + "\n",
-  );
+  const marker: ComponentMarkerData = { components, origin: existingOrigin };
+  if (existingSkip && existingSkip.length > 0) marker.skip = existingSkip;
+
+  await writeFile(markerPath, JSON.stringify(marker, null, 2) + "\n");
 }
 
 export async function discoverComponentPaths(

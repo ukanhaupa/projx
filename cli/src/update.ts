@@ -10,6 +10,7 @@ import {
   cleanupRepo,
   discoverComponentPaths,
   downloadRepo,
+  readComponentMarker,
   toKebab,
 } from "./utils.js";
 import {
@@ -89,16 +90,27 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const name = detectProjectName(cwd, config.components, componentPaths);
     const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
 
+    const componentSkips: Record<string, string[]> = {};
+    for (const component of config.components) {
+      const dir = componentPaths[component];
+      const marker = await readComponentMarker(join(cwd, dir));
+      if (marker?.skip && marker.skip.length > 0) {
+        componentSkips[component] = marker.skip;
+      } else if (marker?.origin === "init") {
+        componentSkips[component] = ["**"];
+      }
+    }
+
     if (!hasBaseline(cwd)) {
       const rebuildSpinner = p.spinner();
       rebuildSpinner.start("Establishing baseline (first-time migration)");
-      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version);
+      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version, componentSkips);
       rebuildSpinner.stop("Baseline established.");
     }
 
     const updateSpinner = p.spinner();
     updateSpinner.start("Updating baseline to latest template");
-    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version);
+    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version, componentSkips);
 
     if (!changed) {
       updateSpinner.stop("Already up to date.");
