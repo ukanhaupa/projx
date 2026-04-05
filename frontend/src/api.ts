@@ -145,7 +145,7 @@ export const api = {
     return request<T>(path, init);
   },
 
-  list(prefix: string, params: ListParams = {}) {
+  list<T = Record<string, unknown>>(prefix: string, params: ListParams = {}) {
     const sp = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v === undefined || v === null || v === '') return;
@@ -153,22 +153,26 @@ export const api = {
       else sp.set(k, String(v));
     });
     const qs = sp.toString();
-    return request<PaginatedResponse>(`${prefix}/${qs ? `?${qs}` : ''}`);
+    return request<PaginatedResponse<T>>(`${prefix}/${qs ? `?${qs}` : ''}`);
   },
 
-  get(prefix: string, id: string | number) {
-    return request<Record<string, unknown>>(`${prefix}/${id}`);
+  get<T = Record<string, unknown>>(prefix: string, id: string | number) {
+    return request<T>(`${prefix}/${id}`);
   },
 
-  create(prefix: string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`${prefix}/`, {
+  create<T = Record<string, unknown>>(prefix: string, data: Partial<T>) {
+    return request<T>(`${prefix}/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  update(prefix: string, id: string | number, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`${prefix}/${id}`, {
+  update<T = Record<string, unknown>>(
+    prefix: string,
+    id: string | number,
+    data: Partial<T>,
+  ) {
+    return request<T>(`${prefix}/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
@@ -178,11 +182,11 @@ export const api = {
     return request<void>(`${prefix}/${id}`, { method: 'DELETE' });
   },
 
-  bulkCreate(prefix: string, items: Record<string, unknown>[]) {
-    return request<{ data: Record<string, unknown>[]; count: number }>(
-      `${prefix}/bulk`,
-      { method: 'POST', body: JSON.stringify(items) },
-    );
+  bulkCreate<T = Record<string, unknown>>(prefix: string, items: Partial<T>[]) {
+    return request<{ data: T[]; count: number }>(`${prefix}/bulk`, {
+      method: 'POST',
+      body: JSON.stringify(items),
+    });
   },
 
   bulkDelete(prefix: string, ids: (string | number)[]) {

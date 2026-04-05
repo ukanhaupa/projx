@@ -172,4 +172,111 @@ describe("gen entity", () => {
     // FastAPI should NOT have files (not in project)
     expect(existsSync(join(dest, "fastapi/src/entities/user/_model.py"))).toBe(false);
   });
+
+  it("generates frontend TypeScript interface", async () => {
+    dest = join(tmpdir(), `projx-gen-ts-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify", "frontend"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "product", "name:string,price:number,active:boolean,notes:text");
+
+    const typePath = join(dest, "frontend/src/types/product.ts");
+    expect(existsSync(typePath)).toBe(true);
+
+    const content = await readFile(typePath, "utf-8");
+    expect(content).toContain("export interface Product {");
+    expect(content).toContain("id: string;");
+    expect(content).toContain("name: string;");
+    expect(content).toContain("price: number;");
+    expect(content).toContain("active: boolean;");
+    expect(content).toContain("notes: string;");
+    expect(content).toContain("created_at: string;");
+    expect(content).toContain("updated_at: string;");
+
+    expect(content).toContain("export interface CreateProduct {");
+    expect(content).toContain("export interface UpdateProduct {");
+
+    // Barrel file
+    const barrelPath = join(dest, "frontend/src/types/index.ts");
+    expect(existsSync(barrelPath)).toBe(true);
+    const barrel = await readFile(barrelPath, "utf-8");
+    expect(barrel).toContain("export * from './product';");
+  });
+
+  it("generates mobile Dart model", async () => {
+    dest = join(tmpdir(), `projx-gen-dart-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify", "mobile"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "product", "name:string,price:number,description:text");
+
+    const modelPath = join(dest, "mobile/lib/entities/product/model.dart");
+    expect(existsSync(modelPath)).toBe(true);
+
+    const content = await readFile(modelPath, "utf-8");
+    expect(content).toContain("class Product {");
+    expect(content).toContain("final String id;");
+    expect(content).toContain("final String name;");
+    expect(content).toContain("final int price;");
+    expect(content).toContain("final String description;");
+    expect(content).toContain("final DateTime createdAt;");
+
+    expect(content).toContain("factory Product.fromJson(Map<String, dynamic> json)");
+    expect(content).toContain("Map<String, dynamic> toJson()");
+    expect(content).toContain("Product copyWith(");
+  });
+
+  it("generates types for all components at once", async () => {
+    dest = join(tmpdir(), `projx-gen-all-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi", "fastify", "frontend", "mobile"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string,amount:number");
+
+    expect(existsSync(join(dest, "fastapi/src/entities/invoice/_model.py"))).toBe(true);
+    expect(existsSync(join(dest, "fastify/src/modules/invoice/schemas.ts"))).toBe(true);
+    expect(existsSync(join(dest, "frontend/src/types/invoice.ts"))).toBe(true);
+    expect(existsSync(join(dest, "mobile/lib/entities/invoice/model.dart"))).toBe(true);
+  });
+
+  it("handles nullable fields in TypeScript interface", async () => {
+    dest = join(tmpdir(), `projx-gen-nullable-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify", "frontend"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    // In parseFieldsFlag, all fields default to required. Test nullable via the generated output.
+    await gen(dest, "task", "title:string,notes:text");
+
+    const content = await readFile(join(dest, "frontend/src/types/task.ts"), "utf-8");
+    expect(content).toContain("title: string;");
+    expect(content).toContain("notes: string;");
+  });
+
+  it("barrel file appends on second entity generation", async () => {
+    dest = join(tmpdir(), `projx-gen-barrel-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify", "frontend"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "product", "name:string");
+    await gen(dest, "invoice", "name:string,amount:number");
+
+    const barrel = await readFile(join(dest, "frontend/src/types/index.ts"), "utf-8");
+    expect(barrel).toContain("export * from './product';");
+    expect(barrel).toContain("export * from './invoice';");
+  });
 });

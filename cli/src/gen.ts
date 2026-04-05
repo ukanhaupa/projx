@@ -430,6 +430,194 @@ function generatePrismaModel(config: EntityConfig): string {
   return lines.join("\n");
 }
 
+// --- Frontend TypeScript interface generation ---
+
+function tsType(type: FieldType, required: boolean): string {
+  const base = (() => {
+    switch (type) {
+      case "string": case "text": case "date": case "datetime": return "string";
+      case "number": return "number";
+      case "boolean": return "boolean";
+      case "json": return "Record<string, unknown>";
+    }
+  })();
+  return required ? base : `${base} | null`;
+}
+
+function generateFrontendInterface(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const lines: string[] = [];
+
+  lines.push(`export interface ${className} {`);
+  lines.push(`  id: string;`);
+  for (const f of config.fields) {
+    lines.push(`  ${f.name}: ${tsType(f.type, f.required)};`);
+  }
+  if (config.softDelete) lines.push(`  deleted_at: string | null;`);
+  lines.push(`  created_at: string;`);
+  lines.push(`  updated_at: string;`);
+  lines.push(`}`);
+  lines.push("");
+
+  lines.push(`export interface Create${className} {`);
+  for (const f of config.fields) {
+    if (f.required) {
+      lines.push(`  ${f.name}: ${tsType(f.type, true)};`);
+    } else {
+      lines.push(`  ${f.name}?: ${tsType(f.type, false)};`);
+    }
+  }
+  lines.push(`}`);
+  lines.push("");
+
+  lines.push(`export interface Update${className} {`);
+  for (const f of config.fields) {
+    lines.push(`  ${f.name}?: ${tsType(f.type, false)};`);
+  }
+  lines.push(`}`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+// --- Mobile Dart model generation ---
+
+function dartType(type: FieldType, required: boolean): string {
+  const base = (() => {
+    switch (type) {
+      case "string": case "text": return "String";
+      case "number": return "int";
+      case "boolean": return "bool";
+      case "date": case "datetime": return "DateTime";
+      case "json": return "Map<String, dynamic>";
+    }
+  })();
+  return required ? base : `${base}?`;
+}
+
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function dartFromJson(fieldName: string, type: FieldType, required: boolean): string {
+  const key = `json['${fieldName}']`;
+  const isDate = type === "date" || type === "datetime";
+
+  if (isDate && required) return `DateTime.parse(${key} as String)`;
+  if (isDate && !required) return `${key} != null ? DateTime.parse(${key} as String) : null`;
+  if (type === "json" && !required) return `${key} as Map<String, dynamic>?`;
+  if (type === "json") return `${key} as Map<String, dynamic>`;
+
+  const dartT = (() => {
+    switch (type) {
+      case "string": case "text": return "String";
+      case "number": return "int";
+      case "boolean": return "bool";
+      default: return "String";
+    }
+  })();
+
+  return required ? `${key} as ${dartT}` : `${key} as ${dartT}?`;
+}
+
+function dartToJson(fieldName: string, camelName: string, type: FieldType): string {
+  const isDate = type === "date" || type === "datetime";
+  if (isDate) return `'${fieldName}': ${camelName}?.toIso8601String()`;
+  return `'${fieldName}': ${camelName}`;
+}
+
+function generateDartModel(config: EntityConfig): string {
+  const className = toPascal(config.name);
+
+  interface DartField {
+    snake: string;
+    camel: string;
+    type: string;
+    required: boolean;
+    fieldType: FieldType;
+  }
+
+  const allFields: DartField[] = [
+    { snake: "id", camel: "id", type: "String", required: true, fieldType: "string" },
+    ...config.fields.map((f) => ({
+      snake: f.name,
+      camel: toCamel(f.name),
+      type: dartType(f.type, f.required),
+      required: f.required,
+      fieldType: f.type,
+    })),
+  ];
+
+  if (config.softDelete) {
+    allFields.push({ snake: "deleted_at", camel: "deletedAt", type: "DateTime?", required: false, fieldType: "datetime" });
+  }
+
+  allFields.push(
+    { snake: "created_at", camel: "createdAt", type: "DateTime", required: true, fieldType: "datetime" },
+    { snake: "updated_at", camel: "updatedAt", type: "DateTime", required: true, fieldType: "datetime" },
+  );
+
+  const lines: string[] = [];
+
+  lines.push(`class ${className} {`);
+
+  // Fields
+  for (const f of allFields) {
+    lines.push(`  final ${f.type} ${f.camel};`);
+  }
+  lines.push("");
+
+  // Constructor
+  lines.push(`  const ${className}({`);
+  for (const f of allFields) {
+    if (f.required) {
+      lines.push(`    required this.${f.camel},`);
+    } else {
+      lines.push(`    this.${f.camel},`);
+    }
+  }
+  lines.push(`  });`);
+  lines.push("");
+
+  // fromJson
+  lines.push(`  factory ${className}.fromJson(Map<String, dynamic> json) {`);
+  lines.push(`    return ${className}(`);
+  for (const f of allFields) {
+    lines.push(`      ${f.camel}: ${dartFromJson(f.snake, f.fieldType, f.required)},`);
+  }
+  lines.push(`    );`);
+  lines.push(`  }`);
+  lines.push("");
+
+  // toJson
+  lines.push(`  Map<String, dynamic> toJson() {`);
+  lines.push(`    return {`);
+  for (const f of allFields) {
+    lines.push(`      ${dartToJson(f.snake, f.camel, f.fieldType)},`);
+  }
+  lines.push(`    };`);
+  lines.push(`  }`);
+  lines.push("");
+
+  // copyWith
+  lines.push(`  ${className} copyWith({`);
+  for (const f of allFields) {
+    lines.push(`    ${f.type.replace("?", "")}? ${f.camel},`);
+  }
+  lines.push(`  }) {`);
+  lines.push(`    return ${className}(`);
+  for (const f of allFields) {
+    lines.push(`      ${f.camel}: ${f.camel} ?? this.${f.camel},`);
+  }
+  lines.push(`    );`);
+  lines.push(`  }`);
+
+  lines.push(`}`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
 // --- Main ---
 
 export async function gen(
@@ -450,6 +638,8 @@ export async function gen(
 
   const hasFastapi = projxConfig.components.includes("fastapi");
   const hasFastify = projxConfig.components.includes("fastify");
+  const hasFrontend = projxConfig.components.includes("frontend");
+  const hasMobile = projxConfig.components.includes("mobile");
 
   if (!hasFastapi && !hasFastify) {
     p.log.error("No backend component found. Need fastapi or fastify.");
@@ -537,6 +727,47 @@ export async function gen(
     }
   }
 
+  if (hasFrontend) {
+    const dir = componentPaths.frontend;
+    const typesDir = join(cwd, dir, "src/types");
+    const fileName = toKebab(config.name) + ".ts";
+    const filePath = join(typesDir, fileName);
+
+    if (existsSync(filePath)) {
+      p.log.warn(`${dir}/src/types/${fileName} already exists. Skipping frontend types.`);
+    } else {
+      await mkdir(typesDir, { recursive: true });
+      await writeFile(filePath, generateFrontendInterface(config));
+      generated.push(`${dir}/src/types/${fileName}`);
+
+      const barrelPath = join(typesDir, "index.ts");
+      const exportLine = `export * from './${toKebab(config.name)}';`;
+      if (existsSync(barrelPath)) {
+        const content = await readFile(barrelPath, "utf-8");
+        if (!content.includes(exportLine)) {
+          await writeFile(barrelPath, content.trimEnd() + "\n" + exportLine + "\n");
+        }
+      } else {
+        await writeFile(barrelPath, exportLine + "\n");
+      }
+      generated.push(`${dir}/src/types/index.ts`);
+    }
+  }
+
+  if (hasMobile) {
+    const dir = componentPaths.mobile;
+    const entityDir = join(cwd, dir, "lib/entities", toSnake(config.name));
+    const modelPath = join(entityDir, "model.dart");
+
+    if (existsSync(modelPath)) {
+      p.log.warn(`${dir}/lib/entities/${toSnake(config.name)}/model.dart already exists. Skipping mobile model.`);
+    } else {
+      await mkdir(entityDir, { recursive: true });
+      await writeFile(modelPath, generateDartModel(config));
+      generated.push(`${dir}/lib/entities/${toSnake(config.name)}/model.dart`);
+    }
+  }
+
   if (generated.length === 0) {
     p.log.warn("Nothing generated.");
     p.outro("");
@@ -561,6 +792,19 @@ export async function gen(
     p.log.info("");
     p.log.info("Fastify next steps:");
     p.log.info(`  npx prisma migrate dev --name add_${toSnake(config.name)}`);
+  }
+
+  if (hasFrontend) {
+    p.log.info("");
+    p.log.info("Frontend usage:");
+    p.log.info(`  import type { ${className} } from '../types/${toKebab(config.name)}';`);
+    p.log.info(`  const { data } = await api.list<${className}>('${config.apiPrefix}');`);
+  }
+
+  if (hasMobile) {
+    p.log.info("");
+    p.log.info("Mobile usage:");
+    p.log.info(`  final item = ${className}.fromJson(json);`);
   }
 
   p.outro(`Entity ${className} created.`);

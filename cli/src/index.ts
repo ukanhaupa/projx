@@ -11,11 +11,12 @@ import { pin, unpin, listPins } from "./pin.js";
 import { doctor } from "./doctor.js";
 import { diff } from "./diff.js";
 import { gen } from "./gen.js";
+import { sync } from "./sync.js";
 
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor" | "gen";
+  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor" | "gen" | "sync";
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -45,6 +46,7 @@ function parseArgs(): ParsedArgs {
     if (arg === "diff" && !name) { command = "diff"; continue; }
     if (arg === "doctor" && !name) { command = "doctor"; continue; }
     if (arg === "gen" && !name) { command = "gen"; continue; }
+    if (arg === "sync" && !name) { command = "sync"; continue; }
 
     if (arg === "--components") {
       const val = args[++i];
@@ -71,6 +73,12 @@ function parseArgs(): ParsedArgs {
 
     if (arg === "--list" || arg === "-l") { flags.list = true; continue; }
     if (arg === "--fix") { flags.fix = true; continue; }
+
+    if (arg === "--url") {
+      const val = args[++i];
+      if (val) extraArgs.push(`--url=${val}`);
+      continue;
+    }
 
     if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -108,6 +116,7 @@ function printHelp(): void {
     projx pin --list              Show all skip patterns
     projx doctor [--fix]          Health check for projx project
     projx gen entity <name>       Generate a new entity
+    projx sync [--url <url>]      Sync types from running backend
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
@@ -181,6 +190,13 @@ async function main(): Promise<void> {
 
   if (command === "doctor") {
     await doctor(process.cwd(), flags.fix);
+    return;
+  }
+
+  if (command === "sync") {
+    const urlArg = extraArgs.find((a) => a.startsWith("--url="));
+    const url = urlArg ? urlArg.split("=").slice(1).join("=") : undefined;
+    await sync(process.cwd(), url);
     return;
   }
 
