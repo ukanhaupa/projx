@@ -2,21 +2,16 @@ services:
 <% if (components.includes('fastapi')) { %>
   migrate:
     build: ./<%= paths.fastapi %>
-    command: ['uv', 'run', 'migrate.py']
+    command: ["uv", "run", "migrate.py"]
     env_file:
       - ./<%= paths.fastapi %>/.env
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
     networks:
       - app-network
 
   backend:
     build: ./<%= paths.fastapi %>
     expose:
-      - '7860'
+      - "7860"
     env_file:
       - ./<%= paths.fastapi %>/.env
     restart: unless-stopped
@@ -26,27 +21,15 @@ services:
     healthcheck:
       test:
         [
-          'CMD',
-          'python',
-          '-c',
+          "CMD",
+          "python",
+          "-c",
           "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')",
         ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
     networks:
       - app-network
 <% } %>
@@ -54,23 +37,16 @@ services:
   backend-fastify:
     build: ./<%= paths.fastify %>
     expose:
-      - '3000'
+      - "3000"
     env_file:
       - ./<%= paths.fastify %>/.env
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/health']
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-    security_opt:
-      - no-new-privileges:true
     networks:
       - app-network
 <% } %>
@@ -79,12 +55,10 @@ services:
     build:
       context: ./<%= paths.frontend %>
       args:
-        VITE_API_URL: ''
+        VITE_API_URL: ""
     ports:
-      - '80:80'
-      - '443:443'
-    environment:
-      - DOMAIN=${DOMAIN:-localhost}
+      - "80:80"
+      - "443:443"
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-www:/var/www/certbot
@@ -100,18 +74,11 @@ services:
 <% } %>
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:80/']
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.5'
-    security_opt:
-      - no-new-privileges:true
     networks:
       - app-network
 
@@ -127,11 +94,6 @@ services:
         condition: service_healthy
     profiles:
       - ssl
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-          cpus: '0.25'
     networks:
       - app-network
 <% } %>

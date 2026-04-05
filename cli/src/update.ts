@@ -10,7 +10,9 @@ import {
   cleanupRepo,
   discoverComponentPaths,
   downloadRepo,
+  readComponentMarker,
   toKebab,
+  writeComponentMarker,
 } from "./utils.js";
 import {
   hasBaseline,
@@ -89,16 +91,27 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const name = detectProjectName(cwd, config.components, componentPaths);
     const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
 
+    const componentSkips: Record<string, string[]> = {};
+    for (const component of config.components) {
+      const dir = componentPaths[component];
+      const marker = await readComponentMarker(join(cwd, dir));
+      if (marker?.skip && marker.skip.length > 0) {
+        componentSkips[component] = marker.skip;
+      } else if (marker?.origin === "init") {
+        componentSkips[component] = ["**"];
+      }
+    }
+
     if (!hasBaseline(cwd)) {
       const rebuildSpinner = p.spinner();
       rebuildSpinner.start("Establishing baseline (first-time migration)");
-      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version);
+      await reconstructBaseline(cwd, repoDir, config.components, componentPaths, vars, config.version || version, componentSkips);
       rebuildSpinner.stop("Baseline established.");
     }
 
     const updateSpinner = p.spinner();
     updateSpinner.start("Updating baseline to latest template");
-    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version);
+    const { changed } = await updateBaseline(cwd, repoDir, config.components, componentPaths, vars, version, componentSkips);
 
     if (!changed) {
       updateSpinner.stop("Already up to date.");
@@ -111,6 +124,26 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     mergeSpinner.start("Merging template changes");
     const result = mergeBaseline(cwd, `projx: update to template v${version}`);
     mergeSpinner.stop("Merge complete.");
+
+    if (result.status === "clean") {
+      const { writeFile } = await import("node:fs/promises");
+
+      const updatedConfig = {
+        ...config,
+        version,
+        baseline: { branch: "projx/baseline", templateVersion: version },
+      };
+      await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2) + "\n");
+
+      for (const component of config.components) {
+        const dir = componentPaths[component];
+        const skip = componentSkips[component];
+        await writeComponentMarker(join(cwd, dir), component,
+          skip?.includes("**") ? "init" : "scaffold", skip);
+      }
+
+      execSync("git add -A && git commit --no-verify -m \"projx: post-update config\"", { cwd, stdio: "pipe" });
+    }
 
     if (result.status === "conflicts") {
       p.log.warn(`Merge conflicts in ${result.conflictedFiles!.length} file(s):`);

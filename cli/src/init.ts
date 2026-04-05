@@ -80,9 +80,14 @@ export async function init(
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
 
+    const componentSkips: Record<string, string[]> = {};
+    for (const c of components) {
+      componentSkips[c] = ["**"];
+    }
+
     const baselineSpinner = p.spinner();
     baselineSpinner.start("Creating template baseline");
-    await createBaseline(cwd, repoDir, components, paths, vars, version, "init");
+    await createBaseline(cwd, repoDir, components, paths, vars, version, "init", componentSkips);
     baselineSpinner.stop("Baseline created.");
 
     const mergeSpinner = p.spinner();
