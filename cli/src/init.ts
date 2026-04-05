@@ -95,7 +95,6 @@ export async function init(
       version: pkg.version,
       components,
       createdAt: new Date().toISOString().split("T")[0],
-      paths,
     };
     await writeFile(join(cwd, ".projx"), JSON.stringify(projxConfig, null, 2));
     p.log.success(".projx");

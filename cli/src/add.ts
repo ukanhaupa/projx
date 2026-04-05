@@ -30,7 +30,6 @@ interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  paths?: Record<string, string>;
   files?: string[];
 }
 
@@ -155,7 +154,6 @@ async function doAdd(
     version: pkg.version,
     components: allComponents,
     createdAt: config.createdAt,
-    paths,
   };
   await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2));
 

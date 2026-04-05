@@ -108,7 +108,6 @@ async function doScaffold(
     version: pkg.version,
     components: opts.components,
     createdAt: new Date().toISOString().split("T")[0],
-    paths: vars.paths,
   };
   await writeFile(join(dest, ".projx"), JSON.stringify(projxConfig, null, 2));
 

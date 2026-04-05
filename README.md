@@ -54,32 +54,49 @@ Interactive prompt lets you pick components. Or specify them directly:
 npx create-projx my-app --components fastapi,fastify,frontend,mobile,e2e,infra
 ```
 
-### Add Components Later
+### Adopt an Existing Project
 
-Already have a project? Add more components anytime:
+Already have a project? Initialize projx to get the scaffolding (CI, hooks, docker-compose) without overwriting your code:
+
+```bash
+cd my-existing-app
+npx create-projx init
+```
+
+Auto-detects components by scanning for `fastapi` in pyproject.toml, `react`/`fastify` in package.json, `flutter` in pubspec.yaml, and `.tf` files. Confirms each mapping, writes `.projx-component` markers, and generates only missing shared files. Existing files get a diff/overwrite/skip prompt.
+
+### Add Components Later
 
 ```bash
 cd my-app
 npx create-projx add frontend mobile
 ```
 
-This copies the new component directories, regenerates shared files (docker-compose, CI, pre-commit hooks) to include them, and installs dependencies.
+Copies the new component directories, regenerates shared files (docker-compose, CI, pre-commit hooks) to include them, and installs dependencies.
 
 ### Update Scaffolding
 
-When we improve templates, update your project's scaffolding without touching your code:
+When templates improve, update your project:
 
 ```bash
 cd my-app
 npx create-projx@latest update
 ```
 
-This updates template files (base models, middleware, configs, Dockerfiles, CI) tracked in `.projx` manifest. Files you created (new entities, pages, features) are never touched.
+Creates a `projx/update-vX.X.X` branch with the latest template overlay. Your custom files are never deleted — only template files are added or replaced. Merge with conflict resolution:
+
+```bash
+git diff main...projx/update-v1.1.2    # review changes
+git checkout main && git merge --no-ff projx/update-v1.1.2  # merge with conflicts
+```
+
+Git shows conflicts on files you customized (controllers, middleware, configs). You keep your code, accept template improvements.
 
 ## Options
 
 ```
 npx create-projx <name> [options]
+npx create-projx init
 npx create-projx add <components...>
 npx create-projx update
 
@@ -90,19 +107,34 @@ npx create-projx update
 -h, --help             Show help
 ```
 
+## Rename Component Directories
+
+Rename `fastapi/` to `backend/`? Just rename the folder — the `.projx-component` marker file moves with it. The `update` command auto-discovers where each component lives by scanning for these markers. No config changes needed.
+
+```
+backend/.projx-component  →  { "components": ["fastapi"] }
+web/.projx-component      →  { "components": ["frontend"] }
+```
+
+CI, setup.sh, pre-commit hooks, and docker-compose are all regenerated with your custom directory names.
+
 ## What a Scaffolded Project Looks Like
 
 ```
 my-app/
-├── fastapi/              # Auto-entity CRUD backend
-├── frontend/             # Auto-entity UI from /_meta
-├── e2e/                  # Playwright E2E tests
-├── docker-compose.yml    # Production (backend + frontend + SSL)
-├── docker-compose.dev.yml # Development (PostgreSQL + hot reload)
-├── .github/workflows/    # CI per component
-├── .githooks/pre-commit  # Format + lint on commit
-├── setup.sh              # Install all deps
-└── .projx                # Manifest (tracks template files for updates)
+├── fastapi/                # Auto-entity CRUD backend
+│   └── .projx-component    # Identifies this as the fastapi component
+├── frontend/               # Auto-entity UI from /_meta
+│   └── .projx-component
+├── e2e/                    # Playwright E2E tests
+│   └── .projx-component
+├── docker-compose.yml      # Production (backend + frontend + SSL)
+├── docker-compose.dev.yml  # Development (PostgreSQL + hot reload)
+├── .github/workflows/      # CI per component (runs only on changes)
+├── .githooks/pre-commit    # Format + lint on commit
+├── .vscode/                # Editor settings + recommended extensions
+├── setup.sh                # Install all deps
+└── .projx                  # Components list + version
 ```
 
 Only the components you selected appear. Shared files (docker-compose, CI, hooks) are generated to match your selection.
@@ -121,9 +153,10 @@ The core idea: define a data model, get everything else for free.
 
 - JWT auth with Keycloak (pluggable providers)
 - Docker Compose for dev and prod
-- GitHub Actions CI per component
+- GitHub Actions CI per component (path-filtered — only runs when that component changes)
 - Pre-commit hooks (format + lint + typecheck)
 - Secret detection in pre-commit
+- VS Code settings + recommended extensions
 - 80% test coverage enforced
 - Auto-entity discovery across all stacks
 
@@ -138,6 +171,12 @@ cd projx
 ```
 
 The CLI lives in `cli/`. Templates are the root-level component directories (`fastapi/`, `frontend/`, etc.).
+
+```bash
+cd cli
+npm test        # run tests
+npm run build   # build CLI
+```
 
 ## License
 

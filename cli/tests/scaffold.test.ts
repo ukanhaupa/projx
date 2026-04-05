@@ -41,7 +41,7 @@ describe("scaffold", () => {
 
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     expect(config.components).toEqual(["fastify"]);
-    expect(config.paths).toEqual({ fastify: "fastify" });
+    expect(config.paths).toBeUndefined();
     const pkg = JSON.parse(await readFile(join(REPO_DIR, "cli/package.json"), "utf-8"));
     expect(config.version).toBe(pkg.version);
     expect(config.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);

@@ -11,7 +11,6 @@ import {
   copyComponent,
   discoverComponentPaths,
   downloadRepo,
-  readFileOrNull,
   toKebab,
   toSnake,
   replaceInDir,
@@ -30,7 +29,6 @@ interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
-  paths?: Record<string, string>;
   files?: string[];
 }
 
@@ -40,11 +38,6 @@ const NEVER_OVERWRITE = [
   /prisma\/migrations\//,
   /src\/migrations\/versions\//,
   /\.projx-component$/,
-];
-
-const MERGE_DEPS = [
-  /^[^/]+\/package\.json$/,
-  /^[^/]+\/pyproject\.toml$/,
 ];
 
 function isGitRepo(cwd: string): boolean {
@@ -167,8 +160,8 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       `Updated on branch: ${branchName}\n\n` +
       `  Review changes:\n` +
       `    git diff ${originalBranch}...${branchName}\n\n` +
-      `  Switch back and merge:\n` +
-      `    git checkout ${originalBranch} && git merge ${branchName}`
+      `  Merge (resolve conflicts for files you customized):\n` +
+      `    git checkout ${originalBranch} && git merge --no-ff ${branchName}`
     );
   } else {
     const dlSpinner = p.spinner();
@@ -238,16 +231,8 @@ async function doUpdate(
       const dir = dest.substring(0, dest.lastIndexOf("/"));
       await mkdir(dir, { recursive: true });
 
-      if (MERGE_DEPS.some((re) => re.test(destRel)) && existsSync(dest)) {
-        const merged = await mergeDeps(dest, src);
-        if (merged) {
-          await writeFile(dest, merged);
-          touchedFiles.push(destRel);
-        }
-      } else {
-        await cp(src, dest, { force: true });
-        touchedFiles.push(destRel);
-      }
+      await cp(src, dest, { force: true });
+      touchedFiles.push(destRel);
     }
 
     await rm(tmpDest, { recursive: true, force: true });
@@ -307,7 +292,6 @@ async function doUpdate(
     version,
     components: config.components,
     createdAt: config.createdAt,
-    paths: componentPaths,
   };
   await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2));
   touchedFiles.push(".projx");
@@ -340,79 +324,3 @@ function detectProjectName(
   return toKebab(cwd.split("/").pop()!);
 }
 
-async function mergeDeps(existingPath: string, templatePath: string): Promise<string | null> {
-  if (existingPath.endsWith("package.json")) {
-    return mergePackageJson(existingPath, templatePath);
-  }
-  if (existingPath.endsWith("pyproject.toml")) {
-    return mergePyprojectToml(existingPath, templatePath);
-  }
-  return null;
-}
-
-async function mergePackageJson(existingPath: string, templatePath: string): Promise<string | null> {
-  const existingRaw = await readFileOrNull(existingPath);
-  const templateRaw = await readFileOrNull(templatePath);
-  if (!existingRaw || !templateRaw) return null;
-
-  try {
-    const existing = JSON.parse(existingRaw);
-    const template = JSON.parse(templateRaw);
-
-    if (template.dependencies) {
-      existing.dependencies = { ...template.dependencies, ...existing.dependencies };
-    }
-    if (template.devDependencies) {
-      existing.devDependencies = { ...template.devDependencies, ...existing.devDependencies };
-    }
-    if (template.scripts) {
-      existing.scripts = { ...template.scripts, ...existing.scripts };
-    }
-
-    return JSON.stringify(existing, null, 2) + "\n";
-  } catch {
-    return null;
-  }
-}
-
-async function mergePyprojectToml(existingPath: string, templatePath: string): Promise<string | null> {
-  const existingRaw = await readFileOrNull(existingPath);
-  const templateRaw = await readFileOrNull(templatePath);
-  if (!existingRaw || !templateRaw) return null;
-
-  const templateDeps = extractTomlDeps(templateRaw);
-  if (templateDeps.length === 0) return null;
-
-  const existingDeps = extractTomlDeps(existingRaw);
-  const existingNames = new Set(existingDeps.map((d) => d.replace(/[><=!~[].*/, "").trim().toLowerCase()));
-
-  const newDeps = templateDeps.filter((d) => {
-    const name = d.replace(/[><=!~[].*/, "").trim().toLowerCase();
-    return !existingNames.has(name);
-  });
-
-  if (newDeps.length === 0) return null;
-
-  const depsMatch = existingRaw.match(/^dependencies\s*=\s*\[([^\]]*)\]/m);
-  if (!depsMatch) return null;
-
-  const closingBracket = existingRaw.indexOf("]", depsMatch.index!);
-  const before = existingRaw.slice(0, closingBracket);
-  const after = existingRaw.slice(closingBracket);
-
-  const indent = "  ";
-  const newLines = newDeps.map((d) => `${indent}"${d}",`).join("\n");
-
-  return before.trimEnd() + "\n" + newLines + "\n" + after;
-}
-
-function extractTomlDeps(toml: string): string[] {
-  const match = toml.match(/^dependencies\s*=\s*\[([\s\S]*?)\]/m);
-  if (!match) return [];
-  return match[1]
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith('"') || l.startsWith("'"))
-    .map((l) => l.replace(/^["']|["'],?$/g, "").trim())
-    .filter(Boolean);
-}

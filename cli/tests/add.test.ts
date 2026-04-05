@@ -48,8 +48,7 @@ describe("add", () => {
 
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     expect(config.components).toEqual(["fastify", "e2e"]);
-    expect(config.paths.fastify).toBe("fastify");
-    expect(config.paths.e2e).toBe("e2e");
+    expect(config.paths).toBeUndefined();
   });
 
   it("regenerates shared files with all components", async () => {
