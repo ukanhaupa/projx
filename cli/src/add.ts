@@ -18,7 +18,6 @@ import {
   generateDockerCompose,
   generateDockerComposeDev,
   generateCiYml,
-  generateMakefile,
   generatePreCommit,
   generateReadme,
   generateSetupSh,
@@ -119,7 +118,6 @@ async function doAdd(
     );
   }
 
-  await writeFile(join(cwd, "Makefile"), await generateMakefile(vars));
   await writeFile(join(cwd, "README.md"), await generateReadme(vars));
 
   await mkdir(join(cwd, ".githooks"), { recursive: true });

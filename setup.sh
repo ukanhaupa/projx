@@ -24,4 +24,4 @@ cd cli && npm ci && cd ..
 echo "CLI dependencies installed."
 
 echo ""
-echo "Done. Run 'make run-dev' to start, or 'make help' for all commands."
+echo "Done. Run 'docker compose -f docker-compose.dev.yml up' to start."

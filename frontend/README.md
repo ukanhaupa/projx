@@ -239,7 +239,7 @@ E2E tests live at the project root (`e2e/`), not inside frontend. Run from the p
 
 ```bash
 cd e2e && npx playwright install chromium   # first time only
-make test-e2e                                # or: cd e2e && npx playwright test
+cd e2e && npx playwright test
 ```
 
 ### Type Checking

@@ -31,10 +31,6 @@ export async function generateDockerComposeDev(
   return renderShared("docker-compose.dev.yml.ejs", vars);
 }
 
-export async function generateMakefile(vars: GeneratorVars): Promise<string> {
-  return renderShared("Makefile.ejs", vars);
-}
-
 export async function generatePreCommit(vars: GeneratorVars): Promise<string> {
   return renderShared("pre-commit.ejs", vars);
 }

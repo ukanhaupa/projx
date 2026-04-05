@@ -30,8 +30,8 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 ## Getting Started
 
 ```bash
-make setup        # Install all dependencies
-make run-dev      # Start with Docker (dev mode)
+./setup.sh                                   # Install all dependencies
+docker compose -f docker-compose.dev.yml up  # Start with Docker (dev mode)
 ```
 <% if (components.includes('fastapi')) { %>
 
@@ -73,10 +73,20 @@ cd mobile && cp .env.example .env && flutter pub get && flutter run
 ## Testing
 
 ```bash
-make test           # Run all tests
-make test-coverage  # Run with coverage
+<% if (components.includes('fastapi')) { %>
+cd fastapi && uv run pytest
+<% } %>
+<% if (components.includes('fastify')) { %>
+cd fastify && pnpm test
+<% } %>
+<% if (components.includes('frontend')) { %>
+cd frontend && npx vitest run
+<% } %>
+<% if (components.includes('mobile')) { %>
+cd mobile && flutter test
+<% } %>
 <% if (components.includes('e2e')) { %>
-make test-e2e       # Playwright E2E tests
+cd e2e && npx playwright test
 <% } %>
 ```
 

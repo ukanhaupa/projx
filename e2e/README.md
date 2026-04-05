@@ -50,7 +50,7 @@ npm run install-browsers
 
 ```bash
 # All frontend tests across all browsers
-make test-e2e
+cd e2e && npx playwright test
 
 # Chromium only (faster local development)
 cd e2e && npm run test:frontend

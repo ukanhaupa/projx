@@ -20,7 +20,6 @@ import {
   generateDockerCompose,
   generateDockerComposeDev,
   generateCiYml,
-  generateMakefile,
   generatePreCommit,
   generateReadme,
   generateSetupSh,
@@ -86,10 +85,6 @@ async function doScaffold(
     manifest.push("docker-compose.dev.yml");
   }
 
-  const makefile = await generateMakefile(vars);
-  await writeFile(join(dest, "Makefile"), makefile);
-  manifest.push("Makefile");
-
   const readme = await generateReadme(vars);
   await writeFile(join(dest, "README.md"), readme);
   manifest.push("README.md");
@@ -150,7 +145,7 @@ async function doScaffold(
     }
   }
 
-  p.outro(`Done! Next steps:\n\n  cd ${name}\n  make run-dev`);
+  p.outro(`Done! Next steps:\n\n  cd ${name}\n  ./setup.sh`);
 }
 
 async function substituteNames(
