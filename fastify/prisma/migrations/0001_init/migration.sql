@@ -1,0 +1,21 @@
+-- CreateTable
+CREATE TABLE "audit_logs" (
+    "id" TEXT NOT NULL,
+    "table_name" VARCHAR(255) NOT NULL,
+    "record_id" VARCHAR(255) NOT NULL,
+    "action" VARCHAR(20) NOT NULL,
+    "old_value" JSONB,
+    "new_value" JSONB,
+    "performed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "performed_by" VARCHAR(255) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "audit_logs_table_name_idx" ON "audit_logs"("table_name");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_record_id_idx" ON "audit_logs"("record_id");

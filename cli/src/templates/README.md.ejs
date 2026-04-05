@@ -1,0 +1,87 @@
+# <%= projectName %>
+
+Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
+
+## Stack
+
+| Layer | Technology |
+| ----- | ---------- |
+<% if (components.includes('fastapi')) { %>
+| **Backend (Python)** | FastAPI, SQLAlchemy, Alembic, uvicorn |
+<% } %>
+<% if (components.includes('fastify')) { %>
+| **Backend (Node)** | Fastify, Prisma, TypeBox, TypeScript |
+<% } %>
+<% if (components.includes('frontend')) { %>
+| **Frontend** | React 19, TypeScript, Vite, React Router |
+<% } %>
+<% if (components.includes('mobile')) { %>
+| **Mobile** | Flutter, Dart, Riverpod, GoRouter, Isar |
+<% } %>
+<% if (components.includes('e2e')) { %>
+| **E2E Tests** | Playwright |
+<% } %>
+<% if (components.includes('infra')) { %>
+| **Infrastructure** | Terraform, AWS (EKS, RDS, VPC, CodePipeline) |
+<% } %>
+| **Identity** | Keycloak (OIDC / JWT) |
+| **Containers** | Docker, Docker Compose |
+
+## Getting Started
+
+```bash
+make setup        # Install all dependencies
+make run-dev      # Start with Docker (dev mode)
+```
+<% if (components.includes('fastapi')) { %>
+
+### FastAPI
+
+```bash
+cd fastapi && cp .env.example .env && uv sync && uv run main.py
+```
+
+API docs at `http://localhost:7860/docs`.
+<% } %>
+<% if (components.includes('fastify')) { %>
+
+### Fastify
+
+```bash
+cd fastify && cp .env.example .env && pnpm install && npx prisma migrate dev && pnpm dev
+```
+
+API docs at `http://localhost:3000/docs`.
+<% } %>
+<% if (components.includes('frontend')) { %>
+
+### Frontend
+
+```bash
+cd frontend && cp .env.example .env && npm install && npm run dev
+```
+<% } %>
+<% if (components.includes('mobile')) { %>
+
+### Mobile
+
+```bash
+cd mobile && cp .env.example .env && flutter pub get && flutter run
+```
+<% } %>
+
+## Testing
+
+```bash
+make test           # Run all tests
+make test-coverage  # Run with coverage
+<% if (components.includes('e2e')) { %>
+make test-e2e       # Playwright E2E tests
+<% } %>
+```
+
+## Update
+
+```bash
+npx create-projx@latest update
+```

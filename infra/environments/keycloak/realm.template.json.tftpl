@@ -1,0 +1,125 @@
+{
+  "realm": "${realm_name}",
+  "enabled": true,
+  "displayName": "${realm_display_name}",
+  "registrationAllowed": false,
+  "rememberMe": ${remember_me},
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      {"name": "fleet_admin", "description": "Route-level admin role used by backend requiredRoles checks."},
+      {
+        "name": "admin",
+        "description": "Platform administrator role with full access.",
+        "composite": true,
+        "composites": {"realm": ["fleet_admin"], "client": {"${client_id}": ["*:*.*"]}}
+      },
+      {
+        "name": "shipper_admin",
+        "description": "Shipper administrator with full shipper workflow permissions.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:read.*", "load*:*.*", "shipper*:*.*", "user_*:*.*", "address*:*.*", "contact*:*.*", "document*:*.*", "entity_document*:*.*", "comment*:*.*", "notification*:*.*", "invitation*:*.*", "carrier*:read.*", "terms_*:*.*", "bulk_upload_*:*.*", "parking_*:*.*", "audit_logs:read.*"]}}
+      },
+      {
+        "name": "shipper_location_manager",
+        "description": "Shipper manager role. Location scope should be enforced by backend data filters.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:read.*", "load*:*.*", "shipper*:read.*", "shipper_location*:*.*", "shipper_carrier_network*:*.*", "user_*:*.*", "address*:*.*", "contact*:*.*", "document*:*.*", "entity_document*:*.*", "comment*:*.*", "notification*:*.*", "invitation*:*.*", "carrier*:read.*", "terms_*:*.*", "parking_*:*.*"]}}
+      },
+      {
+        "name": "carrier",
+        "description": "Carrier role for bid/dispatch/fleet document workflows.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:read.*", "load*:*.*", "driver*:read.*", "driver_location*:*.*", "carrier*:*.*", "document*:*.*", "entity_document*:*.*", "comment*:*.*", "incident*:*.*", "notification*:*.*"]}}
+      },
+      {
+        "name": "driver",
+        "description": "Driver role for execution/tracking/verification workflows.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:read.*", "load_assign*:*.*", "load_stop*:*.*", "load_verification*:*.*", "loads:read.*", "driver_location*:*.*", "driver_duty_log*:*.*", "comment*:*.*", "incident*:*.*", "notification*:*.*"]}}
+      },
+      {
+        "name": "api_admin",
+        "description": "Compatibility role alias for full API access.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:*.*"]}}
+      },
+      {
+        "name": "api_reader",
+        "description": "Compatibility role alias for global read-only API access.",
+        "composite": true,
+        "composites": {"client": {"${client_id}": ["*:read.*"]}}
+      }
+    ],
+    "client": {
+      "${client_id}": [
+        {"name": "*:*.*", "description": "Full access permission wildcard for backend authz plugin."},
+        {"name": "*:read.*", "description": "Read-only permission wildcard for backend authz plugin."},
+        {"name": "load*:*.*"},
+        {"name": "load_assign*:*.*"},
+        {"name": "load_stop*:*.*"},
+        {"name": "load_verification*:*.*"},
+        {"name": "shipper*:*.*"},
+        {"name": "shipper*:read.*"},
+        {"name": "shipper_location*:*.*"},
+        {"name": "shipper_carrier_network*:*.*"},
+        {"name": "carrier*:*.*"},
+        {"name": "carrier*:read.*"},
+        {"name": "driver*:read.*"},
+        {"name": "driver_location*:*.*"},
+        {"name": "driver_duty_log*:*.*"},
+        {"name": "user_*:*.*"},
+        {"name": "address*:*.*"},
+        {"name": "contact*:*.*"},
+        {"name": "document*:*.*"},
+        {"name": "entity_document*:*.*"},
+        {"name": "comment*:*.*"},
+        {"name": "notification*:*.*"},
+        {"name": "incident*:*.*"},
+        {"name": "invitation*:*.*"},
+        {"name": "terms_*:*.*"},
+        {"name": "bulk_upload_*:*.*"},
+        {"name": "parking_*:*.*"},
+        {"name": "audit_logs:read.*"},
+        {"name": "loads:read.*"}
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "${client_id}",
+      "name": "${client_name}",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": ${direct_access_grants_enabled},
+      "serviceAccountsEnabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${client_secret}",
+      "defaultClientScopes": ["profile", "email", "roles"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "audience-backend",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {"included.client.audience": "${client_id}", "id.token.claim": "false", "access.token.claim": "true"}
+        },
+        {
+          "name": "permissions-from-client-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"multivalued": "true", "userinfo.token.claim": "false", "id.token.claim": "false", "access.token.claim": "true", "claim.name": "permissions", "jsonType.label": "String", "clientId": "${client_id}"}
+        }
+      ]
+    }
+  ],
+  "groups": ${groups_json},
+  "users": ${users_json}
+}

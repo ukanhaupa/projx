@@ -1,0 +1,44 @@
+{
+  "name": "create-projx",
+  "version": "1.0.0",
+  "description": "Scaffold production-grade projects. Pick your stack (FastAPI, Fastify, React, Flutter), get a fully wired template with auth, database, CI/CD, and E2E tests.",
+  "type": "module",
+  "bin": {
+    "create-projx": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "src/templates"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target node18 --clean",
+    "dev": "tsup src/index.ts --format esm --target node18 --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "projx",
+    "scaffold",
+    "template",
+    "fastapi",
+    "fastify",
+    "react",
+    "flutter",
+    "fullstack",
+    "create"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.2",
+    "eslint": "^10.2.0",
+    "tsup": "^8",
+    "typescript": "^5",
+    "typescript-eslint": "^8.58.0"
+  }
+}

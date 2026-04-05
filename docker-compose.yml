@@ -1,0 +1,111 @@
+services:
+  migrate:
+    build: ./fastapi
+    command: ['uv', 'run', 'migrate.py']
+    env_file:
+      - ./fastapi/.env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    networks:
+      - app-network
+
+  backend:
+    build: ./fastapi
+    expose:
+      - '7860'
+    env_file:
+      - ./fastapi/.env
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ''
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:80/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+    profiles:
+      - ssl
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
+    networks:
+      - app-network
+
+volumes:
+  letsencrypt:
+  certbot-www:
+
+networks:
+  app-network:
+    driver: bridge

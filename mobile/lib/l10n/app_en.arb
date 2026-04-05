@@ -1,0 +1,64 @@
+{
+  "@@locale": "en",
+  "appTitle": "Project Template",
+  "dashboard": "Dashboard",
+  "settings": "Settings",
+  "login": "Login",
+  "logout": "Logout",
+  "logoutConfirm": "Are you sure you want to log out?",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "search": "Search...",
+  "filter": "Filter",
+  "sort": "Sort",
+  "retry": "Retry",
+  "refresh": "Refresh",
+  "loading": "Loading...",
+  "noItems": "No items yet",
+  "noItemsDescription": "Tap the + button to create your first item.",
+  "errorGeneric": "Something went wrong",
+  "errorNetwork": "No internet connection",
+  "errorSessionExpired": "Session expired. Please log in again.",
+  "errorPermission": "You don't have permission to do this.",
+  "errorNotFound": "Item not found",
+  "errorConflict": "This item already exists",
+  "errorValidation": "Validation failed",
+  "errorTooMany": "Too many requests. Please wait a moment.",
+  "deleteConfirm": "Are you sure you want to delete this item?",
+  "deleteConfirmDescription": "This action cannot be undone.",
+  "unsavedChanges": "You have unsaved changes",
+  "unsavedChangesDescription": "Discard your changes?",
+  "discard": "Discard",
+  "offlineBanner": "You're offline",
+  "pendingSync": "{count, plural, =1{1 change pending sync} other{{count} changes pending sync}}",
+  "@pendingSync": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncing": "Syncing...",
+  "syncComplete": "All changes synced",
+  "darkMode": "Dark mode",
+  "biometricAuth": "Biometric authentication",
+  "createdAt": "Created",
+  "updatedAt": "Updated",
+  "showingResults": "Showing {start}-{end} of {total}",
+  "@showingResults": {
+    "placeholders": {
+      "start": { "type": "int" },
+      "end": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "fullCrud": "Full CRUD",
+  "readOnly": "Read Only",
+  "requiredField": "This field is required",
+  "invalidEmail": "Invalid email format",
+  "invalidNumber": "Please enter a valid number"
+}
