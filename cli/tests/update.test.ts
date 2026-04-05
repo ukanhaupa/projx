@@ -56,7 +56,7 @@ describe("update", () => {
     const marker = JSON.parse(
       await readFile(join(dest, "fastify/.projx-component"), "utf-8"),
     );
-    expect(marker).toEqual({ component: "fastify" });
+    expect(marker).toEqual({ components: ["fastify"] });
   });
 
   it("detects project name from renamed directory", async () => {

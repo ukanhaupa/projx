@@ -32,7 +32,7 @@ describe("add", () => {
     const marker = JSON.parse(
       await readFile(join(dest, "frontend/.projx-component"), "utf-8"),
     );
-    expect(marker).toEqual({ component: "frontend" });
+    expect(marker).toEqual({ components: ["frontend"] });
   });
 
   it("updates .projx config with new component", async () => {

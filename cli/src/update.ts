@@ -22,6 +22,7 @@ import {
   generateCiYml,
   generatePreCommit,
   generateSetupSh,
+  generateVscodeSettings,
 } from "./generators/index.js";
 
 interface ProjxConfig {
@@ -263,6 +264,9 @@ async function doUpdate(
   const setupSh = await generateSetupSh(vars);
   await writeFile(join(cwd, "setup.sh"), setupSh);
   await chmod(join(cwd, "setup.sh"), 0o755);
+
+  await mkdir(join(cwd, ".vscode"), { recursive: true });
+  await writeFile(join(cwd, ".vscode/settings.json"), generateVscodeSettings(vars));
 
   spinner.stop("Shared files updated.");
 

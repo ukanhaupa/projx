@@ -162,7 +162,7 @@ export async function copyStaticFiles(
   const manifest: string[] = [];
   const tpl = repoDir;
 
-  const statics = [".editorconfig", "LICENSE"];
+  const statics = [".editorconfig"];
   for (const file of statics) {
     const src = join(tpl, file);
     if (existsSync(src)) {
@@ -177,10 +177,11 @@ export async function copyStaticFiles(
     manifest.push(".gitignore");
   }
 
-  const vscode = join(tpl, ".vscode");
-  if (existsSync(vscode)) {
-    await cp(vscode, join(dest, ".vscode"), { recursive: true });
-    manifest.push(".vscode/settings.json", ".vscode/extensions.json");
+  const extensionsJson = join(tpl, ".vscode/extensions.json");
+  if (existsSync(extensionsJson)) {
+    await mkdir(join(dest, ".vscode"), { recursive: true });
+    await cp(extensionsJson, join(dest, ".vscode/extensions.json"));
+    manifest.push(".vscode/extensions.json");
   }
 
   const scripts = join(tpl, "scripts");
@@ -253,9 +254,27 @@ export async function writeComponentMarker(
   dir: string,
   component: Component,
 ): Promise<void> {
+  const markerPath = join(dir, COMPONENT_MARKER);
+  let components: string[] = [component];
+
+  const existing = await readFileOrNull(markerPath);
+  if (existing) {
+    try {
+      const data = JSON.parse(existing);
+      const prev: string[] = data.components ?? (data.component ? [data.component] : []);
+      if (!prev.includes(component)) {
+        components = [...prev, component];
+      } else {
+        return;
+      }
+    } catch {
+      // overwrite invalid marker
+    }
+  }
+
   await writeFile(
-    join(dir, COMPONENT_MARKER),
-    JSON.stringify({ component }, null, 2) + "\n",
+    markerPath,
+    JSON.stringify({ components }, null, 2) + "\n",
   );
 }
 
@@ -277,8 +296,11 @@ export async function discoverComponentPaths(
       if (existsSync(marker)) {
         try {
           const data = JSON.parse(await readFile(marker, "utf-8"));
-          if (components.includes(data.component)) {
-            paths[data.component as Component] = entry.name;
+          const markerComponents: string[] = data.components ?? (data.component ? [data.component] : []);
+          for (const mc of markerComponents) {
+            if (components.includes(mc as Component)) {
+              paths[mc as Component] = entry.name;
+            }
           }
         } catch {
           // invalid marker, skip

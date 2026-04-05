@@ -42,7 +42,8 @@ describe("scaffold", () => {
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     expect(config.components).toEqual(["fastify"]);
     expect(config.paths).toEqual({ fastify: "fastify" });
-    expect(config.version).toBe("1.1.0");
+    const pkg = JSON.parse(await readFile(join(REPO_DIR, "cli/package.json"), "utf-8"));
+    expect(config.version).toBe(pkg.version);
     expect(config.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -58,12 +59,12 @@ describe("scaffold", () => {
     const fastifyMarker = JSON.parse(
       await readFile(join(dest, "fastify/.projx-component"), "utf-8"),
     );
-    expect(fastifyMarker).toEqual({ component: "fastify" });
+    expect(fastifyMarker).toEqual({ components: ["fastify"] });
 
     const frontendMarker = JSON.parse(
       await readFile(join(dest, "frontend/.projx-component"), "utf-8"),
     );
-    expect(frontendMarker).toEqual({ component: "frontend" });
+    expect(frontendMarker).toEqual({ components: ["frontend"] });
   });
 
   it("generates docker-compose files for backend + frontend", async () => {

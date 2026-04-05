@@ -162,7 +162,7 @@ describe("writeComponentMarker", () => {
   it("writes marker file with component name", async () => {
     await writeComponentMarker(tmp, "fastapi");
     const content = JSON.parse(await readFile(join(tmp, COMPONENT_MARKER), "utf-8"));
-    expect(content).toEqual({ component: "fastapi" });
+    expect(content).toEqual({ components: ["fastapi"] });
   });
 });
 

@@ -7,10 +7,45 @@ on:
     branches: [main]
 
 jobs:
-  cli:
-    name: CLI (lint + typecheck + build)
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'cli/') }}
+    permissions:
+      pull-requests: read
+    outputs:
+      cli: ${{ steps.filter.outputs.cli }}
+      fastapi: ${{ steps.filter.outputs.fastapi }}
+      fastify: ${{ steps.filter.outputs.fastify }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cli:
+              - 'cli/**'
+            fastapi:
+              - 'fastapi/**'
+            fastify:
+              - 'fastify/**'
+            frontend:
+              - 'frontend/**'
+            mobile:
+              - 'mobile/**'
+            e2e:
+              - 'e2e/**'
+            infra:
+              - 'infra/**'
+
+  cli:
+    name: CLI (lint + typecheck + build + test)
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cli
@@ -25,11 +60,13 @@ jobs:
       - run: npx eslint 'src/**/*.ts'
       - run: npx tsc --noEmit
       - run: npm run build
+      - run: npm test
 
   fastapi:
     name: FastAPI (format + lint)
+    needs: changes
+    if: needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'fastapi/') }}
     defaults:
       run:
         working-directory: fastapi
@@ -42,8 +79,9 @@ jobs:
 
   fastify:
     name: Fastify (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.fastify == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'fastify/') }}
     defaults:
       run:
         working-directory: fastify
@@ -65,8 +103,9 @@ jobs:
 
   frontend:
     name: Frontend (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'frontend/') }}
     defaults:
       run:
         working-directory: frontend
@@ -84,8 +123,9 @@ jobs:
 
   mobile:
     name: Flutter (format + analyze)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'mobile/') }}
     defaults:
       run:
         working-directory: mobile
@@ -101,8 +141,9 @@ jobs:
 
   e2e:
     name: E2E (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'e2e/') }}
     defaults:
       run:
         working-directory: e2e
@@ -120,8 +161,9 @@ jobs:
 
   infra:
     name: Terraform (fmt + validate)
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'infra/') }}
     defaults:
       run:
         working-directory: infra/stack

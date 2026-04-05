@@ -25,6 +25,7 @@ import {
   generatePreCommit,
   generateReadme,
   generateSetupSh,
+  generateVscodeSettings,
 } from "./generators/index.js";
 
 export async function scaffold(opts: Options, dest: string, localRepo?: string): Promise<void> {
@@ -96,6 +97,9 @@ async function doScaffold(
   await chmod(join(dest, "setup.sh"), 0o755);
 
   await copyStaticFiles(repoDir, dest);
+
+  await mkdir(join(dest, ".vscode"), { recursive: true });
+  await writeFile(join(dest, ".vscode/settings.json"), generateVscodeSettings(vars));
 
   const pkg = JSON.parse(
     await readFile(join(repoDir, "cli/package.json"), "utf-8"),

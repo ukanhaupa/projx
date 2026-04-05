@@ -7,9 +7,66 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
 <% if (components.includes('fastapi')) { %>
+      fastapi: ${{ steps.filter.outputs.<%= paths.fastapi %> }}
+<% } %>
+<% if (components.includes('fastify')) { %>
+      fastify: ${{ steps.filter.outputs.<%= paths.fastify %> }}
+<% } %>
+<% if (components.includes('frontend')) { %>
+      frontend: ${{ steps.filter.outputs.<%= paths.frontend %> }}
+<% } %>
+<% if (components.includes('mobile')) { %>
+      mobile: ${{ steps.filter.outputs.<%= paths.mobile %> }}
+<% } %>
+<% if (components.includes('e2e')) { %>
+      e2e: ${{ steps.filter.outputs.<%= paths.e2e %> }}
+<% } %>
+<% if (components.includes('infra')) { %>
+      infra: ${{ steps.filter.outputs.<%= paths.infra %> }}
+<% } %>
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+<% if (components.includes('fastapi')) { %>
+            <%= paths.fastapi %>:
+              - '<%= paths.fastapi %>/**'
+<% } %>
+<% if (components.includes('fastify')) { %>
+            <%= paths.fastify %>:
+              - '<%= paths.fastify %>/**'
+<% } %>
+<% if (components.includes('frontend')) { %>
+            <%= paths.frontend %>:
+              - '<%= paths.frontend %>/**'
+<% } %>
+<% if (components.includes('mobile')) { %>
+            <%= paths.mobile %>:
+              - '<%= paths.mobile %>/**'
+<% } %>
+<% if (components.includes('e2e')) { %>
+            <%= paths.e2e %>:
+              - '<%= paths.e2e %>/**'
+<% } %>
+<% if (components.includes('infra')) { %>
+            <%= paths.infra %>:
+              - '<%= paths.infra %>/**'
+<% } %>
+<% if (components.includes('fastapi')) { %>
+
   fastapi:
     name: FastAPI (format + lint)
+    needs: changes
+    if: needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,8 +79,11 @@ jobs:
       - run: uv run ruff check src tests
 <% } %>
 <% if (components.includes('fastify')) { %>
+
   fastify:
     name: Fastify (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.fastify == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,8 +105,11 @@ jobs:
       - run: npx tsc --noEmit
 <% } %>
 <% if (components.includes('frontend')) { %>
+
   frontend:
     name: Frontend (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,8 +127,11 @@ jobs:
       - run: npx tsc --noEmit
 <% } %>
 <% if (components.includes('mobile')) { %>
+
   mobile:
     name: Flutter (format + analyze)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,8 +147,11 @@ jobs:
       - run: dart analyze --fatal-infos
 <% } %>
 <% if (components.includes('e2e')) { %>
+
   e2e:
     name: E2E (format + lint + typecheck)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -100,8 +169,11 @@ jobs:
       - run: npx tsc --noEmit
 <% } %>
 <% if (components.includes('infra')) { %>
+
   infra:
     name: Terraform (fmt + validate)
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

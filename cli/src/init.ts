@@ -23,6 +23,7 @@ import {
   generatePreCommit,
   generateReadme,
   generateSetupSh,
+  generateVscodeSettings,
 } from "./generators/index.js";
 
 export async function init(
@@ -227,7 +228,7 @@ async function generateSharedFiles(
     }
   }
 
-  const statics = [".editorconfig", "LICENSE"];
+  const statics = [".editorconfig"];
   for (const file of statics) {
     const src = join(repoDir, file);
     const dest = join(cwd, file);
@@ -253,15 +254,30 @@ async function generateSharedFiles(
     }
   }
 
-  const vscode = join(repoDir, ".vscode");
-  if (existsSync(vscode)) {
-    const vscodeDest = join(cwd, ".vscode");
-    if (!existsSync(vscodeDest)) {
-      await cp(vscode, vscodeDest, { recursive: true });
-      p.log.success(".vscode/");
+  const vscodeDest = join(cwd, ".vscode");
+  await mkdir(vscodeDest, { recursive: true });
+
+  const settingsPath = join(vscodeDest, "settings.json");
+  const settingsContent = generateVscodeSettings(vars);
+  const existingSettings = await readFileOrNull(settingsPath);
+  if (existingSettings === null) {
+    await writeFile(settingsPath, settingsContent);
+    p.log.success(".vscode/settings.json");
+  } else if (existingSettings !== settingsContent) {
+    const action = await resolveConflict(".vscode/settings.json", existingSettings, settingsContent);
+    if (action === "overwrite") {
+      await writeFile(settingsPath, settingsContent);
+      p.log.success(".vscode/settings.json — overwritten.");
     } else {
-      p.log.info(".vscode/ — already exists, skipped.");
+      p.log.info(".vscode/settings.json — kept existing.");
     }
+  }
+
+  const extSrc = join(repoDir, ".vscode/extensions.json");
+  const extDest = join(vscodeDest, "extensions.json");
+  if (existsSync(extSrc) && !existsSync(extDest)) {
+    await cp(extSrc, extDest);
+    p.log.success(".vscode/extensions.json");
   }
 }
 
