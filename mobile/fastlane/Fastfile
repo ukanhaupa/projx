@@ -1,0 +1,64 @@
+default_platform(:ios)
+
+before_all do
+  ensure_git_status_clean
+end
+
+platform :ios do
+  desc "Build iOS release"
+  lane :build do
+    Dir.chdir("..") do
+      sh("flutter build ios --release --no-codesign")
+    end
+  end
+
+  desc "Deploy to TestFlight"
+  lane :beta do
+    build
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+    )
+  end
+
+  desc "Deploy to App Store"
+  lane :deploy do
+    build
+    upload_to_app_store(
+      skip_metadata: true,
+      skip_screenshots: true,
+    )
+  end
+
+  desc "Setup certificates and profiles"
+  lane :certificates do
+    match(type: "development")
+    match(type: "appstore")
+  end
+end
+
+platform :android do
+  desc "Build Android release"
+  lane :build do
+    Dir.chdir("..") do
+      sh("flutter build appbundle --release")
+    end
+  end
+
+  desc "Deploy to internal testing"
+  lane :beta do
+    build
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+    )
+  end
+
+  desc "Deploy to production"
+  lane :deploy do
+    build
+    upload_to_play_store(
+      track: "production",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+    )
+  end
+end

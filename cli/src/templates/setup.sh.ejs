@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -e
+
+git config core.hooksPath .githooks
+echo "Git hooks configured."
+<% if (components.includes('fastapi')) { %>
+
+cd fastapi && uv sync --all-extras && cd ..
+echo "FastAPI dependencies installed."
+<% } %>
+<% if (components.includes('fastify')) { %>
+
+cd fastify && pnpm install --frozen-lockfile && cd ..
+echo "Fastify dependencies installed."
+<% } %>
+<% if (components.includes('frontend')) { %>
+
+cd frontend && npm ci && cd ..
+echo "Frontend dependencies installed."
+<% } %>
+<% if (components.includes('e2e')) { %>
+
+cd e2e && npm ci && cd ..
+echo "E2E dependencies installed."
+<% } %>
+<% if (components.includes('mobile')) { %>
+
+if command -v flutter &>/dev/null; then
+  cd mobile && flutter pub get && cd ..
+  echo "Flutter dependencies installed."
+else
+  echo "Flutter SDK not installed — skipping mobile."
+fi
+<% } %>
+
+echo ""
+echo "Done. Run 'make run-dev' to start, or 'make help' for all commands."

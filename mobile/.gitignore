@@ -1,0 +1,41 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Platform
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+android/.gradle
+android/local.properties
+android/app/debug
+android/app/profile
+android/app/release
+
+# Secrets
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+**/play-store-key.json
+.env
+.env.*
+!.env.example
+
+# Misc
+*.log
+.DS_Store
+coverage/
