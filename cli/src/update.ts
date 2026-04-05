@@ -11,6 +11,7 @@ import {
   copyComponent,
   discoverComponentPaths,
   downloadRepo,
+  readFileOrNull,
   toKebab,
   toSnake,
   replaceInDir,
@@ -39,6 +40,11 @@ const NEVER_OVERWRITE = [
   /prisma\/migrations\//,
   /src\/migrations\/versions\//,
   /\.projx-component$/,
+];
+
+const MERGE_DEPS = [
+  /^[^/]+\/package\.json$/,
+  /^[^/]+\/pyproject\.toml$/,
 ];
 
 function isGitRepo(cwd: string): boolean {
@@ -145,14 +151,17 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     execSync(`git checkout -b ${branchName}`, { cwd, stdio: "pipe" });
     p.log.info(`Created branch: ${branchName}`);
 
+    let touchedFiles: string[];
     try {
-      await doUpdate(cwd, config, repoDir, pkg.version, componentPaths);
+      touchedFiles = await doUpdate(cwd, config, repoDir, pkg.version, componentPaths);
     } finally {
       await cleanupRepo(repoDir, isLocal);
     }
 
-    execSync("git add -A", { cwd, stdio: "pipe" });
-    execSync(`git commit -m "projx update to v${pkg.version}"`, { cwd, stdio: "pipe" });
+    for (const f of touchedFiles) {
+      execSync(`git add "${f}"`, { cwd, stdio: "pipe" });
+    }
+    execSync(`git commit --no-verify -m "projx update to v${pkg.version}"`, { cwd, stdio: "pipe" });
 
     p.outro(
       `Updated on branch: ${branchName}\n\n` +
@@ -191,13 +200,22 @@ async function doUpdate(
   repoDir: string,
   version: string,
   componentPaths: ComponentPaths,
-): Promise<void> {
+): Promise<string[]> {
   const name = detectProjectName(cwd, config.components, componentPaths);
   const nameSnake = toSnake(name);
   const vars = { projectName: name, components: config.components, paths: componentPaths };
+  const touchedFiles: string[] = [];
+  const usedPaths = new Set<string>();
 
   for (const component of config.components) {
     const targetDir = componentPaths[component];
+
+    if (usedPaths.has(targetDir)) {
+      p.log.warn(`${component} shares directory ${targetDir}/ with another component — skipping overlay to avoid nesting.`);
+      continue;
+    }
+    usedPaths.add(targetDir);
+
     const spinner = p.spinner();
     spinner.start(`Updating ${targetDir}/ (${component})`);
 
@@ -219,13 +237,24 @@ async function doUpdate(
 
       const dir = dest.substring(0, dest.lastIndexOf("/"));
       await mkdir(dir, { recursive: true });
-      await cp(src, dest, { force: true });
+
+      if (MERGE_DEPS.some((re) => re.test(destRel)) && existsSync(dest)) {
+        const merged = await mergeDeps(dest, src);
+        if (merged) {
+          await writeFile(dest, merged);
+          touchedFiles.push(destRel);
+        }
+      } else {
+        await cp(src, dest, { force: true });
+        touchedFiles.push(destRel);
+      }
     }
 
     await rm(tmpDest, { recursive: true, force: true });
 
     if (!existsSync(join(cwd, targetDir, ".projx-component"))) {
       await writeComponentMarker(join(cwd, targetDir), component);
+      touchedFiles.push(`${targetDir}/.projx-component`);
     }
 
     spinner.stop(`${targetDir}/ updated.`);
@@ -239,34 +268,28 @@ async function doUpdate(
     config.components.includes("fastify");
 
   if (hasBackend || config.components.includes("frontend")) {
-    await writeFile(
-      join(cwd, "docker-compose.yml"),
-      await generateDockerCompose(vars),
-    );
-
-    await writeFile(
-      join(cwd, "docker-compose.dev.yml"),
-      await generateDockerComposeDev(vars),
-    );
+    await writeFile(join(cwd, "docker-compose.yml"), await generateDockerCompose(vars));
+    touchedFiles.push("docker-compose.yml");
+    await writeFile(join(cwd, "docker-compose.dev.yml"), await generateDockerComposeDev(vars));
+    touchedFiles.push("docker-compose.dev.yml");
   }
 
   await mkdir(join(cwd, ".githooks"), { recursive: true });
-  const preCommit = await generatePreCommit(vars);
-  await writeFile(join(cwd, ".githooks/pre-commit"), preCommit);
+  await writeFile(join(cwd, ".githooks/pre-commit"), await generatePreCommit(vars));
   await chmod(join(cwd, ".githooks/pre-commit"), 0o755);
+  touchedFiles.push(".githooks/pre-commit");
 
   await mkdir(join(cwd, ".github/workflows"), { recursive: true });
-  await writeFile(
-    join(cwd, ".github/workflows/ci.yml"),
-    await generateCiYml(vars),
-  );
+  await writeFile(join(cwd, ".github/workflows/ci.yml"), await generateCiYml(vars));
+  touchedFiles.push(".github/workflows/ci.yml");
 
-  const setupSh = await generateSetupSh(vars);
-  await writeFile(join(cwd, "setup.sh"), setupSh);
+  await writeFile(join(cwd, "setup.sh"), await generateSetupSh(vars));
   await chmod(join(cwd, "setup.sh"), 0o755);
+  touchedFiles.push("setup.sh");
 
   await mkdir(join(cwd, ".vscode"), { recursive: true });
   await writeFile(join(cwd, ".vscode/settings.json"), generateVscodeSettings(vars));
+  touchedFiles.push(".vscode/settings.json");
 
   spinner.stop("Shared files updated.");
 
@@ -287,6 +310,9 @@ async function doUpdate(
     paths: componentPaths,
   };
   await writeFile(join(cwd, ".projx"), JSON.stringify(updatedConfig, null, 2));
+  touchedFiles.push(".projx");
+
+  return touchedFiles;
 }
 
 function detectProjectName(
@@ -312,4 +338,81 @@ function detectProjectName(
     }
   }
   return toKebab(cwd.split("/").pop()!);
+}
+
+async function mergeDeps(existingPath: string, templatePath: string): Promise<string | null> {
+  if (existingPath.endsWith("package.json")) {
+    return mergePackageJson(existingPath, templatePath);
+  }
+  if (existingPath.endsWith("pyproject.toml")) {
+    return mergePyprojectToml(existingPath, templatePath);
+  }
+  return null;
+}
+
+async function mergePackageJson(existingPath: string, templatePath: string): Promise<string | null> {
+  const existingRaw = await readFileOrNull(existingPath);
+  const templateRaw = await readFileOrNull(templatePath);
+  if (!existingRaw || !templateRaw) return null;
+
+  try {
+    const existing = JSON.parse(existingRaw);
+    const template = JSON.parse(templateRaw);
+
+    if (template.dependencies) {
+      existing.dependencies = { ...template.dependencies, ...existing.dependencies };
+    }
+    if (template.devDependencies) {
+      existing.devDependencies = { ...template.devDependencies, ...existing.devDependencies };
+    }
+    if (template.scripts) {
+      existing.scripts = { ...template.scripts, ...existing.scripts };
+    }
+
+    return JSON.stringify(existing, null, 2) + "\n";
+  } catch {
+    return null;
+  }
+}
+
+async function mergePyprojectToml(existingPath: string, templatePath: string): Promise<string | null> {
+  const existingRaw = await readFileOrNull(existingPath);
+  const templateRaw = await readFileOrNull(templatePath);
+  if (!existingRaw || !templateRaw) return null;
+
+  const templateDeps = extractTomlDeps(templateRaw);
+  if (templateDeps.length === 0) return null;
+
+  const existingDeps = extractTomlDeps(existingRaw);
+  const existingNames = new Set(existingDeps.map((d) => d.replace(/[><=!~[].*/, "").trim().toLowerCase()));
+
+  const newDeps = templateDeps.filter((d) => {
+    const name = d.replace(/[><=!~[].*/, "").trim().toLowerCase();
+    return !existingNames.has(name);
+  });
+
+  if (newDeps.length === 0) return null;
+
+  const depsMatch = existingRaw.match(/^dependencies\s*=\s*\[([^\]]*)\]/m);
+  if (!depsMatch) return null;
+
+  const closingBracket = existingRaw.indexOf("]", depsMatch.index!);
+  const before = existingRaw.slice(0, closingBracket);
+  const after = existingRaw.slice(closingBracket);
+
+  const indent = "  ";
+  const newLines = newDeps.map((d) => `${indent}"${d}",`).join("\n");
+
+  return before.trimEnd() + "\n" + newLines + "\n" + after;
+}
+
+function extractTomlDeps(toml: string): string[] {
+  const match = toml.match(/^dependencies\s*=\s*\[([\s\S]*?)\]/m);
+  if (!match) return [];
+  return match[1]
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('"') || l.startsWith("'"))
+    .map((l) => l.replace(/^["']|["'],?$/g, "").trim())
+    .filter(Boolean);
 }
