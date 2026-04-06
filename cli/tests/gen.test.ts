@@ -232,6 +232,10 @@ describe("gen entity", () => {
     expect(content).toContain("factory Product.fromJson(Map<String, dynamic> json)");
     expect(content).toContain("Map<String, dynamic> toJson()");
     expect(content).toContain("Product copyWith(");
+
+    // Non-nullable DateTime fields must not use null-aware operator
+    expect(content).toContain("'created_at': createdAt.toIso8601String()");
+    expect(content).not.toContain("createdAt?.toIso8601String()");
   });
 
   it("generates primary backend + frontend + mobile types", async () => {

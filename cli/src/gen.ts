@@ -514,9 +514,10 @@ function dartFromJson(fieldName: string, type: FieldType, required: boolean): st
   return required ? `${key} as ${dartT}` : `${key} as ${dartT}?`;
 }
 
-function dartToJson(fieldName: string, camelName: string, type: FieldType): string {
+function dartToJson(fieldName: string, camelName: string, type: FieldType, required: boolean): string {
   const isDate = type === "date" || type === "datetime";
-  if (isDate) return `'${fieldName}': ${camelName}?.toIso8601String()`;
+  if (isDate && required) return `'${fieldName}': ${camelName}.toIso8601String()`;
+  if (isDate && !required) return `'${fieldName}': ${camelName}?.toIso8601String()`;
   return `'${fieldName}': ${camelName}`;
 }
 
@@ -587,7 +588,7 @@ function generateDartModel(config: EntityConfig): string {
   lines.push(`  Map<String, dynamic> toJson() {`);
   lines.push(`    return {`);
   for (const f of allFields) {
-    lines.push(`      ${dartToJson(f.snake, f.camel, f.fieldType)},`);
+    lines.push(`      ${dartToJson(f.snake, f.camel, f.fieldType, f.required)},`);
   }
   lines.push(`    };`);
   lines.push(`  }`);
