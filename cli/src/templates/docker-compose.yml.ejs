@@ -1,14 +1,13 @@
 services:
 <% if (components.includes('fastapi')) { %>
-  migrate:
+  <%= paths.fastapi %>-migrate:
     build: ./<%= paths.fastapi %>
     command: ["uv", "run", "migrate.py"]
     env_file:
       - ./<%= paths.fastapi %>/.env
     networks:
       - app-network
-
-  backend:
+  <%= paths.fastapi %>:
     build: ./<%= paths.fastapi %>
     expose:
       - "7860"
@@ -16,7 +15,7 @@ services:
       - ./<%= paths.fastapi %>/.env
     restart: unless-stopped
     depends_on:
-      migrate:
+      <%= paths.fastapi %>-migrate:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -34,13 +33,23 @@ services:
       - app-network
 <% } %>
 <% if (components.includes('fastify')) { %>
-  backend-fastify:
+  <%= paths.fastify %>-migrate:
+    build: ./<%= paths.fastify %>
+    command: ["pnpm", "prisma", "migrate", "deploy"]
+    env_file:
+      - ./<%= paths.fastify %>/.env
+    networks:
+      - app-network
+  <%= paths.fastify %>:
     build: ./<%= paths.fastify %>
     expose:
       - "3000"
     env_file:
       - ./<%= paths.fastify %>/.env
     restart: unless-stopped
+    depends_on:
+      <%= paths.fastify %>-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
@@ -62,14 +71,13 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-<% if (components.includes('fastapi')) { %>
+<% if (components.includes('fastify')) { %>
     depends_on:
-      backend:
+      <%= paths.fastify %>:
         condition: service_healthy
-<% } %>
-<% if (components.includes('fastify') && !components.includes('fastapi')) { %>
+<% } else if (components.includes('fastapi')) { %>
     depends_on:
-      backend-fastify:
+      <%= paths.fastapi %>:
         condition: service_healthy
 <% } %>
     restart: unless-stopped
@@ -81,7 +89,6 @@ services:
       start_period: 10s
     networks:
       - app-network
-
   certbot:
     image: certbot/certbot:latest
     volumes:
@@ -102,7 +109,6 @@ volumes:
   letsencrypt:
   certbot-www:
 <% } %>
-
 networks:
   app-network:
     driver: bridge

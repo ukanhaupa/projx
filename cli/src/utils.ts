@@ -350,19 +350,37 @@ export function render(
   const projectName = vars.projectName as string;
   const lines = template.split("\n");
   const output: string[] = [];
-  const stack: boolean[] = [];
+  const stack: { active: boolean; matched: boolean }[] = [];
 
   for (const line of lines) {
     const ifMatch = line.match(/^<%\s*if\s*\((.+?)\)\s*\{?\s*%>$/);
     if (ifMatch) {
       const fn = new Function("components", "projectName", `return ${ifMatch[1]}`);
-      stack.push(fn(components, projectName));
+      const result = fn(components, projectName);
+      stack.push({ active: result, matched: result });
+      continue;
+    }
+
+    const elseIfMatch = line.match(/^<%\s*\}\s*else\s+if\s*\((.+?)\)\s*\{?\s*%>$/);
+    if (elseIfMatch) {
+      if (stack.length > 0) {
+        const top = stack[stack.length - 1];
+        if (top.matched) {
+          top.active = false;
+        } else {
+          const fn = new Function("components", "projectName", `return ${elseIfMatch[1]}`);
+          const result = fn(components, projectName);
+          top.active = result;
+          if (result) top.matched = true;
+        }
+      }
       continue;
     }
 
     if (/^<%\s*\}\s*else\s*\{?\s*%>$/.test(line)) {
       if (stack.length > 0) {
-        stack[stack.length - 1] = !stack[stack.length - 1];
+        const top = stack[stack.length - 1];
+        top.active = !top.matched;
       }
       continue;
     }
@@ -372,7 +390,7 @@ export function render(
       continue;
     }
 
-    if (stack.length > 0 && stack.some((v) => !v)) continue;
+    if (stack.length > 0 && stack.some((v) => !v.active)) continue;
 
     const replaced = line.replace(
       /<%=\s*([\w.]+)\s*%>/g,

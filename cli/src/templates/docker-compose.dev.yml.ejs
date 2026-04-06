@@ -24,7 +24,7 @@ services:
       - app-network
 <% } %>
 <% if (components.includes('fastapi')) { %>
-  migrate:
+  <%= paths.fastapi %>-migrate:
     build: ./<%= paths.fastapi %>
     command: ['uv', 'run', 'migrate.py']
     environment:
@@ -39,8 +39,7 @@ services:
           cpus: '0.5'
     networks:
       - app-network
-
-  backend:
+  <%= paths.fastapi %>:
     build: ./<%= paths.fastapi %>
     command:
       [
@@ -61,7 +60,7 @@ services:
       - ./<%= paths.fastapi %>/alembic.ini:/app/alembic.ini
       - ./<%= paths.fastapi %>/migrate.py:/app/migrate.py
     depends_on:
-      migrate:
+      <%= paths.fastapi %>-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
@@ -83,7 +82,22 @@ services:
       - app-network
 <% } %>
 <% if (components.includes('fastify')) { %>
-  backend-fastify:
+  <%= paths.fastify %>-migrate:
+    build: ./<%= paths.fastify %>
+    command: ['pnpm', 'prisma', 'migrate', 'deploy']
+    environment:
+      - DATABASE_URL=postgresql://dev:dev@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    networks:
+      - app-network
+  <%= paths.fastify %>:
     build: ./<%= paths.fastify %>
     command: ['pnpm', 'dev']
     ports:
@@ -96,8 +110,8 @@ services:
     volumes:
       - ./<%= paths.fastify %>/src:/app/src
     depends_on:
-      db:
-        condition: service_healthy
+      <%= paths.fastify %>-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/health']
@@ -121,23 +135,21 @@ services:
     ports:
       - '5173:5173'
     environment:
-<% if (components.includes('fastapi')) { %>
-      - VITE_API_URL=http://localhost:7860
-<% } %>
-<% if (components.includes('fastify') && !components.includes('fastapi')) { %>
+<% if (components.includes('fastify')) { %>
       - VITE_API_URL=http://localhost:3000
+<% } else if (components.includes('fastapi')) { %>
+      - VITE_API_URL=http://localhost:7860
 <% } %>
     volumes:
       - ./<%= paths.frontend %>:/app
       - frontend_node_modules:/app/node_modules
-<% if (components.includes('fastapi')) { %>
+<% if (components.includes('fastify')) { %>
     depends_on:
-      backend:
+      <%= paths.fastify %>:
         condition: service_healthy
-<% } %>
-<% if (components.includes('fastify') && !components.includes('fastapi')) { %>
+<% } else if (components.includes('fastapi')) { %>
     depends_on:
-      backend-fastify:
+      <%= paths.fastapi %>:
         condition: service_healthy
 <% } %>
     healthcheck:
@@ -154,7 +166,6 @@ services:
     networks:
       - app-network
 <% } %>
-
 volumes:
 <% if (components.includes('fastapi') || components.includes('fastify')) { %>
   pgdata:
@@ -162,7 +173,6 @@ volumes:
 <% if (components.includes('frontend')) { %>
   frontend_node_modules:
 <% } %>
-
 networks:
   app-network:
     driver: bridge
