@@ -32,6 +32,16 @@ npx create-projx my-app --components fastify,frontend,e2e
 npx create-projx my-app -y
 ```
 
+## Package Manager Support
+
+Projx supports **npm**, **pnpm**, **yarn**, and **bun**. During `create`, you're prompted to pick one. The choice is stored in `.projx` and used everywhere — setup.sh, Docker, CI, pre-commit hooks, and README.
+
+```json
+{ "packageManager": "pnpm" }
+```
+
+For `init`, the package manager is auto-detected from lockfiles (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb` → bun). Falls back to a prompt if no lockfile is found.
+
 ## Components
 
 | Component | Stack | What You Get |
@@ -204,7 +214,7 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 | `frontend` | `src/types/<name>.ts` — TypeScript interface + Create/Update variants |
 | `mobile` | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith |
 
-No migrations — run `alembic revision --autogenerate` or `npx prisma migrate dev` when ready.
+No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 
 ### Sync Types
 

@@ -10,6 +10,7 @@ import {
   detectProjectName,
   discoverComponentsFromMarkers,
   downloadRepo,
+  pmCommands,
   readComponentMarker,
 } from "./utils.js";
 import {
@@ -40,6 +41,7 @@ interface ProjxConfig {
   components: Component[];
   createdAt: string;
   skip?: string[];
+  packageManager?: string;
 }
 
 function isSkipped(
@@ -110,7 +112,7 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
     p.log.info(`Current: v${config.version} → Template: v${version}`);
 
     const name = detectProjectName(cwd, config.components, componentPaths);
-    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
+    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths, pm: pmCommands((raw.packageManager ?? "npm") as "npm") };
 
     const spinner = p.spinner();
     spinner.start("Analyzing changes");

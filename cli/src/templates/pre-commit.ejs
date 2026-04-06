@@ -46,10 +46,10 @@ FASTIFY_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.fastify %>/' || true)
 if [ -n "$FASTIFY_ALL" ]; then
   echo "Formatting <%= paths.fastify %>..."
   cd <%= paths.fastify %>
-  echo "$FASTIFY_ALL" | sed 's|^<%= paths.fastify %>/||' | xargs npx prettier --write --ignore-unknown
+  echo "$FASTIFY_ALL" | sed 's|^<%= paths.fastify %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
   if [ -n "$FASTIFY_TS" ]; then
-    echo "$FASTIFY_TS" | sed 's|^<%= paths.fastify %>/||' | xargs npx eslint --fix
-    npx tsc --noEmit
+    echo "$FASTIFY_TS" | sed 's|^<%= paths.fastify %>/||' | xargs <%= pm.exec %> eslint --fix
+    <%= pm.exec %> tsc --noEmit
   fi
   cd ..
   echo "$FASTIFY_ALL" | xargs git add
@@ -62,10 +62,10 @@ FRONTEND_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.frontend %>/' || true)
 if [ -n "$FRONTEND_ALL" ]; then
   echo "Formatting <%= paths.frontend %>..."
   cd <%= paths.frontend %>
-  echo "$FRONTEND_ALL" | sed 's|^<%= paths.frontend %>/||' | xargs npx prettier --write --ignore-unknown
+  echo "$FRONTEND_ALL" | sed 's|^<%= paths.frontend %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
   if [ -n "$FRONTEND_TS" ]; then
-    echo "$FRONTEND_TS" | sed 's|^<%= paths.frontend %>/||' | xargs npx eslint --fix
-    npx tsc --noEmit
+    echo "$FRONTEND_TS" | sed 's|^<%= paths.frontend %>/||' | xargs <%= pm.exec %> eslint --fix
+    <%= pm.exec %> tsc --noEmit
   fi
   cd ..
   echo "$FRONTEND_ALL" | xargs git add
@@ -78,10 +78,10 @@ E2E_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.e2e %>/' || true)
 if [ -n "$E2E_ALL" ]; then
   echo "Formatting <%= paths.e2e %>..."
   cd <%= paths.e2e %>
-  echo "$E2E_ALL" | sed 's|^<%= paths.e2e %>/||' | xargs npx prettier --write --ignore-unknown
+  echo "$E2E_ALL" | sed 's|^<%= paths.e2e %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
   if [ -n "$E2E_TS" ]; then
-    echo "$E2E_TS" | sed 's|^<%= paths.e2e %>/||' | xargs npx eslint --fix
-    npx tsc --noEmit
+    echo "$E2E_TS" | sed 's|^<%= paths.e2e %>/||' | xargs <%= pm.exec %> eslint --fix
+    <%= pm.exec %> tsc --noEmit
   fi
   cd ..
   echo "$E2E_ALL" | xargs git add

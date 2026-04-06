@@ -10,17 +10,17 @@ echo "FastAPI dependencies installed."
 <% } %>
 <% if (components.includes('fastify')) { %>
 
-cd <%= paths.fastify %> && pnpm install --frozen-lockfile && cd ..
+cd <%= paths.fastify %> && <%= pm.ci %> && cd ..
 echo "Fastify dependencies installed."
 <% } %>
 <% if (components.includes('frontend')) { %>
 
-cd <%= paths.frontend %> && npm ci && cd ..
+cd <%= paths.frontend %> && <%= pm.ci %> && cd ..
 echo "Frontend dependencies installed."
 <% } %>
 <% if (components.includes('e2e')) { %>
 
-cd <%= paths.e2e %> && npm ci && cd ..
+cd <%= paths.e2e %> && <%= pm.ci %> && cd ..
 echo "E2E dependencies installed."
 <% } %>
 <% if (components.includes('mobile')) { %>

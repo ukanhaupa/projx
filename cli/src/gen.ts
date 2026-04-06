@@ -3,7 +3,9 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
+  type PackageManager,
   discoverComponentsFromMarkers,
+  pmCommands,
   toKebab,
   toSnake,
   toTitle,
@@ -681,6 +683,10 @@ export async function gen(
     process.exit(1);
   }
 
+  const projxData = JSON.parse(await readFile(configPath, "utf-8"));
+  const pmName: PackageManager = projxData.packageManager ?? "npm";
+  const pm = pmCommands(pmName);
+
   const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
   const hasFastapi = discovered.includes("fastapi");
@@ -842,7 +848,7 @@ export async function gen(
   if (genFastify) {
     p.log.info("");
     p.log.info("Fastify next steps:");
-    p.log.info(`  npx prisma migrate dev --name add_${toSnake(config.name)}`);
+    p.log.info(`  ${pm.prismaExec} migrate dev --name add_${toSnake(config.name)}`);
   }
 
   if (hasFrontend) {

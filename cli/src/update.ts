@@ -12,6 +12,7 @@ import {
   discoverComponentPaths,
   discoverComponentsFromMarkers,
   downloadRepo,
+  pmCommands,
   readComponentMarker,
 } from "./utils.js";
 import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
@@ -91,7 +92,9 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const version = pkg.version;
 
     const name = detectProjectName(cwd, config.components, componentPaths);
-    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths };
+    const raw = existsSync(configPath) ? JSON.parse(await readFile(configPath, "utf-8")) : {};
+    const pm = raw.packageManager ?? "npm";
+    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths, pm: pmCommands(pm) };
 
     const spinner = p.spinner();
     spinner.start("Applying template update");

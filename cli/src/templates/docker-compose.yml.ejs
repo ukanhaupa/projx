@@ -35,7 +35,7 @@ services:
 <% if (components.includes('fastify')) { %>
   <%= paths.fastify %>-migrate:
     build: ./<%= paths.fastify %>
-    command: ["pnpm", "prisma", "migrate", "deploy"]
+    command: ["sh", "-c", "<%= pm.prismaExec %> migrate deploy"]
     env_file:
       - ./<%= paths.fastify %>/.env
     networks:

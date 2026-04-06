@@ -90,19 +90,26 @@ jobs:
         working-directory: <%= paths.fastify %>
     steps:
       - uses: actions/checkout@v5
+<% if (pm === 'pnpm') { %>
       - uses: pnpm/action-setup@v4
         with:
           version: 9
+<% } %>
+<% if (pm === 'bun') { %>
+      - uses: oven-sh/setup-bun@v2
+<% } %>
+<% if (pm !== 'bun') { %>
       - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: <%= paths.fastify %>/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: npx prisma generate
-      - run: npx prettier --check .
-      - run: npx eslint .
-      - run: npx tsc --noEmit
+          cache: <%= pm.name %>
+          cache-dependency-path: <%= paths.fastify %>/<%= pm.lockfile %>
+<% } %>
+      - run: <%= pm.ci %>
+      - run: <%= pm.prismaExec %> generate
+      - run: <%= pm.exec %> prettier --check .
+      - run: <%= pm.exec %> eslint .
+      - run: <%= pm.exec %> tsc --noEmit
 <% } %>
 <% if (components.includes('frontend')) { %>
 
@@ -116,15 +123,25 @@ jobs:
         working-directory: <%= paths.frontend %>
     steps:
       - uses: actions/checkout@v5
+<% if (pm === 'pnpm') { %>
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+<% } %>
+<% if (pm === 'bun') { %>
+      - uses: oven-sh/setup-bun@v2
+<% } %>
+<% if (pm !== 'bun') { %>
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: <%= paths.frontend %>/package-lock.json
-      - run: npm ci
-      - run: npx prettier --check .
-      - run: npx eslint 'src/**/*.{ts,tsx}'
-      - run: npx tsc --noEmit
+          cache: <%= pm.name %>
+          cache-dependency-path: <%= paths.frontend %>/<%= pm.lockfile %>
+<% } %>
+      - run: <%= pm.ci %>
+      - run: <%= pm.exec %> prettier --check .
+      - run: <%= pm.exec %> eslint 'src/**/*.{ts,tsx}'
+      - run: <%= pm.exec %> tsc --noEmit
 <% } %>
 <% if (components.includes('mobile')) { %>
 
@@ -158,15 +175,25 @@ jobs:
         working-directory: <%= paths.e2e %>
     steps:
       - uses: actions/checkout@v5
+<% if (pm === 'pnpm') { %>
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+<% } %>
+<% if (pm === 'bun') { %>
+      - uses: oven-sh/setup-bun@v2
+<% } %>
+<% if (pm !== 'bun') { %>
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: <%= paths.e2e %>/package-lock.json
-      - run: npm ci
-      - run: npx prettier --check .
-      - run: npx eslint '**/*.ts'
-      - run: npx tsc --noEmit
+          cache: <%= pm.name %>
+          cache-dependency-path: <%= paths.e2e %>/<%= pm.lockfile %>
+<% } %>
+      - run: <%= pm.ci %>
+      - run: <%= pm.exec %> prettier --check .
+      - run: <%= pm.exec %> eslint '**/*.ts'
+      - run: <%= pm.exec %> tsc --noEmit
 <% } %>
 <% if (components.includes('infra')) { %>
 

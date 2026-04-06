@@ -5,12 +5,14 @@ import * as p from "@clack/prompts";
 import {
   type Component,
   type ComponentPaths,
+  type PackageManager,
   cleanupRepo,
   detectProjectName,
   discoverComponentPaths,
   downloadRepo,
   exec,
   hasCommand,
+  pmCommands,
 } from "./utils.js";
 import { writeTemplateToDir, type GeneratorVars } from "./baseline.js";
 
@@ -18,6 +20,7 @@ interface ProjxConfig {
   version: string;
   components: Component[];
   createdAt: string;
+  packageManager?: PackageManager;
 }
 
 export async function add(
@@ -66,8 +69,9 @@ export async function add(
     const paths: ComponentPaths = { ...existingPaths };
     for (const c of toAdd) paths[c] = c;
 
+    const pm: PackageManager = config.packageManager ?? "npm";
     const name = detectProjectName(cwd, existing, paths);
-    const vars: GeneratorVars = { projectName: name, components: allComponents, paths };
+    const vars: GeneratorVars = { projectName: name, components: allComponents, paths, pm: pmCommands(pm) };
 
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
@@ -78,7 +82,7 @@ export async function add(
     spinner.stop("Components added.");
 
     if (!skipInstall) {
-      await installDeps(cwd, toAdd);
+      await installDeps(cwd, toAdd, pm);
     }
 
     for (const component of toAdd) {
@@ -102,7 +106,11 @@ export async function add(
 async function installDeps(
   dest: string,
   components: Component[],
+  pm: PackageManager,
 ): Promise<void> {
+  const cmds = pmCommands(pm);
+  const pmBin = pm === "bun" ? "bun" : pm;
+
   for (const component of components) {
     const spinner = p.spinner();
     try {
@@ -117,25 +125,31 @@ async function installDeps(
           }
           break;
         case "fastify":
-          if (hasCommand("pnpm")) {
-            spinner.start("Installing Fastify dependencies");
-            exec("pnpm install", join(dest, "fastify"));
+          if (hasCommand(pmBin)) {
+            spinner.start(`Installing Fastify dependencies (${cmds.install})`);
+            exec(cmds.install, join(dest, "fastify"));
             spinner.stop("Fastify dependencies installed.");
           } else {
-            spinner.start("Installing Fastify dependencies");
-            exec("npm install", join(dest, "fastify"));
-            spinner.stop("Fastify dependencies installed.");
+            p.log.warn(`${pm} not found — run 'cd fastify && ${cmds.install}' manually.`);
           }
           break;
         case "frontend":
-          spinner.start("Installing Frontend dependencies");
-          exec("npm install", join(dest, "frontend"));
-          spinner.stop("Frontend dependencies installed.");
+          if (hasCommand(pmBin)) {
+            spinner.start(`Installing Frontend dependencies (${cmds.install})`);
+            exec(cmds.install, join(dest, "frontend"));
+            spinner.stop("Frontend dependencies installed.");
+          } else {
+            p.log.warn(`${pm} not found — run 'cd frontend && ${cmds.install}' manually.`);
+          }
           break;
         case "e2e":
-          spinner.start("Installing E2E dependencies");
-          exec("npm install", join(dest, "e2e"));
-          spinner.stop("E2E dependencies installed.");
+          if (hasCommand(pmBin)) {
+            spinner.start(`Installing E2E dependencies (${cmds.install})`);
+            exec(cmds.install, join(dest, "e2e"));
+            spinner.stop("E2E dependencies installed.");
+          } else {
+            p.log.warn(`${pm} not found — run 'cd e2e && ${cmds.install}' manually.`);
+          }
           break;
         case "mobile":
           if (hasCommand("flutter")) {

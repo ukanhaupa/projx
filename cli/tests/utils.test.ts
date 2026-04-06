@@ -12,6 +12,8 @@ import {
   discoverComponentPaths,
   replaceInFile,
   replaceInDir,
+  detectPackageManager,
+  pmCommands,
   COMPONENT_MARKER,
   type Component,
 } from "../src/utils.js";
@@ -224,6 +226,139 @@ describe("discoverComponentPaths", () => {
     const paths = await discoverComponentPaths(tmp, ["fastapi", "fastify"] as Component[]);
     expect(paths.fastapi).toBe("fastapi");
     expect(paths.fastify).toBe("fastify");
+  });
+});
+
+describe("detectPackageManager", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = join(tmpdir(), `projx-pm-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("detects pnpm from lockfile", async () => {
+    await writeFile(join(tmp, "pnpm-lock.yaml"), "");
+    expect(detectPackageManager(tmp)).toBe("pnpm");
+  });
+
+  it("detects yarn from lockfile", async () => {
+    await writeFile(join(tmp, "yarn.lock"), "");
+    expect(detectPackageManager(tmp)).toBe("yarn");
+  });
+
+  it("detects bun from lockfile", async () => {
+    await writeFile(join(tmp, "bun.lockb"), "");
+    expect(detectPackageManager(tmp)).toBe("bun");
+  });
+
+  it("detects npm from lockfile", async () => {
+    await writeFile(join(tmp, "package-lock.json"), "{}");
+    expect(detectPackageManager(tmp)).toBe("npm");
+  });
+
+  it("returns null when no lockfile", () => {
+    expect(detectPackageManager(tmp)).toBeNull();
+  });
+
+  it("prioritizes bun over pnpm", async () => {
+    await writeFile(join(tmp, "bun.lockb"), "");
+    await writeFile(join(tmp, "pnpm-lock.yaml"), "");
+    expect(detectPackageManager(tmp)).toBe("bun");
+  });
+});
+
+describe("pmCommands", () => {
+  it("returns correct npm commands", () => {
+    const cmd = pmCommands("npm");
+    expect(cmd.name).toBe("npm");
+    expect(cmd.install).toBe("npm install");
+    expect(cmd.ci).toBe("npm ci");
+    expect(cmd.exec).toBe("npx");
+    expect(cmd.lockfile).toBe("package-lock.json");
+  });
+
+  it("returns correct pnpm commands", () => {
+    const cmd = pmCommands("pnpm");
+    expect(cmd.name).toBe("pnpm");
+    expect(cmd.ci).toBe("pnpm install --frozen-lockfile");
+    expect(cmd.run).toBe("pnpm");
+    expect(cmd.lockfile).toBe("pnpm-lock.yaml");
+  });
+
+  it("returns correct yarn commands", () => {
+    const cmd = pmCommands("yarn");
+    expect(cmd.install).toBe("yarn");
+    expect(cmd.ci).toBe("yarn --frozen-lockfile");
+    expect(cmd.lockfile).toBe("yarn.lock");
+  });
+
+  it("returns correct bun commands", () => {
+    const cmd = pmCommands("bun");
+    expect(cmd.install).toBe("bun install");
+    expect(cmd.exec).toBe("bunx");
+    expect(cmd.lockfile).toBe("bun.lockb");
+  });
+});
+
+const ALL_PMS = ["npm", "pnpm", "yarn", "bun"] as const;
+
+describe.each(ALL_PMS)("render with pm=%s", (pm) => {
+  const cmd = pmCommands(pm);
+
+  it("renders install command", () => {
+    const tpl = "run: <%= pm.install %>";
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe(`run: ${cmd.install}`);
+  });
+
+  it("renders ci command", () => {
+    const tpl = "run: <%= pm.ci %>";
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe(`run: ${cmd.ci}`);
+  });
+
+  it("renders exec command", () => {
+    const tpl = "<%= pm.exec %> prisma";
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe(`${cmd.exec} prisma`);
+  });
+
+  it("renders lockfile name", () => {
+    const tpl = "cache: <%= pm.lockfile %>";
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe(`cache: ${cmd.lockfile}`);
+  });
+
+  it("renders pm name", () => {
+    const tpl = "cache: <%= pm.name %>";
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe(`cache: ${pm}`);
+  });
+
+  it("matches own name in conditionals", () => {
+    const tpl = [
+      `<% if (pm === '${pm}') { %>`,
+      "matched",
+      "<% } %>",
+    ].join("\n");
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe("matched");
+  });
+
+  it("excludes other PM conditionals", () => {
+    const other = ALL_PMS.find((p) => p !== pm)!;
+    const tpl = [
+      `<% if (pm === '${other}') { %>`,
+      "should not appear",
+      "<% } %>",
+    ].join("\n");
+    const result = render(tpl, { projectName: "app", components: [], pm: cmd });
+    expect(result).toBe("");
   });
 });
 

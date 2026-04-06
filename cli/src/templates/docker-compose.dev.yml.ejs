@@ -84,7 +84,7 @@ services:
 <% if (components.includes('fastify')) { %>
   <%= paths.fastify %>-migrate:
     build: ./<%= paths.fastify %>
-    command: ['pnpm', 'prisma', 'migrate', 'deploy']
+    command: ["sh", "-c", "<%= pm.prismaExec %> migrate deploy"]
     environment:
       - DATABASE_URL=postgresql://dev:dev@db:5432/app
     depends_on:
@@ -99,7 +99,7 @@ services:
       - app-network
   <%= paths.fastify %>:
     build: ./<%= paths.fastify %>
-    command: ['pnpm', 'dev']
+    command: ["sh", "-c", "<%= pm.runDev %>"]
     ports:
       - '3000:3000'
     environment:
@@ -131,7 +131,7 @@ services:
   frontend:
     image: node:20-alpine
     working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "<%= pm.install %> && <%= pm.run %> dev -- --host 0.0.0.0"
     ports:
       - '5173:5173'
     environment:

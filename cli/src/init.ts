@@ -7,8 +7,12 @@ import {
   COMPONENTS,
   type Component,
   type ComponentPaths,
+  type PackageManager,
+  PACKAGE_MANAGERS,
   cleanupRepo,
+  detectPackageManager,
   downloadRepo,
+  pmCommands,
   toKebab,
 } from "./utils.js";
 import { LABELS } from "./prompts.js";
@@ -64,8 +68,27 @@ export async function init(
     confirmed.map((c) => [c.component, c.directory]),
   ) as ComponentPaths;
 
+  const hasJs = components.some((c) => ["fastify", "frontend", "e2e"].includes(c));
+  let pm: PackageManager = "npm";
+
+  if (hasJs) {
+    const detected = detectPackageManager(cwd);
+    if (detected) {
+      pm = detected;
+      p.log.info(`Detected package manager: ${pm}`);
+    } else if (process.stdin.isTTY) {
+      const choice = (await p.select({
+        message: "Package manager",
+        options: PACKAGE_MANAGERS.map((v) => ({ value: v, label: v })),
+        initialValue: "npm" as PackageManager,
+      })) as PackageManager | symbol;
+      if (p.isCancel(choice)) process.exit(0);
+      pm = choice as PackageManager;
+    }
+  }
+
   const projectName = toKebab(cwd.split("/").pop()!);
-  const vars: GeneratorVars = { projectName, components, paths };
+  const vars: GeneratorVars = { projectName, components, paths, pm: pmCommands(pm) };
 
   const dlSpinner = p.spinner();
   dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");

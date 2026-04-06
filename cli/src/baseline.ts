@@ -336,11 +336,13 @@ export async function writeTemplateToDir(
     await writeFile(join(dest, ".vscode/settings.json"), generateVscodeSettings(vars));
   }
 
-  const projxConfig = {
+  const projxConfig: Record<string, unknown> = {
     version,
     components,
     createdAt: new Date().toISOString().split("T")[0],
   };
+  const pmObj = vars.pm as { name?: string } | undefined;
+  if (pmObj?.name) projxConfig.packageManager = pmObj.name;
   await writeFile(join(dest, ".projx"), JSON.stringify(projxConfig, null, 2) + "\n");
 }
 
@@ -465,12 +467,13 @@ export async function applyTemplate(
       const result = await tryThreeWayMerge(cwd, tmpTemplate, baselineRef);
       await rm(tmpTemplate, { recursive: true, force: true });
 
-      // Update .projx version
-      const projxConfig = {
+      const projxConfig: Record<string, unknown> = {
         version,
         components,
         createdAt: new Date().toISOString().split("T")[0],
       };
+      const pmObj = vars.pm as { name?: string } | undefined;
+  if (pmObj?.name) projxConfig.packageManager = pmObj.name;
       await writeFile(join(cwd, ".projx"), JSON.stringify(projxConfig, null, 2) + "\n");
 
       if (result.conflicted.length === 0) {

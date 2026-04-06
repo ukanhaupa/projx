@@ -19,11 +19,48 @@ export const COMPONENTS = [
 
 export type Component = (typeof COMPONENTS)[number];
 
+export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
+export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
+export interface PmCommands {
+  name: PackageManager;
+  install: string;
+  ci: string;
+  run: string;
+  exec: string;
+  dlx: string;
+  lockfile: string;
+  prismaExec: string;
+  runDev: string;
+}
+
+export function pmCommands(pm: PackageManager): PmCommands {
+  switch (pm) {
+    case "npm":
+      return { name: "npm", install: "npm install", ci: "npm ci", run: "npm run", exec: "npx", dlx: "npx", lockfile: "package-lock.json", prismaExec: "npx prisma", runDev: "npm run dev" };
+    case "pnpm":
+      return { name: "pnpm", install: "pnpm install", ci: "pnpm install --frozen-lockfile", run: "pnpm", exec: "pnpm exec", dlx: "pnpm dlx", lockfile: "pnpm-lock.yaml", prismaExec: "pnpm prisma", runDev: "pnpm dev" };
+    case "yarn":
+      return { name: "yarn", install: "yarn", ci: "yarn --frozen-lockfile", run: "yarn", exec: "yarn", dlx: "yarn dlx", lockfile: "yarn.lock", prismaExec: "yarn prisma", runDev: "yarn dev" };
+    case "bun":
+      return { name: "bun", install: "bun install", ci: "bun install --frozen-lockfile", run: "bun run", exec: "bunx", dlx: "bunx", lockfile: "bun.lockb", prismaExec: "bunx prisma", runDev: "bun run dev" };
+  }
+}
+
+export function detectPackageManager(cwd: string): PackageManager | null {
+  if (existsSync(join(cwd, "bun.lockb"))) return "bun";
+  if (existsSync(join(cwd, "pnpm-lock.yaml"))) return "pnpm";
+  if (existsSync(join(cwd, "yarn.lock"))) return "yarn";
+  if (existsSync(join(cwd, "package-lock.json"))) return "npm";
+  return null;
+}
+
 export interface Options {
   name: string;
   components: Component[];
   git: boolean;
   install: boolean;
+  packageManager?: PackageManager;
 }
 
 export function toKebab(s: string): string {
@@ -392,8 +429,9 @@ export function render(
   for (const line of lines) {
     const ifMatch = line.match(/^<%\s*if\s*\((.+?)\)\s*\{?\s*%>$/);
     if (ifMatch) {
-      const fn = new Function("components", "projectName", `return ${ifMatch[1]}`);
-      const result = fn(components, projectName);
+      const pmName = (vars.pm as { name?: string })?.name ?? "npm";
+      const fn = new Function("components", "projectName", "pm", `return ${ifMatch[1]}`);
+      const result = fn(components, projectName, pmName);
       stack.push({ active: result, matched: result });
       continue;
     }
@@ -405,8 +443,9 @@ export function render(
         if (top.matched) {
           top.active = false;
         } else {
-          const fn = new Function("components", "projectName", `return ${elseIfMatch[1]}`);
-          const result = fn(components, projectName);
+          const pmN = (vars.pm as { name?: string })?.name ?? "npm";
+          const fn = new Function("components", "projectName", "pm", `return ${elseIfMatch[1]}`);
+          const result = fn(components, projectName, pmN);
           top.active = result;
           if (result) top.matched = true;
         }
