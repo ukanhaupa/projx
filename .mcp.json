@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "projx": {
+      "command": "npx",
+      "args": ["-y", "create-projx", "mcp"]
+    }
+  }
+}

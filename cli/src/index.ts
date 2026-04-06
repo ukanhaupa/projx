@@ -1,22 +1,40 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { COMPONENTS, type Component, type Options } from "./utils.js";
-import { runPrompts } from "./prompts.js";
-import { scaffold } from "./scaffold.js";
-import { update } from "./update.js";
-import { add } from "./add.js";
-import { init } from "./init.js";
-import { pin, unpin, listPins } from "./pin.js";
-import { doctor } from "./doctor.js";
-import { diff } from "./diff.js";
-import { gen } from "./gen.js";
-import { sync } from "./sync.js";
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  COMPONENTS,
+  PACKAGE_MANAGERS,
+  type Component,
+  type Options,
+  type PackageManager,
+} from './utils.js';
+import { runPrompts } from './prompts.js';
+import { scaffold } from './scaffold.js';
+import { update } from './update.js';
+import { add } from './add.js';
+import { init } from './init.js';
+import { pin, unpin, listPins } from './pin.js';
+import { doctor } from './doctor.js';
+import { diff } from './diff.js';
+import { gen } from './gen.js';
+import { sync } from './sync.js';
+import { startMcpServer } from './mcp.js';
 
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor" | "gen" | "sync";
+  command:
+    | 'create'
+    | 'update'
+    | 'add'
+    | 'init'
+    | 'pin'
+    | 'unpin'
+    | 'diff'
+    | 'doctor'
+    | 'gen'
+    | 'sync'
+    | 'mcp';
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -30,73 +48,135 @@ interface ParsedArgs {
 }
 
 function parseArgs(): ParsedArgs {
-  let command: ParsedArgs["command"] = "create";
+  let command: ParsedArgs['command'] = 'create';
   let name: string | undefined;
   let localRepo: string | undefined;
   const options: Partial<Options> = {};
   const extraArgs: string[] = [];
-  const flags: ParsedArgs["flags"] = {};
+  const flags: ParsedArgs['flags'] = {};
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === "update" && !name) { command = "update"; continue; }
-    if (arg === "add" && !name) { command = "add"; continue; }
-    if (arg === "init" && !name) { command = "init"; continue; }
-    if (arg === "pin" && !name) { command = "pin"; continue; }
-    if (arg === "unpin" && !name) { command = "unpin"; continue; }
-    if (arg === "diff" && !name) { command = "diff"; continue; }
-    if (arg === "doctor" && !name) { command = "doctor"; continue; }
-    if (arg === "gen" && !name) { command = "gen"; continue; }
-    if (arg === "sync" && !name) { command = "sync"; continue; }
+    if (arg === 'update' && !name) {
+      command = 'update';
+      continue;
+    }
+    if (arg === 'add' && !name) {
+      command = 'add';
+      continue;
+    }
+    if (arg === 'init' && !name) {
+      command = 'init';
+      continue;
+    }
+    if (arg === 'pin' && !name) {
+      command = 'pin';
+      continue;
+    }
+    if (arg === 'unpin' && !name) {
+      command = 'unpin';
+      continue;
+    }
+    if (arg === 'diff' && !name) {
+      command = 'diff';
+      continue;
+    }
+    if (arg === 'doctor' && !name) {
+      command = 'doctor';
+      continue;
+    }
+    if (arg === 'gen' && !name) {
+      command = 'gen';
+      continue;
+    }
+    if (arg === 'sync' && !name) {
+      command = 'sync';
+      continue;
+    }
+    if (arg === 'mcp' && !name) {
+      command = 'mcp';
+      continue;
+    }
 
-    if (arg === "--components") {
+    if (arg === '--components') {
       const val = args[++i];
       if (val) {
-        options.components = val.split(",").filter((c): c is Component =>
-          COMPONENTS.includes(c as Component),
-        );
+        options.components = val
+          .split(',')
+          .filter((c): c is Component => COMPONENTS.includes(c as Component));
       }
       continue;
     }
 
-    if (arg === "--local") {
-      localRepo = resolve(args[++i] || ".");
+    if (arg === '--package-manager' || arg === '--pm') {
+      const val = args[++i];
+      if (val && PACKAGE_MANAGERS.includes(val as PackageManager)) {
+        options.packageManager = val as PackageManager;
+      }
       continue;
     }
 
-    if (arg === "--no-git") { options.git = false; continue; }
-    if (arg === "--no-install") { options.install = false; continue; }
-
-    if (arg === "-y" || arg === "--yes") {
-      options.components = options.components ?? ["fastify", "frontend", "e2e"];
+    if (arg === '--local') {
+      localRepo = resolve(args[++i] || '.');
       continue;
     }
 
-    if (arg === "--list" || arg === "-l") { flags.list = true; continue; }
-    if (arg === "--fix") { flags.fix = true; continue; }
-    if (arg === "--ai") { flags.ai = true; continue; }
-    if (arg === "--backend") { flags.backend = true; continue; }
+    if (arg === '--no-git') {
+      options.git = false;
+      continue;
+    }
+    if (arg === '--no-install') {
+      options.install = false;
+      continue;
+    }
 
-    if (arg === "--url") {
+    if (arg === '-y' || arg === '--yes') {
+      options.components = options.components ?? ['fastify', 'frontend', 'e2e'];
+      continue;
+    }
+
+    if (arg === '--list' || arg === '-l') {
+      flags.list = true;
+      continue;
+    }
+    if (arg === '--fix') {
+      flags.fix = true;
+      continue;
+    }
+    if (arg === '--ai') {
+      flags.ai = true;
+      continue;
+    }
+    if (arg === '--backend') {
+      flags.backend = true;
+      continue;
+    }
+
+    if (arg === '--url') {
       const val = args[++i];
       if (val) extraArgs.push(`--url=${val}`);
       continue;
     }
 
-    if (arg === "--help" || arg === "-h") {
+    if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
     }
 
-    if (arg === "--fields") {
+    if (arg === '--fields') {
       const val = args[++i];
       if (val) extraArgs.push(`--fields=${val}`);
       continue;
     }
 
-    if (!arg.startsWith("-")) {
-      if (command === "add" || command === "pin" || command === "unpin" || command === "gen") {
+    if (!arg.startsWith('-')) {
+      if (
+        command === 'add' ||
+        command === 'pin' ||
+        command === 'unpin' ||
+        command === 'gen'
+      ) {
         extraArgs.push(arg);
       } else if (!name) {
         name = arg;
@@ -121,9 +201,11 @@ function printHelp(): void {
     projx doctor [--fix]          Health check for projx project
     projx gen entity <name>       Generate a new entity
     projx sync [--url <url>]      Sync types from running backend
+    projx mcp                     Start MCP server over stdio
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+    --package-manager    One of: npm, pnpm, yarn, bun
     --no-git             Skip git init
     --no-install         Skip dependency installation
     -y, --yes            Accept defaults (fastify + frontend + e2e)
@@ -147,29 +229,31 @@ function printHelp(): void {
 async function main(): Promise<void> {
   const { command, name, options, localRepo, extraArgs, flags } = parseArgs();
 
-  if (command === "init") {
+  if (command === 'init') {
     await init(process.cwd(), localRepo);
     return;
   }
 
-  if (command === "update") {
+  if (command === 'update') {
     await update(process.cwd(), localRepo);
     return;
   }
 
-  if (command === "add") {
+  if (command === 'add') {
     const components = extraArgs.filter((c): c is Component =>
       COMPONENTS.includes(c as Component),
     );
     if (components.length === 0) {
-      console.error(`Error: specify components to add. Available: ${COMPONENTS.join(", ")}`);
+      console.error(
+        `Error: specify components to add. Available: ${COMPONENTS.join(', ')}`,
+      );
       process.exit(1);
     }
     await add(process.cwd(), components, localRepo, options.install === false);
     return;
   }
 
-  if (command === "pin") {
+  if (command === 'pin') {
     if (flags.list || extraArgs.length === 0) {
       await listPins(process.cwd());
     } else {
@@ -178,42 +262,57 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "unpin") {
+  if (command === 'unpin') {
     if (extraArgs.length === 0) {
-      console.error("Error: specify patterns to unpin. Usage: projx unpin <patterns...>");
+      console.error(
+        'Error: specify patterns to unpin. Usage: projx unpin <patterns...>',
+      );
       process.exit(1);
     }
     await unpin(process.cwd(), extraArgs);
     return;
   }
 
-  if (command === "diff") {
+  if (command === 'diff') {
     await diff(process.cwd(), localRepo);
     return;
   }
 
-  if (command === "doctor") {
+  if (command === 'doctor') {
     await doctor(process.cwd(), flags.fix);
     return;
   }
 
-  if (command === "sync") {
-    const urlArg = extraArgs.find((a) => a.startsWith("--url="));
-    const url = urlArg ? urlArg.split("=").slice(1).join("=") : undefined;
+  if (command === 'sync') {
+    const urlArg = extraArgs.find((a) => a.startsWith('--url='));
+    const url = urlArg ? urlArg.split('=').slice(1).join('=') : undefined;
     await sync(process.cwd(), url);
     return;
   }
 
-  if (command === "gen") {
+  if (command === 'mcp') {
+    startMcpServer();
+    return;
+  }
+
+  if (command === 'gen') {
     const subcommand = extraArgs[0];
-    if (subcommand !== "entity" || !extraArgs[1]) {
-      console.error("Usage: projx gen entity <name> [--fields \"name:string,amount:number\"]");
+    if (subcommand !== 'entity' || !extraArgs[1]) {
+      console.error(
+        'Usage: projx gen entity <name> [--fields "name:string,amount:number"]',
+      );
       process.exit(1);
     }
     const entityName = extraArgs[1];
-    const fieldsArg = extraArgs.find((a) => a.startsWith("--fields="));
-    const fieldsFlag = fieldsArg ? fieldsArg.split("=").slice(1).join("=") : undefined;
-    const backendFlag = flags.ai ? "fastapi" as const : flags.backend ? "fastify" as const : undefined;
+    const fieldsArg = extraArgs.find((a) => a.startsWith('--fields='));
+    const fieldsFlag = fieldsArg
+      ? fieldsArg.split('=').slice(1).join('=')
+      : undefined;
+    const backendFlag = flags.ai
+      ? ('fastapi' as const)
+      : flags.backend
+        ? ('fastify' as const)
+        : undefined;
     await gen(process.cwd(), entityName, fieldsFlag, backendFlag);
     return;
   }
@@ -223,7 +322,7 @@ async function main(): Promise<void> {
 
   if (options.components) {
     if (!name) {
-      console.error("Error: project name required. Usage: projx <name>");
+      console.error('Error: project name required. Usage: projx <name>');
       return process.exit(1);
     }
     opts = {
@@ -231,11 +330,13 @@ async function main(): Promise<void> {
       components: options.components,
       git: options.git ?? true,
       install: options.install ?? true,
+      packageManager: options.packageManager,
     };
   } else {
     opts = await runPrompts(name);
     opts.git = options.git ?? opts.git;
     opts.install = options.install ?? opts.install;
+    opts.packageManager = options.packageManager ?? opts.packageManager;
   }
 
   const dest = resolve(process.cwd(), opts.name);
