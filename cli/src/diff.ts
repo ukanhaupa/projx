@@ -8,7 +8,7 @@ import {
   type ComponentPaths,
   cleanupRepo,
   detectProjectName,
-  discoverComponentPaths,
+  discoverComponentsFromMarkers,
   downloadRepo,
   readComponentMarker,
 } from "./utils.js";
@@ -80,8 +80,9 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
     process.exit(1);
   }
 
-  const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
+  const raw: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
+  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  const config = { ...raw, components: discovered.length > 0 ? discovered : raw.components };
 
   const componentSkips: Record<string, string[]> = {};
   for (const component of config.components) {

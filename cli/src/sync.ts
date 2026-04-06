@@ -1,18 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
 import {
-  type Component,
-  discoverComponentPaths,
+  discoverComponentsFromMarkers,
   toKebab,
   toSnake,
 } from './utils.js';
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-}
 
 interface MetaField {
   key: string;
@@ -252,16 +246,10 @@ export async function sync(cwd: string, url?: string): Promise<void> {
     process.exit(1);
   }
 
-  const projxConfig: ProjxConfig = JSON.parse(
-    await readFile(configPath, 'utf-8'),
-  );
-  const componentPaths = await discoverComponentPaths(
-    cwd,
-    projxConfig.components,
-  );
+  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
-  const hasFrontend = projxConfig.components.includes('frontend');
-  const hasMobile = projxConfig.components.includes('mobile');
+  const hasFrontend = discovered.includes('frontend');
+  const hasMobile = discovered.includes('mobile');
 
   if (!hasFrontend && !hasMobile) {
     p.log.error('No frontend or mobile component found. Nothing to sync.');

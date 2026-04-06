@@ -342,6 +342,43 @@ export async function discoverComponentPaths(
   return paths as ComponentPaths;
 }
 
+export async function discoverComponentsFromMarkers(
+  cwd: string,
+): Promise<{ components: Component[]; paths: ComponentPaths }> {
+  const components: Component[] = [];
+  const paths: Partial<ComponentPaths> = {};
+
+  const entries = await readdir(cwd, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (EXCLUDE.has(entry.name)) continue;
+    if (entry.name.startsWith(".")) continue;
+
+    const full = join(cwd, entry.name);
+    const marker = join(full, COMPONENT_MARKER);
+    if (existsSync(marker)) {
+      try {
+        const data = JSON.parse(await readFile(marker, "utf-8"));
+        const markerComponents: string[] = data.components ?? (data.component ? [data.component] : []);
+        for (const mc of markerComponents) {
+          if (COMPONENTS.includes(mc as Component) && !components.includes(mc as Component)) {
+            components.push(mc as Component);
+            paths[mc as Component] = entry.name;
+          }
+        }
+      } catch {
+        // invalid marker
+      }
+    }
+  }
+
+  for (const c of components) {
+    if (!paths[c]) paths[c] = c;
+  }
+
+  return { components, paths: paths as ComponentPaths };
+}
+
 export function render(
   template: string,
   vars: Record<string, unknown>,

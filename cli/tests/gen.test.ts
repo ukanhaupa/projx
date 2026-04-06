@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { execSync } from "node:child_process";
 import { scaffold } from "../src/scaffold.js";
 import { gen } from "../src/gen.js";
 
@@ -278,5 +279,37 @@ describe("gen entity", () => {
     const barrel = await readFile(join(dest, "frontend/src/types/index.ts"), "utf-8");
     expect(barrel).toContain("export * from './product';");
     expect(barrel).toContain("export * from './invoice';");
+  });
+
+  it("works with renamed directories (fastapi→ai, fastify→backend)", async () => {
+    dest = join(tmpdir(), `projx-gen-rename-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi", "fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    // Rename directories like user would
+    execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, { stdio: "pipe" });
+    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
+
+    // Manually rewrite .projx with directory names (what user might do)
+    const projx = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    projx.components = ["ai", "backend"];
+    await writeFile(join(dest, ".projx"), JSON.stringify(projx, null, 2) + "\n");
+
+    execSync("git add -A && git commit --no-verify -m 'rename dirs'", { cwd: dest, stdio: "pipe" });
+
+    // gen should still find fastapi and fastify from markers
+    await gen(dest, "tenant", "name:string,domain:string");
+
+    // FastAPI model in renamed dir
+    expect(existsSync(join(dest, "ai/src/entities/tenant/_model.py"))).toBe(true);
+    const model = await readFile(join(dest, "ai/src/entities/tenant/_model.py"), "utf-8");
+    expect(model).toContain("class Tenant(BaseModel_):");
+
+    // Fastify module in renamed dir
+    expect(existsSync(join(dest, "backend/src/modules/tenant/schemas.ts"))).toBe(true);
+    expect(existsSync(join(dest, "backend/src/modules/tenant/index.ts"))).toBe(true);
   });
 });

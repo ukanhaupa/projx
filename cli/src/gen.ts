@@ -3,17 +3,11 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
-  type Component,
-  discoverComponentPaths,
+  discoverComponentsFromMarkers,
   toKebab,
   toSnake,
   toTitle,
 } from "./utils.js";
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-}
 
 const FIELD_TYPES = ["string", "number", "boolean", "date", "datetime", "text", "json"] as const;
 type FieldType = (typeof FIELD_TYPES)[number];
@@ -633,13 +627,12 @@ export async function gen(
     process.exit(1);
   }
 
-  const projxConfig: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const componentPaths = await discoverComponentPaths(cwd, projxConfig.components);
+  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
-  const hasFastapi = projxConfig.components.includes("fastapi");
-  const hasFastify = projxConfig.components.includes("fastify");
-  const hasFrontend = projxConfig.components.includes("frontend");
-  const hasMobile = projxConfig.components.includes("mobile");
+  const hasFastapi = discovered.includes("fastapi");
+  const hasFastify = discovered.includes("fastify");
+  const hasFrontend = discovered.includes("frontend");
+  const hasMobile = discovered.includes("mobile");
 
   if (!hasFastapi && !hasFastify) {
     p.log.error("No backend component found. Need fastapi or fastify.");

@@ -6,7 +6,7 @@ import {
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
-  discoverComponentPaths,
+  discoverComponentsFromMarkers,
   readComponentMarker,
 } from "./utils.js";
 
@@ -52,7 +52,7 @@ export async function pin(
   }
 
   const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
+  const componentPaths = (await discoverComponentsFromMarkers(cwd)).paths;
 
   const rootAdds: string[] = [];
   const componentAdds: Record<string, string[]> = {};
@@ -124,7 +124,7 @@ export async function unpin(
   }
 
   const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
+  const componentPaths = (await discoverComponentsFromMarkers(cwd)).paths;
 
   const rootRemoves: string[] = [];
   const componentRemoves: Record<string, string[]> = {};
@@ -193,7 +193,7 @@ export async function listPins(cwd: string): Promise<void> {
   }
 
   const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
+  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
   let hasAny = false;
 
@@ -207,7 +207,7 @@ export async function listPins(cwd: string): Promise<void> {
   }
 
   // Component skips
-  for (const component of config.components) {
+  for (const component of discovered) {
     const dir = componentPaths[component];
     const marker = await readComponentMarker(join(cwd, dir));
     if (marker?.skip && marker.skip.length > 0) {

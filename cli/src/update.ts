@@ -4,13 +4,13 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
-  COMPONENTS,
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
   cleanupRepo,
   detectProjectName,
   discoverComponentPaths,
+  discoverComponentsFromMarkers,
   downloadRepo,
   readComponentMarker,
 } from "./utils.js";
@@ -47,17 +47,19 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
   let config: ProjxConfig;
 
   if (existsSync(configPath)) {
-    config = JSON.parse(await readFile(configPath, "utf-8"));
+    const raw = JSON.parse(await readFile(configPath, "utf-8"));
+    const { components: discovered } = await discoverComponentsFromMarkers(cwd);
+    config = { ...raw, components: discovered.length > 0 ? discovered : raw.components };
     p.log.info(`Found .projx (v${config.version}, components: ${config.components.join(", ")})`);
   } else {
     p.log.warn("No .projx file found. Detecting components from directories.");
-    const detected = COMPONENTS.filter((c) => existsSync(join(cwd, c))) as Component[];
-    if (detected.length === 0) {
+    const { components: discovered } = await discoverComponentsFromMarkers(cwd);
+    if (discovered.length === 0) {
       p.log.error("No projx components found. Run 'projx init' first.");
       process.exit(1);
     }
-    config = { version: "0.0.0", components: detected, createdAt: "unknown" };
-    p.log.info(`Detected: ${detected.join(", ")}`);
+    config = { version: "0.0.0", components: discovered, createdAt: "unknown" };
+    p.log.info(`Detected: ${discovered.join(", ")}`);
   }
 
   const componentPaths = await discoverComponentPaths(cwd, config.components);

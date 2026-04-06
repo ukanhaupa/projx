@@ -8,7 +8,7 @@ import {
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
-  discoverComponentPaths,
+  discoverComponentsFromMarkers,
   readComponentMarker,
 } from "./utils.js";
 import { BASELINE_REF, matchesSkip, saveBaselineRef } from "./baseline.js";
@@ -313,14 +313,15 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
   }
 
   // Component checks
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
-  allResults.push(...await checkComponents(cwd, config, componentPaths));
+  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  const resolvedConfig = { ...config, components: discovered.length > 0 ? discovered : config.components };
+  allResults.push(...await checkComponents(cwd, resolvedConfig, componentPaths));
 
   // Git checks
   allResults.push(...checkGit(cwd, fix));
 
   // Skip pattern checks
-  allResults.push(...await checkSkipPatterns(cwd, config, componentPaths));
+  allResults.push(...await checkSkipPatterns(cwd, resolvedConfig, componentPaths));
 
   printReport(allResults);
 
