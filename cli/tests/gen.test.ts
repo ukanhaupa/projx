@@ -76,7 +76,7 @@ describe("gen entity", () => {
     expect(app).toContain("import './modules/invoice/index.js';");
   });
 
-  it("generates for both backends when both present", async () => {
+  it("generates in primary backend only when both present", async () => {
     dest = join(tmpdir(), `projx-gen-both-${Date.now()}`);
     await scaffold(
       { name: "gen-app", components: ["fastapi", "fastify"], git: true, install: false },
@@ -84,11 +84,12 @@ describe("gen entity", () => {
       REPO_DIR,
     );
 
+    // Non-interactive defaults to fastify
     await gen(dest, "product", "name:string,price:number,active:boolean");
 
-    expect(existsSync(join(dest, "fastapi/src/entities/product/_model.py"))).toBe(true);
     expect(existsSync(join(dest, "fastify/src/modules/product/schemas.ts"))).toBe(true);
     expect(existsSync(join(dest, "fastify/src/modules/product/index.ts"))).toBe(true);
+    expect(existsSync(join(dest, "fastapi/src/entities/product"))).toBe(false);
   });
 
   it("skips generation if entity already exists", async () => {
@@ -233,7 +234,7 @@ describe("gen entity", () => {
     expect(content).toContain("Product copyWith(");
   });
 
-  it("generates types for all components at once", async () => {
+  it("generates primary backend + frontend + mobile types", async () => {
     dest = join(tmpdir(), `projx-gen-all-${Date.now()}`);
     await scaffold(
       { name: "gen-app", components: ["fastapi", "fastify", "frontend", "mobile"], git: true, install: false },
@@ -243,10 +244,12 @@ describe("gen entity", () => {
 
     await gen(dest, "invoice", "name:string,amount:number");
 
-    expect(existsSync(join(dest, "fastapi/src/entities/invoice/_model.py"))).toBe(true);
+    // Primary backend (fastify) + frontend + mobile
     expect(existsSync(join(dest, "fastify/src/modules/invoice/schemas.ts"))).toBe(true);
     expect(existsSync(join(dest, "frontend/src/types/invoice.ts"))).toBe(true);
     expect(existsSync(join(dest, "mobile/lib/entities/invoice/model.dart"))).toBe(true);
+    // fastapi should NOT get the entity (it's the AI engine)
+    expect(existsSync(join(dest, "fastapi/src/entities/invoice"))).toBe(false);
   });
 
   it("handles nullable fields in TypeScript interface", async () => {
@@ -289,27 +292,84 @@ describe("gen entity", () => {
       REPO_DIR,
     );
 
-    // Rename directories like user would
     execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, { stdio: "pipe" });
     execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
 
-    // Manually rewrite .projx with directory names (what user might do)
     const projx = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     projx.components = ["ai", "backend"];
+    projx.primaryBackend = "fastify";
     await writeFile(join(dest, ".projx"), JSON.stringify(projx, null, 2) + "\n");
-
     execSync("git add -A && git commit --no-verify -m 'rename dirs'", { cwd: dest, stdio: "pipe" });
 
-    // gen should still find fastapi and fastify from markers
     await gen(dest, "tenant", "name:string,domain:string");
 
-    // FastAPI model in renamed dir
-    expect(existsSync(join(dest, "ai/src/entities/tenant/_model.py"))).toBe(true);
-    const model = await readFile(join(dest, "ai/src/entities/tenant/_model.py"), "utf-8");
-    expect(model).toContain("class Tenant(BaseModel_):");
-
-    // Fastify module in renamed dir
+    // Only fastify (primary) gets the entity, not fastapi
     expect(existsSync(join(dest, "backend/src/modules/tenant/schemas.ts"))).toBe(true);
     expect(existsSync(join(dest, "backend/src/modules/tenant/index.ts"))).toBe(true);
+    expect(existsSync(join(dest, "ai/src/entities/tenant/_model.py"))).toBe(false);
+  });
+
+  it("defaults to only backend when single backend exists", async () => {
+    dest = join(tmpdir(), `projx-gen-single-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "task", "title:string");
+
+    expect(existsSync(join(dest, "fastapi/src/entities/task/_model.py"))).toBe(true);
+  });
+
+  it("--ai flag generates in fastapi even when both exist", async () => {
+    dest = join(tmpdir(), `projx-gen-ai-flag-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi", "fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const projx = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    projx.primaryBackend = "fastify";
+    await writeFile(join(dest, ".projx"), JSON.stringify(projx, null, 2) + "\n");
+
+    await gen(dest, "embedding", "name:string,vector:json", "fastapi");
+
+    expect(existsSync(join(dest, "fastapi/src/entities/embedding/_model.py"))).toBe(true);
+    expect(existsSync(join(dest, "fastify/src/modules/embedding"))).toBe(false);
+  });
+
+  it("--backend flag generates in fastify even when primaryBackend is fastapi", async () => {
+    dest = join(tmpdir(), `projx-gen-backend-flag-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi", "fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const projx = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    projx.primaryBackend = "fastapi";
+    await writeFile(join(dest, ".projx"), JSON.stringify(projx, null, 2) + "\n");
+
+    await gen(dest, "invoice", "name:string,amount:number", "fastify");
+
+    expect(existsSync(join(dest, "fastify/src/modules/invoice/schemas.ts"))).toBe(true);
+    expect(existsSync(join(dest, "fastapi/src/entities/invoice"))).toBe(false);
+  });
+
+  it("saves primaryBackend to .projx in non-interactive mode", async () => {
+    dest = join(tmpdir(), `projx-gen-save-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi", "fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    // Non-interactive (no TTY) defaults to fastify
+    await gen(dest, "task", "title:string");
+
+    expect(existsSync(join(dest, "fastify/src/modules/task/schemas.ts"))).toBe(true);
+    expect(existsSync(join(dest, "fastapi/src/entities/task"))).toBe(false);
   });
 });

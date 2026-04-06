@@ -24,6 +24,8 @@ interface ParsedArgs {
   flags: {
     list?: boolean;
     fix?: boolean;
+    ai?: boolean;
+    backend?: boolean;
   };
 }
 
@@ -73,6 +75,8 @@ function parseArgs(): ParsedArgs {
 
     if (arg === "--list" || arg === "-l") { flags.list = true; continue; }
     if (arg === "--fix") { flags.fix = true; continue; }
+    if (arg === "--ai") { flags.ai = true; continue; }
+    if (arg === "--backend") { flags.backend = true; continue; }
 
     if (arg === "--url") {
       const val = args[++i];
@@ -209,7 +213,8 @@ async function main(): Promise<void> {
     const entityName = extraArgs[1];
     const fieldsArg = extraArgs.find((a) => a.startsWith("--fields="));
     const fieldsFlag = fieldsArg ? fieldsArg.split("=").slice(1).join("=") : undefined;
-    await gen(process.cwd(), entityName, fieldsFlag);
+    const backendFlag = flags.ai ? "fastapi" as const : flags.backend ? "fastify" as const : undefined;
+    await gen(process.cwd(), entityName, fieldsFlag, backendFlag);
     return;
   }
 

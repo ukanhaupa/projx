@@ -614,10 +614,63 @@ function generateDartModel(config: EntityConfig): string {
 
 // --- Main ---
 
+type BackendTarget = "fastapi" | "fastify";
+
+async function resolvePrimaryBackend(
+  cwd: string,
+  hasFastapi: boolean,
+  hasFastify: boolean,
+  backendFlag?: BackendTarget,
+): Promise<BackendTarget> {
+  if (backendFlag) return backendFlag;
+  if (hasFastapi && !hasFastify) return "fastapi";
+  if (hasFastify && !hasFastapi) return "fastify";
+
+  // Both exist — check .projx for saved preference
+  const configPath = join(cwd, ".projx");
+  if (existsSync(configPath)) {
+    try {
+      const data = JSON.parse(await readFile(configPath, "utf-8"));
+      if (data.primaryBackend === "fastapi" || data.primaryBackend === "fastify") {
+        return data.primaryBackend;
+      }
+    } catch {
+      // continue to prompt
+    }
+  }
+
+  // Prompt user
+  if (!process.stdin.isTTY) return "fastify";
+
+  const choice = (await p.select({
+    message: "Both backends detected. Which is your primary?",
+    options: [
+      { value: "fastify", label: "fastify (API backend)" },
+      { value: "fastapi", label: "fastapi (AI/ML engine)" },
+    ],
+    initialValue: "fastify" as BackendTarget,
+  })) as BackendTarget | symbol;
+
+  if (p.isCancel(choice)) process.exit(0);
+
+  // Save to .projx
+  try {
+    const data = JSON.parse(await readFile(configPath, "utf-8"));
+    data.primaryBackend = choice;
+    await writeFile(configPath, JSON.stringify(data, null, 2) + "\n");
+    p.log.success(`Saved primaryBackend: ${choice} to .projx`);
+  } catch {
+    // non-critical
+  }
+
+  return choice as BackendTarget;
+}
+
 export async function gen(
   cwd: string,
   entityName: string,
   fieldsFlag?: string,
+  backendFlag?: BackendTarget,
 ): Promise<void> {
   p.intro(`projx gen entity ${entityName}`);
 
@@ -638,6 +691,10 @@ export async function gen(
     p.log.error("No backend component found. Need fastapi or fastify.");
     process.exit(1);
   }
+
+  const targetBackend = await resolvePrimaryBackend(cwd, hasFastapi, hasFastify, backendFlag);
+  const genFastapi = targetBackend === "fastapi" && hasFastapi;
+  const genFastify = targetBackend === "fastify" && hasFastify;
 
   let config: EntityConfig;
 
@@ -663,7 +720,7 @@ export async function gen(
 
   const generated: string[] = [];
 
-  if (hasFastapi) {
+  if (genFastapi) {
     const dir = componentPaths.fastapi;
     const entityDir = join(cwd, dir, "src/entities", toSnake(config.name));
 
@@ -676,7 +733,7 @@ export async function gen(
     }
   }
 
-  if (hasFastify) {
+  if (genFastify) {
     const dir = componentPaths.fastify;
     const moduleDir = join(cwd, dir, "src/modules", toKebab(config.name));
 
@@ -774,14 +831,14 @@ export async function gen(
 
   const className = toPascal(config.name);
 
-  if (hasFastapi) {
+  if (genFastapi) {
     p.log.info("");
     p.log.info("FastAPI next steps:");
     p.log.info(`  alembic revision --autogenerate -m "add ${config.tableName}"`);
     p.log.info("  alembic upgrade head");
   }
 
-  if (hasFastify) {
+  if (genFastify) {
     p.log.info("");
     p.log.info("Fastify next steps:");
     p.log.info(`  npx prisma migrate dev --name add_${toSnake(config.name)}`);

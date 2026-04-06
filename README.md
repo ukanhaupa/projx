@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/create-projx)](https://www.npmjs.com/package/create-projx)
 [![CI](https://github.com/ukanhaupa/projx/actions/workflows/ci.yml/badge.svg)](https://github.com/ukanhaupa/projx/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/ukanhaupa/projx)](https://github.com/ukanhaupa/projx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Production-grade project scaffolder. Pick your stack, get a fully wired project with auth, database, CI/CD, and E2E tests — ready to deploy.
@@ -111,7 +112,7 @@ To skip root-level files (docker-compose, README), add `skip` to `.projx`:
 
 ```json
 {
-  "version": "1.3.6",
+  "version": "1.4.2",
   "components": ["fastapi", "frontend"],
   "skip": ["docker-compose.yml", "README.md"]
 }
@@ -131,10 +132,12 @@ npx create-projx pin <patterns...>
 npx create-projx unpin <patterns...>
 npx create-projx pin --list
 npx create-projx doctor [--fix]
-npx create-projx gen entity <name>
+npx create-projx gen entity <name> [--ai | --backend]
 npx create-projx sync [--url <url>]
 
 --components <list>    Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+--ai                   Target fastapi (AI/ML) for gen entity
+--backend              Target fastify (API backend) for gen entity
 --no-git               Skip git init
 --no-install           Skip dependency installation
 -y, --yes              Accept defaults (fastify + frontend + e2e)
@@ -178,19 +181,26 @@ Checks: config validity, component markers, baseline ref, stale worktrees, skip 
 
 ### Generate Entities
 
-Scaffold a new entity across all components in your project:
+Scaffold a new entity in your primary backend + typed models for frontend/mobile:
 
 ```bash
 npx create-projx gen entity invoice                                          # interactive
 npx create-projx gen entity invoice --fields "name:string,amount:number"     # non-interactive
+npx create-projx gen entity embedding --ai --fields "name:string,vector:json"  # target AI backend
 ```
 
-Generates based on what's in your `.projx`:
+When both `fastapi` and `fastify` exist, the entity generates in the **primary backend** only (not both). First run prompts you to choose and saves to `.projx`:
+
+```json
+{ "primaryBackend": "fastify" }
+```
+
+Override with `--ai` (fastapi) or `--backend` (fastify).
 
 | Component | Generated |
 | --------- | --------- |
-| `fastapi` | `src/entities/<name>/_model.py` — auto-discovered by registry |
-| `fastify` | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + app.ts import |
+| Primary backend (fastapi) | `src/entities/<name>/_model.py` — auto-discovered by registry |
+| Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + app.ts import |
 | `frontend` | `src/types/<name>.ts` — TypeScript interface + Create/Update variants |
 | `mobile` | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith |
 
