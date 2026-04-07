@@ -615,6 +615,160 @@ function generateDartModel(config: EntityConfig): string {
   return lines.join("\n");
 }
 
+// --- Test generation ---
+
+type SampleVariant = "create" | "update" | "alt";
+
+function pyHttpLiteral(type: FieldType, variant: SampleVariant = "create"): string {
+  switch (type) {
+    case "string":
+    case "text":
+      return variant === "create" ? '"sample text"' : variant === "update" ? '"updated text"' : '"alt text"';
+    case "number":
+      return variant === "create" ? "42" : variant === "update" ? "100" : "7";
+    case "boolean":
+      return variant === "create" ? "True" : "False";
+    case "date":
+      return variant === "alt" ? '"2026-02-01"' : '"2026-01-01"';
+    case "datetime":
+      return variant === "alt" ? '"2026-02-01T00:00:00"' : '"2026-01-01T00:00:00"';
+    case "json":
+      return "{}";
+  }
+}
+
+function pyOrmLiteral(type: FieldType, variant: SampleVariant = "create"): string {
+  switch (type) {
+    case "string":
+    case "text":
+      return variant === "create" ? '"sample text"' : variant === "update" ? '"updated text"' : '"alt text"';
+    case "number":
+      return variant === "create" ? "42" : variant === "update" ? "100" : "7";
+    case "boolean":
+      return variant === "create" ? "True" : "False";
+    case "date":
+      return variant === "alt" ? "date(2026, 2, 1)" : "date(2026, 1, 1)";
+    case "datetime":
+      return variant === "alt" ? "datetime(2026, 2, 1, 0, 0, 0)" : "datetime(2026, 1, 1, 0, 0, 0)";
+    case "json":
+      return "{}";
+  }
+}
+
+function tsLiteral(type: FieldType, variant: SampleVariant = "create"): string {
+  switch (type) {
+    case "string":
+    case "text":
+      return variant === "create" ? "'sample text'" : variant === "update" ? "'updated text'" : "'alt text'";
+    case "number":
+      return variant === "create" ? "42" : variant === "update" ? "100" : "7";
+    case "boolean":
+      return variant === "create" ? "true" : "false";
+    case "date":
+      return variant === "alt" ? "'2026-02-01'" : "'2026-01-01'";
+    case "datetime":
+      return variant === "alt" ? "'2026-02-01T00:00:00.000Z'" : "'2026-01-01T00:00:00.000Z'";
+    case "json":
+      return "{}";
+  }
+}
+
+function pickFilterField(fields: EntityField[]): EntityField {
+  return (
+    fields.find((f) => f.type === "string" || f.type === "text") ??
+    fields.find((f) => f.type === "number") ??
+    fields.find((f) => f.type === "boolean") ??
+    fields[0]
+  );
+}
+
+function generateFastapiTest(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const snake = toSnake(config.name);
+  const apiUrl = `/api/v1${config.apiPrefix}/`;
+  const filterField = pickFilterField(config.fields);
+
+  const needsDate = config.fields.some((f) => f.type === "date");
+  const needsDatetime = config.fields.some((f) => f.type === "datetime");
+
+  const dateImports: string[] = [];
+  if (needsDate) dateImports.push("date");
+  if (needsDatetime) dateImports.push("datetime");
+
+  const lines: string[] = [];
+
+  if (dateImports.length > 0) {
+    lines.push(`from datetime import ${dateImports.join(", ")}`);
+    lines.push("");
+  }
+
+  lines.push(`from src.entities.${snake}._model import ${className}`);
+  lines.push(`from tests.base_entity_api_test import BaseEntityApiTest`);
+  lines.push("");
+  lines.push("");
+  lines.push(`class Test${className}Entity(BaseEntityApiTest):`);
+  lines.push(`    __test__ = True`);
+  lines.push(`    endpoint = "${apiUrl}"`);
+
+  // create_payload
+  lines.push(`    create_payload = {`);
+  for (const f of config.fields) {
+    lines.push(`        "${f.name}": ${pyHttpLiteral(f.type, "create")},`);
+  }
+  lines.push(`    }`);
+
+  // update_payload — pick first field
+  const updateField = config.fields[0];
+  lines.push(`    update_payload = {"${updateField.name}": ${pyHttpLiteral(updateField.type, "update")}}`);
+  lines.push(`    invalid_payload: dict = {}`);
+
+  // filter_field/values
+  lines.push(`    filter_field = "${filterField.name}"`);
+  lines.push(`    filter_value = ${pyHttpLiteral(filterField.type, "create")}`);
+  lines.push(`    other_filter_value = ${pyHttpLiteral(filterField.type, "alt")}`);
+  lines.push("");
+
+  // make_model
+  lines.push(`    def make_model(self, index: int, **overrides):`);
+  lines.push(`        data = {`);
+  for (const f of config.fields) {
+    lines.push(`            "${f.name}": ${pyOrmLiteral(f.type, "create")},`);
+  }
+  lines.push(`        }`);
+  lines.push(`        data.update(overrides)`);
+  lines.push(`        return ${className}(**data)`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function generateFastifyTest(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const basePath = `/api/v1${config.apiPrefix}`;
+  const updateField = config.fields[0];
+
+  const lines: string[] = [];
+
+  lines.push(`import { describeCrudEntity } from '../helpers/crud-test-base.js';`);
+  lines.push("");
+  lines.push(`describeCrudEntity({`);
+  lines.push(`  entityName: '${className}',`);
+  lines.push(`  basePath: '${basePath}',`);
+  lines.push(`  prismaModel: '${className}',`);
+  lines.push(`  createPayload: {`);
+  for (const f of config.fields) {
+    lines.push(`    ${f.name}: ${tsLiteral(f.type, "create")},`);
+  }
+  lines.push(`  },`);
+  lines.push(`  updatePayload: {`);
+  lines.push(`    ${updateField.name}: ${tsLiteral(updateField.type, "update")},`);
+  lines.push(`  },`);
+  lines.push(`});`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
 // --- Main ---
 
 type BackendTarget = "fastapi" | "fastify";
@@ -737,6 +891,13 @@ export async function gen(
       await mkdir(entityDir, { recursive: true });
       await writeFile(join(entityDir, "_model.py"), generateFastAPIModel(config));
       generated.push(`${dir}/src/entities/${toSnake(config.name)}/_model.py`);
+
+      const testsDir = join(cwd, dir, "tests");
+      const testFile = join(testsDir, `test_${toSnake(config.name)}_entity.py`);
+      if (existsSync(testsDir) && !existsSync(testFile)) {
+        await writeFile(testFile, generateFastapiTest(config));
+        generated.push(`${dir}/tests/test_${toSnake(config.name)}_entity.py`);
+      }
     }
   }
 
@@ -780,6 +941,13 @@ export async function gen(
           await writeFile(prismaPath, prismaContent.trimEnd() + "\n\n" + prismaModel + "\n");
           generated.push(`${dir}/prisma/schema.prisma (model added)`);
         }
+      }
+
+      const testsModulesDir = join(cwd, dir, "tests/modules");
+      const fastifyTestFile = join(testsModulesDir, `${toKebab(config.name)}.test.ts`);
+      if (existsSync(testsModulesDir) && !existsSync(fastifyTestFile)) {
+        await writeFile(fastifyTestFile, generateFastifyTest(config));
+        generated.push(`${dir}/tests/modules/${toKebab(config.name)}.test.ts`);
       }
     }
   }

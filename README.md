@@ -66,6 +66,7 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 ## Why teams pick Projx and stay
 
 - **It actually runs.** Every template is tested in CI before release. No "looks right" surprises.
+- **Tests ship with the code.** `gen entity` writes integration tests alongside every model — 11 tests per entity, against a real database. You start green, not scrambling.
 - **Auto-entity pattern.** Define a data model, get CRUD routes, validation, OpenAPI docs, and a typed UI for free. Backend, frontend, and mobile all stay in sync.
 - **Updates don't nuke your code.** `projx update` does a 3-tier merge — your custom controllers, pages, and config survive template upgrades. No rewrites.
 - **No lock-in.** Projx generates files and walks away. Delete the `.projx` config and it's just a normal repo.
@@ -273,12 +274,14 @@ When both `fastapi` and `fastify` exist, the entity generates in the **primary b
 
 Override with `--ai` (fastapi) or `--backend` (fastify).
 
-| Component                 | Generated                                                                   |
-| ------------------------- | --------------------------------------------------------------------------- |
-| Primary backend (fastapi) | `src/entities/<name>/_model.py` — auto-discovered by registry               |
-| Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + app.ts import |
-| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants       |
-| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith |
+| Component                 | Generated                                                                                     |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| Primary backend (fastapi) | `src/entities/<name>/_model.py` + `tests/test_<name>_entity.py` — model + 11 CRUD/auth tests  |
+| Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + `tests/modules/<name>.test.ts`  |
+| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                         |
+| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith                   |
+
+**Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres for Fastify, SQLite-in-memory for FastAPI today). New entities ship green from day one — no scrambling to bolt on tests at go-live.
 
 No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 

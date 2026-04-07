@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,15 +22,18 @@ from src.configs import _database as database_module
 from src.configs import get_db_session
 from src.entities import BaseModel_
 
+TEST_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite+aiosqlite:///:memory:")
+IS_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
+
 
 @pytest.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    engine_kwargs: dict = {"echo": False}
+    if IS_SQLITE:
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+        engine_kwargs["poolclass"] = StaticPool
+
+    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
 
     database_module._engine = engine
     database_module._session_factory = async_sessionmaker(
@@ -40,9 +44,15 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     )
 
     async with engine.begin() as conn:
+        if not IS_SQLITE:
+            await conn.run_sync(BaseModel_.metadata.drop_all)
         await conn.run_sync(BaseModel_.metadata.create_all)
 
     yield engine
+
+    if not IS_SQLITE:
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseModel_.metadata.drop_all)
 
     database_module._session_factory = None
     database_module._engine = None

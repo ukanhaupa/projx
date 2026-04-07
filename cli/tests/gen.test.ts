@@ -376,4 +376,88 @@ describe("gen entity", () => {
     expect(existsSync(join(dest, "fastify/src/modules/task/schemas.ts"))).toBe(true);
     expect(existsSync(join(dest, "fastapi/src/entities/task"))).toBe(false);
   });
+
+  it("generates FastAPI test file alongside the model", async () => {
+    dest = join(tmpdir(), `projx-gen-fastapi-test-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastapi"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string,amount:number,due_date:date,active:boolean");
+
+    const testPath = join(dest, "fastapi/tests/test_invoice_entity.py");
+    expect(existsSync(testPath)).toBe(true);
+
+    const content = await readFile(testPath, "utf-8");
+    expect(content).toContain("from src.entities.invoice._model import Invoice");
+    expect(content).toContain("from tests.base_entity_api_test import BaseEntityApiTest");
+    expect(content).toContain("class TestInvoiceEntity(BaseEntityApiTest):");
+    expect(content).toContain("__test__ = True");
+    expect(content).toContain('endpoint = "/api/v1/invoices/"');
+    expect(content).toContain('"name": "sample text"');
+    expect(content).toContain('"amount": 42');
+    expect(content).toContain('"active": True');
+    expect(content).toContain('filter_field = "name"');
+    expect(content).toContain("def make_model(self, index: int, **overrides):");
+    expect(content).toContain("return Invoice(**data)");
+    expect(content).toContain("from datetime import date");
+    expect(content).toContain("date(2026, 1, 1)");
+  });
+
+  it("generates Fastify test file alongside the schemas and index", async () => {
+    dest = join(tmpdir(), `projx-gen-fastify-test-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string,amount:number,active:boolean");
+
+    const testPath = join(dest, "fastify/tests/modules/invoice.test.ts");
+    expect(existsSync(testPath)).toBe(true);
+
+    const content = await readFile(testPath, "utf-8");
+    expect(content).toContain("import { describeCrudEntity } from '../helpers/crud-test-base.js';");
+    expect(content).toContain("describeCrudEntity({");
+    expect(content).toContain("entityName: 'Invoice',");
+    expect(content).toContain("basePath: '/api/v1/invoices',");
+    expect(content).toContain("prismaModel: 'Invoice',");
+    expect(content).toContain("name: 'sample text',");
+    expect(content).toContain("amount: 42,");
+    expect(content).toContain("active: true,");
+    expect(content).toContain("updatePayload: {");
+    expect(content).toContain("name: 'updated text',");
+  });
+
+  it("does not overwrite an existing test file", async () => {
+    dest = join(tmpdir(), `projx-gen-test-skip-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string");
+    const firstContent = await readFile(
+      join(dest, "fastify/tests/modules/invoice.test.ts"),
+      "utf-8",
+    );
+
+    // Manually edit the test file
+    const testPath = join(dest, "fastify/tests/modules/invoice.test.ts");
+    await writeFile(testPath, "// custom test\n" + firstContent);
+
+    // Re-run gen with a different entity name (so the entity-skip kicks in only on the test side)
+    // Actually the model already exists so the whole thing skips. Let's verify manually:
+    // delete the schemas to force regeneration but keep the test file
+    await rm(join(dest, "fastify/src/modules/invoice"), { recursive: true });
+    await gen(dest, "invoice", "name:string,extra:number");
+
+    // Test file should be untouched (still starts with our custom marker)
+    const afterContent = await readFile(testPath, "utf-8");
+    expect(afterContent.startsWith("// custom test\n")).toBe(true);
+  });
 });
