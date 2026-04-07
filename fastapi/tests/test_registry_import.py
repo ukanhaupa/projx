@@ -1,4 +1,4 @@
-from src.entities.base._registry import EntityRegistry
+from src.entities.base import EntityRegistry
 
 
 class TestEntityImportEdgeCases:
@@ -14,7 +14,7 @@ class TestEntityImportEdgeCases:
         EntityRegistry._entities = saved
 
     def test_custom_controller_detected(self):
-        from src.entities.base._controller import BaseController
+        from src.entities.base import BaseController
 
         class FakeController(BaseController):
             def __init__(self):

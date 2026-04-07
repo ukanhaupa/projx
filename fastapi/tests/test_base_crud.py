@@ -3,9 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import Column, DateTime, Numeric, String
 
-from src.entities.base._model import BaseModel_, SoftDeleteMixin
-from src.entities.base._repository import BaseRepository
-from src.entities.base._service import BaseService
+from src.entities.base import BaseModel_, BaseRepository, BaseService, SoftDeleteMixin
 
 # ── Test-only models ────────────────────────────────────────────────
 

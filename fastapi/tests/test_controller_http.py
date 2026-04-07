@@ -7,10 +7,11 @@ from src.app import app
 from src.entities.base import (
     BaseRepository,
     BaseService,
+    BusinessRuleError,
+    NotFoundError,
     create_create_schema,
     create_update_schema,
 )
-from src.entities.base._model import BusinessRuleError, NotFoundError
 
 # Import to ensure model is registered with Base metadata
 from tests.test_base_crud import SoftWidget, Widget

@@ -145,14 +145,14 @@ class TestAuthnMiddlewareEdgeCases:
 
 class TestEntityRegistry:
     def test_auto_discover_finds_entities(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         entities = EntityRegistry.get_entities()
         assert len(entities) >= 1
         assert "audit_logs" in entities
 
     def test_entity_meta_has_fields(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         entities = EntityRegistry.get_entities()
         meta = entities["audit_logs"]
@@ -161,7 +161,7 @@ class TestEntityRegistry:
         assert len(meta.fields) > 0
 
     def test_reset_clears_entities(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         saved = dict(EntityRegistry._entities)
         EntityRegistry.reset()
@@ -170,7 +170,7 @@ class TestEntityRegistry:
         EntityRegistry._entities = saved
 
     def test_auto_discover_reimport(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         saved = dict(EntityRegistry._entities)
         EntityRegistry.reset()
@@ -180,7 +180,7 @@ class TestEntityRegistry:
 
     @pytest.mark.asyncio
     async def test_meta_endpoint_response_shape(self, client: AsyncClient, auth_headers_admin):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         result = await EntityRegistry._meta_endpoint()
         assert "entities" in result
@@ -196,7 +196,7 @@ class TestEntityRegistry:
 
 class TestRegistryValidation:
     def test_import_all_entity_modules(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         EntityRegistry._import_all_entity_modules()
         # Should have found AuditLog's custom model
@@ -206,8 +206,7 @@ class TestRegistryValidation:
         """Models with invalid __api_prefix__ are skipped."""
         from sqlalchemy import Column, String
 
-        from src.entities.base._model import BaseModel_
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import BaseModel_, EntityRegistry
 
         class BadPrefixModel(BaseModel_):
             __tablename__ = "bad_prefix_test"
@@ -224,8 +223,7 @@ class TestRegistryValidation:
         """Models with __soft_delete__=True but no deleted_at column are skipped."""
         from sqlalchemy import Column, String
 
-        from src.entities.base._model import BaseModel_
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import BaseModel_, EntityRegistry
 
         class BadSoftDeleteModel(BaseModel_):
             __tablename__ = "bad_soft_delete_test"
@@ -239,7 +237,7 @@ class TestRegistryValidation:
         EntityRegistry._entities = saved
 
     def test_build_readonly_controller(self):
-        from src.entities.base._registry import EntityRegistry
+        from src.entities.base import EntityRegistry
 
         meta = EntityRegistry._entities.get("audit_logs")
         if meta:
@@ -252,7 +250,7 @@ class TestRegistryValidation:
 class TestDatabaseConfig:
     @pytest.mark.asyncio
     async def test_async_session_yields_session(self, test_db):
-        from src.configs._database import DatabaseConfig
+        from src.configs import DatabaseConfig
 
         async with DatabaseConfig.async_session() as session:
             assert session is not None
@@ -266,7 +264,7 @@ class TestDatabaseConfig:
         monkeypatch.delenv("SQLALCHEMY_DATABASE_URI", raising=False)
         try:
             with pytest.raises(RuntimeError, match="SQLALCHEMY_DATABASE_URI"):
-                from src.configs._database import DatabaseConfig
+                from src.configs import DatabaseConfig
 
                 DatabaseConfig.get_engine()
         finally:

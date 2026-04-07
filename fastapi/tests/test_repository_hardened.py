@@ -3,8 +3,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy import Boolean, Column, Date, DateTime, Integer, Numeric, String
 
-from src.entities.base._model import BaseModel_, NotFoundError
-from src.entities.base._repository import BaseRepository
+from src.entities.base import BaseModel_, BaseRepository, NotFoundError
 
 from .test_base_crud import SoftWidget, Widget
 
@@ -334,7 +333,7 @@ class TestServiceGetByIds:
             (BaseRepository,),
             {"__init__": lambda self: BaseRepository.__init__(self, Widget)},
         )
-        from src.entities.base._service import BaseService
+        from src.entities.base import BaseService
 
         svc_cls = type(
             "WSvc",
@@ -354,7 +353,7 @@ class TestServiceGetByIds:
             (BaseRepository,),
             {"__init__": lambda self: BaseRepository.__init__(self, Widget)},
         )
-        from src.entities.base._service import BaseService
+        from src.entities.base import BaseService
 
         svc_cls = type(
             "WSvc2",

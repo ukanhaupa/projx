@@ -1,4 +1,4 @@
-from src.entities.audit_log._model import AuditLog
+from src.entities.audit_log import AuditLog
 from tests.base_entity_api_test import BaseEntityApiTest
 
 

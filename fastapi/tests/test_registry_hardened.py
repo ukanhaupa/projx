@@ -5,14 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app import app
 from src.entities.base import (
+    BaseModel_,
     BaseRepository,
     BaseService,
+    EntityRegistry,
     create_create_schema,
     create_update_schema,
 )
-from src.entities.base._model import BaseModel_
 from src.entities.base._registry import (
-    EntityRegistry,
     _AutoController,
     _ReadOnlyController,
 )
@@ -212,7 +212,7 @@ class TestReadOnlyControllerHttp:
 
     @pytest.mark.asyncio
     async def test_list_business_rule_error(self, http_client, auth_headers_admin, monkeypatch):
-        from src.entities.base._model import BusinessRuleError
+        from src.entities.base import BusinessRuleError
 
         async def _fail(*a, **kw):
             raise BusinessRuleError("limit exceeded")
@@ -252,7 +252,7 @@ class TestAutoControllerBulkOps:
 
     @pytest.mark.asyncio
     async def test_bulk_create_business_rule_error(self, http_client, auth_headers_admin, monkeypatch):
-        from src.entities.base._model import BusinessRuleError
+        from src.entities.base import BusinessRuleError
 
         async def _fail(items):
             raise BusinessRuleError("limit")

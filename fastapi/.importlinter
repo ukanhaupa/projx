@@ -1,0 +1,29 @@
+[importlinter]
+root_packages =
+    src
+    tests
+
+[importlinter:contract:no-private-cross-module]
+name = No reaching into private module files (must import from package)
+type = forbidden
+source_modules =
+    tests
+forbidden_modules =
+    src.entities.audit_log._model
+    src.entities.base._auto_schema
+    src.entities.base._controller
+    src.entities.base._expand
+    src.entities.base._model
+    src.entities.base._registry
+    src.entities.base._repository
+    src.entities.base._service
+    src.configs._auth
+    src.configs._database
+allow_indirect_imports = True
+ignore_imports =
+    tests.conftest -> src.configs._database
+    tests.test_app -> src.configs._database
+    tests.test_auth_config -> src.configs._auth
+    tests.test_app -> src.entities.base._registry
+    tests.test_controller_http -> src.entities.base._registry
+    tests.test_registry_hardened -> src.entities.base._registry

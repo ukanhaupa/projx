@@ -702,7 +702,7 @@ function generateFastapiTest(config: EntityConfig): string {
     lines.push("");
   }
 
-  lines.push(`from src.entities.${snake}._model import ${className}`);
+  lines.push(`from src.entities.${snake} import ${className}`);
   lines.push(`from tests.base_entity_api_test import BaseEntityApiTest`);
   lines.push("");
   lines.push("");
@@ -890,7 +890,9 @@ export async function gen(
     } else {
       await mkdir(entityDir, { recursive: true });
       await writeFile(join(entityDir, "_model.py"), generateFastAPIModel(config));
+      await writeFile(join(entityDir, "__init__.py"), "from ._model import *\n");
       generated.push(`${dir}/src/entities/${toSnake(config.name)}/_model.py`);
+      generated.push(`${dir}/src/entities/${toSnake(config.name)}/__init__.py`);
 
       const testsDir = join(cwd, dir, "tests");
       const testFile = join(testsDir, `test_${toSnake(config.name)}_entity.py`);

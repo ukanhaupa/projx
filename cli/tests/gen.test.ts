@@ -387,11 +387,19 @@ describe("gen entity", () => {
 
     await gen(dest, "invoice", "name:string,amount:number,due_date:date,active:boolean");
 
+    // __init__.py re-exports the model so the public import style works
+    const initPath = join(dest, "fastapi/src/entities/invoice/__init__.py");
+    expect(existsSync(initPath)).toBe(true);
+    const initContent = await readFile(initPath, "utf-8");
+    expect(initContent).toContain("from ._model import *");
+
     const testPath = join(dest, "fastapi/tests/test_invoice_entity.py");
     expect(existsSync(testPath)).toBe(true);
 
     const content = await readFile(testPath, "utf-8");
-    expect(content).toContain("from src.entities.invoice._model import Invoice");
+    // Public import — the convention requires importing from the package, not the private file
+    expect(content).toContain("from src.entities.invoice import Invoice");
+    expect(content).not.toContain("from src.entities.invoice._model import");
     expect(content).toContain("from tests.base_entity_api_test import BaseEntityApiTest");
     expect(content).toContain("class TestInvoiceEntity(BaseEntityApiTest):");
     expect(content).toContain("__test__ = True");

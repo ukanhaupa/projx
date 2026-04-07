@@ -80,6 +80,13 @@ jobs:
       - run: uv sync --group dev
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
+      - name: Enforce no private cross-module imports in src/
+        run: |
+          if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/; then
+            echo "❌ src/ files cannot import from another module's _-prefixed file. Import from the package."
+            exit 1
+          fi
+      - run: uv run lint-imports
 
   fastify:
     name: Fastify (format + lint + typecheck)
