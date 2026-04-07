@@ -5,19 +5,98 @@
 [![GitHub stars](https://img.shields.io/github/stars/ukanhaupa/projx)](https://github.com/ukanhaupa/projx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Production-grade project scaffolder. Pick your stack, get a fully wired project with auth, database, CI/CD, and E2E tests — ready to deploy.
-
-## The Problem
-
-Starting a new project means days of boilerplate: setting up auth, database migrations, CI/CD pipelines, Docker configs, linting, pre-commit hooks, test infrastructure. Every team does this from scratch, every time.
-
-## The Solution
+**Go from blank folder to production-ready project in 30 seconds.** Backend-only API, AI/ML app, mobile, full-stack, infra setup — pick what you need and get it wired with auth, database, Docker, CI/CD, hooks, and tests. All optional. All yours.
 
 ```bash
 npx create-projx my-app
 ```
 
-Pick the components you need. Get a production-ready project in seconds.
+No SDK lock-in. No runtime dependency on Projx. Just clean code in your repo that you own forever.
+
+---
+
+## You've done this a hundred times
+
+Every new project starts with the same week of plumbing:
+
+- Wire up auth (again).
+- Configure the database and migrations (again).
+- Write the Dockerfile and `docker-compose.yml` (again).
+- Set up CI, linting, formatting, pre-commit hooks (again).
+- Build the same login + CRUD scaffolding (again).
+- Realize at 11pm that something's broken and you don't remember why (again).
+
+You ship features two weeks late because the first two weeks were boilerplate.
+
+## Or your AI does it badly
+
+Ask an LLM to "scaffold a full-stack app" and you get 50 files of plausible-looking code that breaks on first run. Wrong import paths. Outdated package versions. Auth that doesn't actually authenticate. You end up debugging machine-generated boilerplate, which is worse than writing it yourself.
+
+## What if you just… didn't?
+
+```bash
+npx create-projx my-app       # interactive — pick exactly what you need
+cd my-app
+./setup.sh                    # installs everything you picked
+```
+
+Pick any combination of components — they're all optional:
+
+```bash
+# AI/ML backend only
+npx create-projx vision-api --components fastapi -y
+
+# Node API + React frontend
+npx create-projx saas --components fastify,frontend -y
+
+# Mobile app with backend
+npx create-projx field-app --components fastapi,mobile -y
+
+# Full-stack with infra and E2E
+npx create-projx prod-app --components fastify,frontend,e2e,infra -y
+
+# Just the infra
+npx create-projx platform --components infra -y
+```
+
+**30 seconds.** No matter what you pick, you get auth, Docker, CI/CD, hooks, and tests wired up for it.
+
+If this saves you even one hour, it's already paid for itself. (It's free.)
+
+## Why teams pick Projx and stay
+
+- **It actually runs.** Every template is tested in CI before release. No "looks right" surprises.
+- **Auto-entity pattern.** Define a data model, get CRUD routes, validation, OpenAPI docs, and a typed UI for free. Backend, frontend, and mobile all stay in sync.
+- **Updates don't nuke your code.** `projx update` does a 3-tier merge — your custom controllers, pages, and config survive template upgrades. No rewrites.
+- **No lock-in.** Projx generates files and walks away. Delete the `.projx` config and it's just a normal repo.
+- **Adopt incrementally.** Already have a project? `projx init` adds CI, hooks, and Docker without touching your code.
+- **Pick your package manager.** npm, pnpm, yarn, or bun. The choice propagates everywhere — scripts, Docker, CI, docs.
+- **AI-agent friendly.** Ships with [SKILL.md](SKILL.md) so Claude, Cursor, and other agents call Projx instead of hand-writing broken scaffolds.
+
+## What you get
+
+| Component  | Stack                       | What it gives you                                            |
+| ---------- | --------------------------- | ------------------------------------------------------------ |
+| `fastapi`  | Python, SQLAlchemy, Alembic | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs         |
+| `fastify`  | Node.js, Prisma, TypeBox    | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs      |
+| `frontend` | React 19, TypeScript, Vite  | Auto-entity UI from `/_meta`, design tokens, light/dark mode |
+| `mobile`   | Flutter, Riverpod, GoRouter | Auto-entity screens, offline-first with Isar, biometric auth |
+| `e2e`      | Playwright                  | Page object model, auth fixtures, accessibility scans        |
+| `infra`    | Terraform, AWS              | EKS, RDS, VPC, ALB, CodePipeline, multi-environment          |
+
+Plus, in every project: Docker Compose for dev + prod, GitHub Actions CI per component (path-filtered), pre-commit hooks, secret detection, VS Code settings, and 80% test coverage enforced.
+
+All optional. Pick any combination.
+
+## Built for humans and AI agents
+
+Projx is a shared operating system for teams that ship with both:
+
+- **Developers** get a readable layout, stable conventions, and safe updates.
+- **AI agents** get a deterministic CLI to call instead of guessing folder structures.
+- **Teams** get consistency across repos, less drift, and fewer surprise refactors.
+
+If you're an AI agent reading this, see [SKILL.md](SKILL.md) for trigger conditions, decision rules, and the canonical invocation. Short version:
 
 ## Quick Start
 
@@ -41,19 +120,6 @@ Projx supports **npm**, **pnpm**, **yarn**, and **bun**. During `create`, you're
 ```
 
 For `init`, the package manager is auto-detected from lockfiles (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb` → bun). Falls back to a prompt if no lockfile is found.
-
-## Components
-
-| Component | Stack | What You Get |
-| --------- | ----- | ------------ |
-| `fastapi` | Python, SQLAlchemy, Alembic | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs |
-| `fastify` | Node.js, Prisma, TypeBox | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs |
-| `frontend` | React 19, TypeScript, Vite | Auto-entity UI from metadata, design tokens, light/dark mode |
-| `mobile` | Flutter, Riverpod, GoRouter | Auto-entity screens, offline-first with Isar, biometric auth |
-| `e2e` | Playwright | Page object model, auth fixtures, accessibility scans |
-| `infra` | Terraform, AWS | EKS, RDS, VPC, ALB, CodePipeline, multi-environment |
-
-All optional. Pick any combination.
 
 ## Commands
 
@@ -207,12 +273,12 @@ When both `fastapi` and `fastify` exist, the entity generates in the **primary b
 
 Override with `--ai` (fastapi) or `--backend` (fastify).
 
-| Component | Generated |
-| --------- | --------- |
-| Primary backend (fastapi) | `src/entities/<name>/_model.py` — auto-discovered by registry |
+| Component                 | Generated                                                                   |
+| ------------------------- | --------------------------------------------------------------------------- |
+| Primary backend (fastapi) | `src/entities/<name>/_model.py` — auto-discovered by registry               |
 | Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + app.ts import |
-| `frontend` | `src/types/<name>.ts` — TypeScript interface + Create/Update variants |
-| `mobile` | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith |
+| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants       |
+| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith |
 
 No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 
@@ -232,8 +298,8 @@ The generic `api.ts` client accepts type parameters:
 ```tsx
 import type { Invoice } from '../types/invoice';
 
-const { data } = await api.list<Invoice>('/invoices');    // data: Invoice[]
-const item = await api.get<Invoice>('/invoices', id);     // item: Invoice
+const { data } = await api.list<Invoice>('/invoices'); // data: Invoice[]
+const item = await api.get<Invoice>('/invoices', id); // item: Invoice
 ```
 
 ## Rename Component Directories
@@ -278,17 +344,6 @@ The core idea: define a data model, get everything else for free.
 
 **Mobile** — Same metadata endpoint, generates list/detail/form screens. Offline-first with local DB and sync queue.
 
-## What's Included
-
-- JWT auth with Keycloak (pluggable providers)
-- Docker Compose for dev and prod
-- GitHub Actions CI per component (path-filtered — only runs when that component changes)
-- Pre-commit hooks (format + lint + typecheck)
-- Secret detection in pre-commit
-- VS Code settings + recommended extensions
-- 80% test coverage enforced
-- Auto-entity discovery across all stacks
-
 ## Development
 
 Contributing to Projx itself:
@@ -314,6 +369,20 @@ Add this to your project's README:
 ```md
 [![Built with Projx](https://img.shields.io/badge/Built%20with-Projx-blue)](https://github.com/ukanhaupa/projx)
 ```
+
+---
+
+## Try it now
+
+You're still reading. Stop reading. Run this:
+
+```bash
+npx create-projx my-app
+```
+
+Pick whatever you need from the menu — backend-only, AI app, mobile, full-stack, just infra. 30 seconds. Free. No signup. If you don't like it, `rm -rf my-app` and we never speak of this again.
+
+Star the repo if it saved you time → [github.com/ukanhaupa/projx](https://github.com/ukanhaupa/projx)
 
 ## License
 
