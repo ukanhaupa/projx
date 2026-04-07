@@ -55,6 +55,22 @@ export function detectPackageManager(cwd: string): PackageManager | null {
   return null;
 }
 
+export function detectPackageManagerFromComponents(
+  cwd: string,
+  componentPaths: Partial<Record<Component, string>>,
+): PackageManager | null {
+  const jsComponents: Component[] = ["fastify", "frontend", "e2e"];
+  for (const component of jsComponents) {
+    const dir = componentPaths[component];
+    if (!dir) continue;
+    const fullDir = join(cwd, dir);
+    if (!existsSync(fullDir)) continue;
+    const detected = detectPackageManager(fullDir);
+    if (detected) return detected;
+  }
+  return detectPackageManager(cwd);
+}
+
 export interface Options {
   name: string;
   components: Component[];
@@ -282,100 +298,112 @@ export async function readFileOrNull(path: string): Promise<string | null> {
 
 export type ComponentPaths = Record<Component, string>;
 
-export type ComponentOrigin = "scaffold" | "init";
-
 export interface ComponentMarkerData {
-  components: string[];
-  origin?: ComponentOrigin;
-  skip?: string[];
+  component: Component;
+  skip: string[];
 }
 
-export async function readComponentMarker(dir: string): Promise<ComponentMarkerData | null> {
-  const raw = await readFileOrNull(join(dir, COMPONENT_MARKER));
-  if (!raw) return null;
+function parseMarker(raw: string): ComponentMarkerData | null {
   try {
     const data = JSON.parse(raw);
+    let component: Component | undefined;
+    if (typeof data.component === "string" && COMPONENTS.includes(data.component as Component)) {
+      component = data.component as Component;
+    } else if (Array.isArray(data.components) && data.components.length > 0) {
+      const first = data.components[0];
+      if (typeof first === "string" && COMPONENTS.includes(first as Component)) {
+        component = first as Component;
+      }
+    }
+    if (!component) return null;
     return {
-      components: data.components ?? (data.component ? [data.component] : []),
-      origin: data.origin,
-      skip: data.skip,
+      component,
+      skip: Array.isArray(data.skip) ? data.skip : [],
     };
   } catch {
     return null;
   }
 }
 
+export async function readComponentMarker(dir: string): Promise<ComponentMarkerData | null> {
+  const raw = await readFileOrNull(join(dir, COMPONENT_MARKER));
+  if (!raw) return null;
+  return parseMarker(raw);
+}
+
 export async function writeComponentMarker(
   dir: string,
-  component: Component,
-  origin: ComponentOrigin = "scaffold",
-  skip?: string[],
+  data: ComponentMarkerData,
 ): Promise<void> {
   const markerPath = join(dir, COMPONENT_MARKER);
-  let components: string[] = [component];
-  let existingOrigin: ComponentOrigin = origin;
-  let existingSkip: string[] | undefined = skip;
-
-  const existing = await readFileOrNull(markerPath);
-  if (existing) {
-    try {
-      const data = JSON.parse(existing);
-      const prev: string[] = data.components ?? (data.component ? [data.component] : []);
-      existingOrigin = origin ?? data.origin ?? "scaffold";
-      existingSkip = skip ?? data.skip;
-      if (!prev.includes(component)) {
-        components = [...prev, component];
-      } else {
-        components = prev;
-      }
-    } catch {
-      // overwrite invalid marker
-    }
-  }
-
-  const marker: ComponentMarkerData = { components, origin: existingOrigin };
-  if (existingSkip && existingSkip.length > 0) marker.skip = existingSkip;
-
-  await writeFile(markerPath, JSON.stringify(marker, null, 2) + "\n");
+  const out: ComponentMarkerData = {
+    component: data.component,
+    skip: Array.isArray(data.skip) ? data.skip : [],
+  };
+  await writeFile(markerPath, JSON.stringify(out, null, 2) + "\n");
 }
+
+export async function upsertComponentMarker(
+  dir: string,
+  component: Component,
+  skip?: string[],
+): Promise<void> {
+  const existing = await readComponentMarker(dir);
+  await writeComponentMarker(dir, {
+    component,
+    skip: skip ?? existing?.skip ?? [],
+  });
+}
+
+export async function readProjxConfig(cwd: string): Promise<Record<string, unknown>> {
+  const path = join(cwd, ".projx");
+  if (!existsSync(path)) return {};
+  try {
+    return JSON.parse(await readFile(path, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+export async function writeProjxConfig(
+  cwd: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const path = join(cwd, ".projx");
+  const today = new Date().toISOString().split("T")[0];
+  const out: Record<string, unknown> = { ...data };
+  if (typeof out.createdAt !== "string") out.createdAt = today;
+  if (!Array.isArray(out.skip)) out.skip = [];
+  await writeFile(path, JSON.stringify(out, null, 2) + "\n");
+}
+
+export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
+  "docker-compose.yml",
+  "docker-compose.dev.yml",
+  "README.md",
+  ".githooks/pre-commit",
+  ".github/workflows/ci.yml",
+  "setup.sh",
+];
+
+export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<Record<Component, string[]>> = {
+  fastapi: ["pyproject.toml"],
+  fastify: ["package.json"],
+  frontend: ["package.json"],
+  e2e: ["package.json"],
+  mobile: ["pubspec.yaml"],
+};
+
 
 export async function discoverComponentPaths(
   cwd: string,
   components: Component[],
 ): Promise<ComponentPaths> {
-  const paths: Partial<ComponentPaths> = {};
-
-  const scan = async (dir: string): Promise<void> => {
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (EXCLUDE.has(entry.name)) continue;
-      if (entry.name.startsWith(".")) continue;
-
-      const full = join(dir, entry.name);
-      const marker = join(full, COMPONENT_MARKER);
-      if (existsSync(marker)) {
-        try {
-          const data = JSON.parse(await readFile(marker, "utf-8"));
-          const markerComponents: string[] = data.components ?? (data.component ? [data.component] : []);
-          for (const mc of markerComponents) {
-            if (components.includes(mc as Component)) {
-              paths[mc as Component] = entry.name;
-            }
-          }
-        } catch {
-          // invalid marker, skip
-        }
-      }
-    }
-  };
-
-  await scan(cwd);
-
+  const { paths: discovered } = await discoverComponentsFromMarkers(cwd);
+  const paths: Partial<ComponentPaths> = { ...discovered };
   for (const c of components) {
     if (!paths[c]) paths[c] = c;
   }
-
   return paths as ComponentPaths;
 }
 
@@ -385,27 +413,19 @@ export async function discoverComponentsFromMarkers(
   const components: Component[] = [];
   const paths: Partial<ComponentPaths> = {};
 
+  if (!existsSync(cwd)) return { components, paths: paths as ComponentPaths };
+
   const entries = await readdir(cwd, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (EXCLUDE.has(entry.name)) continue;
     if (entry.name.startsWith(".")) continue;
 
-    const full = join(cwd, entry.name);
-    const marker = join(full, COMPONENT_MARKER);
-    if (existsSync(marker)) {
-      try {
-        const data = JSON.parse(await readFile(marker, "utf-8"));
-        const markerComponents: string[] = data.components ?? (data.component ? [data.component] : []);
-        for (const mc of markerComponents) {
-          if (COMPONENTS.includes(mc as Component) && !components.includes(mc as Component)) {
-            components.push(mc as Component);
-            paths[mc as Component] = entry.name;
-          }
-        }
-      } catch {
-        // invalid marker
-      }
+    const marker = await readComponentMarker(join(cwd, entry.name));
+    if (!marker) continue;
+    if (!components.includes(marker.component)) {
+      components.push(marker.component);
+      paths[marker.component] = entry.name;
     }
   }
 

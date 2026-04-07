@@ -1,21 +1,17 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
   COMPONENT_MARKER,
   type Component,
+  type ComponentMarkerData,
   type ComponentPaths,
   discoverComponentsFromMarkers,
   readComponentMarker,
+  readProjxConfig,
+  writeComponentMarker,
+  writeProjxConfig,
 } from "./utils.js";
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-  createdAt: string;
-  skip?: string[];
-}
 
 function classifyPattern(
   pattern: string,
@@ -45,13 +41,12 @@ export async function pin(
 ): Promise<void> {
   p.intro("projx pin");
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
 
-  const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
+  const config = await readProjxConfig(cwd);
   const componentPaths = (await discoverComponentsFromMarkers(cwd)).paths;
 
   const rootAdds: string[] = [];
@@ -73,35 +68,30 @@ export async function pin(
     }
   }
 
-  // Write component skips
   for (const [component, additions] of Object.entries(componentAdds)) {
     const dir = componentPaths[component as Component];
-    const markerPath = join(cwd, dir, COMPONENT_MARKER);
-    try {
-      const data = JSON.parse(await readFile(markerPath, "utf-8"));
-      const existing: string[] = data.skip ?? [];
-      const merged = [...new Set([...existing, ...additions])];
-      const added = merged.length - existing.length;
-      if (added > 0) {
-        data.skip = merged;
-        await writeFile(markerPath, JSON.stringify(data, null, 2) + "\n");
-        p.log.success(`${component}: pinned ${additions.join(", ")}`);
-      } else {
-        p.log.info(`${component}: already pinned.`);
-      }
-    } catch {
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (!marker) {
       p.log.error(`Could not read marker for ${component}.`);
+      continue;
+    }
+    const merged = [...new Set([...marker.skip, ...additions])];
+    const added = merged.length - marker.skip.length;
+    if (added > 0) {
+      const next: ComponentMarkerData = { ...marker, skip: merged };
+      await writeComponentMarker(join(cwd, dir), next);
+      p.log.success(`${component}: pinned ${additions.join(", ")}`);
+    } else {
+      p.log.info(`${component}: already pinned.`);
     }
   }
 
-  // Write root skips
   if (rootAdds.length > 0) {
-    const existing: string[] = config.skip ?? [];
+    const existing: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
     const merged = [...new Set([...existing, ...rootAdds])];
     const added = merged.length - existing.length;
     if (added > 0) {
-      config.skip = merged;
-      await writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
+      await writeProjxConfig(cwd, { ...config, skip: merged });
       p.log.success(`root: pinned ${rootAdds.join(", ")}`);
     } else {
       p.log.info("root: already pinned.");
@@ -117,13 +107,12 @@ export async function unpin(
 ): Promise<void> {
   p.intro("projx unpin");
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
 
-  const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
+  const config = await readProjxConfig(cwd);
   const componentPaths = (await discoverComponentsFromMarkers(cwd)).paths;
 
   const rootRemoves: string[] = [];
@@ -141,39 +130,28 @@ export async function unpin(
 
   for (const [component, removals] of Object.entries(componentRemoves)) {
     const dir = componentPaths[component as Component];
-    const markerPath = join(cwd, dir, COMPONENT_MARKER);
-    try {
-      const data = JSON.parse(await readFile(markerPath, "utf-8"));
-      const existing: string[] = data.skip ?? [];
-      const filtered = existing.filter((s) => !removals.includes(s));
-      const removed = existing.length - filtered.length;
-      if (removed > 0) {
-        if (filtered.length > 0) {
-          data.skip = filtered;
-        } else {
-          delete data.skip;
-        }
-        await writeFile(markerPath, JSON.stringify(data, null, 2) + "\n");
-        p.log.success(`${component}: unpinned ${removals.join(", ")}`);
-      } else {
-        p.log.info(`${component}: not found in skip list.`);
-      }
-    } catch {
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (!marker) {
       p.log.error(`Could not read marker for ${component}.`);
+      continue;
+    }
+    const filtered = marker.skip.filter((s) => !removals.includes(s));
+    const removed = marker.skip.length - filtered.length;
+    if (removed > 0) {
+      const next: ComponentMarkerData = { ...marker, skip: filtered };
+      await writeComponentMarker(join(cwd, dir), next);
+      p.log.success(`${component}: unpinned ${removals.join(", ")}`);
+    } else {
+      p.log.info(`${component}: not found in skip list.`);
     }
   }
 
   if (rootRemoves.length > 0) {
-    const existing: string[] = config.skip ?? [];
+    const existing: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
     const filtered = existing.filter((s) => !rootRemoves.includes(s));
     const removed = existing.length - filtered.length;
     if (removed > 0) {
-      if (filtered.length > 0) {
-        config.skip = filtered;
-      } else {
-        delete config.skip;
-      }
-      await writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
+      await writeProjxConfig(cwd, { ...config, skip: filtered });
       p.log.success(`root: unpinned ${rootRemoves.join(", ")}`);
     } else {
       p.log.info("root: not found in skip list.");
@@ -186,22 +164,21 @@ export async function unpin(
 export async function listPins(cwd: string): Promise<void> {
   p.intro("projx pin --list");
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
 
-  const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
+  const config = await readProjxConfig(cwd);
   const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
   let hasAny = false;
 
-  // Root skips
-  if (config.skip && config.skip.length > 0) {
+  const rootSkip: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+  if (rootSkip.length > 0) {
     hasAny = true;
     p.log.info("root:");
-    for (const s of config.skip) {
+    for (const s of rootSkip) {
       p.log.info(`  ${s}`);
     }
   }

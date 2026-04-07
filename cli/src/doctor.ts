@@ -1,15 +1,15 @@
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
-  COMPONENTS,
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
   discoverComponentsFromMarkers,
   readComponentMarker,
+  readProjxConfig,
 } from "./utils.js";
 import { BASELINE_REF, matchesSkip, saveBaselineRef } from "./baseline.js";
 
@@ -21,14 +21,10 @@ interface CheckResult {
   autoFixable?: boolean;
 }
 
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-  createdAt: string;
-  skip?: string[];
-}
-
-async function checkConfig(cwd: string): Promise<{ results: CheckResult[]; config?: ProjxConfig }> {
+async function checkConfig(cwd: string): Promise<{
+  results: CheckResult[];
+  rootConfig?: Record<string, unknown>;
+}> {
   const results: CheckResult[] = [];
   const configPath = join(cwd, ".projx");
 
@@ -42,51 +38,49 @@ async function checkConfig(cwd: string): Promise<{ results: CheckResult[]; confi
     return { results };
   }
 
-  let config: ProjxConfig;
-  try {
-    config = JSON.parse(await readFile(configPath, "utf-8"));
-  } catch {
+  const rootConfig = await readProjxConfig(cwd);
+  if (Object.keys(rootConfig).length === 0) {
     results.push({
       name: ".projx valid JSON",
       status: "fail",
-      message: ".projx contains invalid JSON.",
+      message: ".projx contains invalid JSON or is empty.",
     });
     return { results };
   }
 
-  results.push({ name: ".projx exists", status: "pass", message: `v${config.version}` });
+  results.push({ name: ".projx exists", status: "pass", message: `v${rootConfig.version ?? "unknown"}` });
 
-  if (!config.version || !config.components || !Array.isArray(config.components)) {
+  if (!rootConfig.version) {
     results.push({
       name: ".projx fields",
-      status: "fail",
-      message: "Missing required fields (version, components).",
-    });
-    return { results };
-  }
-
-  const invalid = config.components.filter((c) => !COMPONENTS.includes(c));
-  if (invalid.length > 0) {
-    results.push({
-      name: "component names",
       status: "warn",
-      message: `Unknown components: ${invalid.join(", ")}`,
+      message: "Missing version field.",
     });
-  } else {
-    results.push({ name: "component names", status: "pass", message: `${config.components.length} valid` });
   }
 
-  return { results, config };
+  return { results, rootConfig };
 }
 
 async function checkComponents(
   cwd: string,
-  config: ProjxConfig,
+  components: Component[],
   componentPaths: ComponentPaths,
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
-  for (const component of config.components) {
+  if (components.length === 0) {
+    results.push({
+      name: "components",
+      status: "fail",
+      message: `No ${COMPONENT_MARKER} files found in any directory.`,
+      fix: "Run 'npx create-projx init' to detect and mark components.",
+    });
+    return results;
+  }
+
+  results.push({ name: "components", status: "pass", message: `${components.length} discovered from markers` });
+
+  for (const component of components) {
     const dir = componentPaths[component];
     const fullDir = join(cwd, dir);
 
@@ -110,37 +104,8 @@ async function checkComponents(
       continue;
     }
 
-    if (!marker.components.includes(component)) {
-      results.push({
-        name: `${component} marker`,
-        status: "warn",
-        message: `Marker in ${dir}/ does not list "${component}".`,
-      });
-    } else {
-      const label = dir !== component ? `${dir}/ (${component})` : `${component}/`;
-      results.push({ name: `${component} marker`, status: "pass", message: label });
-    }
-  }
-
-  // Check for orphan markers
-  try {
-    const entries = await readdir(cwd, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const markerPath = join(cwd, entry.name, COMPONENT_MARKER);
-      if (!existsSync(markerPath)) continue;
-
-      const isKnown = Object.values(componentPaths).includes(entry.name);
-      if (!isKnown) {
-        results.push({
-          name: `orphan marker`,
-          status: "warn",
-          message: `${entry.name}/ has a ${COMPONENT_MARKER} but is not in .projx components.`,
-        });
-      }
-    }
-  } catch {
-    // non-critical
+    const label = dir !== component ? `${dir}/ (${component})` : `${component}/`;
+    results.push({ name: `${component} marker`, status: "pass", message: label });
   }
 
   return results;
@@ -227,27 +192,25 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
 
 async function checkSkipPatterns(
   cwd: string,
-  config: ProjxConfig,
+  rootConfig: Record<string, unknown>,
+  components: Component[],
   componentPaths: ComponentPaths,
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
-  // Root skip patterns
-  if (config.skip && config.skip.length > 0) {
-    for (const pattern of config.skip) {
-      const matches = await patternMatchesAnything(cwd, pattern);
-      if (!matches) {
-        results.push({
-          name: "root skip",
-          status: "warn",
-          message: `"${pattern}" matches no files — stale?`,
-        });
-      }
+  const rootSkip: string[] = Array.isArray(rootConfig.skip) ? (rootConfig.skip as string[]) : [];
+  for (const pattern of rootSkip) {
+    const matches = await patternMatchesAnything(cwd, pattern);
+    if (!matches) {
+      results.push({
+        name: "root skip",
+        status: "warn",
+        message: `"${pattern}" matches no files — stale?`,
+      });
     }
   }
 
-  // Component skip patterns
-  for (const component of config.components) {
+  for (const component of components) {
     const dir = componentPaths[component];
     const marker = await readComponentMarker(join(cwd, dir));
     if (marker?.skip && marker.skip.length > 0) {
@@ -264,7 +227,7 @@ async function checkSkipPatterns(
     }
   }
 
-  if (results.length === 0 && (config.skip?.length || config.components.some(() => true))) {
+  if (results.length === 0 && (rootSkip.length > 0 || components.length > 0)) {
     results.push({ name: "skip patterns", status: "pass", message: "All patterns match files." });
   }
 
@@ -303,25 +266,20 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
 
   const allResults: CheckResult[] = [];
 
-  // Config checks
-  const { results: configResults, config } = await checkConfig(cwd);
+  const { results: configResults, rootConfig } = await checkConfig(cwd);
   allResults.push(...configResults);
 
-  if (!config) {
+  if (!rootConfig) {
     printReport(allResults);
     process.exit(1);
   }
 
-  // Component checks
-  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
-  const resolvedConfig = { ...config, components: discovered.length > 0 ? discovered : config.components };
-  allResults.push(...await checkComponents(cwd, resolvedConfig, componentPaths));
+  const { components, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  allResults.push(...await checkComponents(cwd, components, componentPaths));
 
-  // Git checks
   allResults.push(...checkGit(cwd, fix));
 
-  // Skip pattern checks
-  allResults.push(...await checkSkipPatterns(cwd, resolvedConfig, componentPaths));
+  allResults.push(...await checkSkipPatterns(cwd, rootConfig, components, componentPaths));
 
   printReport(allResults);
 

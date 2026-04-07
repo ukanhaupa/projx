@@ -7,22 +7,22 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 | Layer | Technology |
 | ----- | ---------- |
 <% if (components.includes('fastapi')) { %>
-| **Backend (Python)** | FastAPI, SQLAlchemy, Alembic, uvicorn |
+| **<%= paths.fastapi %>/** | FastAPI, SQLAlchemy, Alembic, uvicorn |
 <% } %>
 <% if (components.includes('fastify')) { %>
-| **Backend (Node)** | Fastify, Prisma, TypeBox, TypeScript |
+| **<%= paths.fastify %>/** | Fastify, Prisma, TypeBox, TypeScript |
 <% } %>
 <% if (components.includes('frontend')) { %>
-| **Frontend** | React 19, TypeScript, Vite, React Router |
+| **<%= paths.frontend %>/** | React 19, TypeScript, Vite, React Router |
 <% } %>
 <% if (components.includes('mobile')) { %>
-| **Mobile** | Flutter, Dart, Riverpod, GoRouter, Isar |
+| **<%= paths.mobile %>/** | Flutter, Dart, Riverpod, GoRouter, Isar |
 <% } %>
 <% if (components.includes('e2e')) { %>
-| **E2E Tests** | Playwright |
+| **<%= paths.e2e %>/** | Playwright |
 <% } %>
 <% if (components.includes('infra')) { %>
-| **Infrastructure** | Terraform, AWS (EKS, RDS, VPC, CodePipeline) |
+| **<%= paths.infra %>/** | Terraform, AWS (EKS, RDS, VPC, CodePipeline) |
 <% } %>
 | **Identity** | Keycloak (OIDC / JWT) |
 | **Containers** | Docker, Docker Compose |
@@ -35,7 +35,7 @@ docker compose -f docker-compose.dev.yml up  # Start with Docker (dev mode)
 ```
 <% if (components.includes('fastapi')) { %>
 
-### FastAPI
+### <%= paths.fastapi %>/
 
 ```bash
 cd <%= paths.fastapi %> && cp .env.example .env && uv sync && uv run main.py
@@ -45,7 +45,7 @@ API docs at `http://localhost:7860/docs`.
 <% } %>
 <% if (components.includes('fastify')) { %>
 
-### Fastify
+### <%= paths.fastify %>/
 
 ```bash
 cd <%= paths.fastify %> && cp .env.example .env && <%= pm.install %> && <%= pm.exec %> prisma migrate dev && <%= pm.run %> dev
@@ -55,7 +55,7 @@ API docs at `http://localhost:3000/docs`.
 <% } %>
 <% if (components.includes('frontend')) { %>
 
-### Frontend
+### <%= paths.frontend %>/
 
 ```bash
 cd <%= paths.frontend %> && cp .env.example .env && <%= pm.install %> && <%= pm.run %> dev
@@ -63,7 +63,7 @@ cd <%= paths.frontend %> && cp .env.example .env && <%= pm.install %> && <%= pm.
 <% } %>
 <% if (components.includes('mobile')) { %>
 
-### Mobile
+### <%= paths.mobile %>/
 
 ```bash
 cd <%= paths.mobile %> && cp .env.example .env && flutter pub get && flutter run

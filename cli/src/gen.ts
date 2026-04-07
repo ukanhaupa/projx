@@ -6,9 +6,11 @@ import {
   type PackageManager,
   discoverComponentsFromMarkers,
   pmCommands,
+  readProjxConfig,
   toKebab,
   toSnake,
   toTitle,
+  writeProjxConfig,
 } from "./utils.js";
 
 const FIELD_TYPES = ["string", "number", "boolean", "date", "datetime", "text", "json"] as const;
@@ -783,20 +785,11 @@ async function resolvePrimaryBackend(
   if (hasFastapi && !hasFastify) return "fastapi";
   if (hasFastify && !hasFastapi) return "fastify";
 
-  // Both exist — check .projx for saved preference
-  const configPath = join(cwd, ".projx");
-  if (existsSync(configPath)) {
-    try {
-      const data = JSON.parse(await readFile(configPath, "utf-8"));
-      if (data.primaryBackend === "fastapi" || data.primaryBackend === "fastify") {
-        return data.primaryBackend;
-      }
-    } catch {
-      // continue to prompt
-    }
+  const config = await readProjxConfig(cwd);
+  if (config.primaryBackend === "fastapi" || config.primaryBackend === "fastify") {
+    return config.primaryBackend;
   }
 
-  // Prompt user
   if (!process.stdin.isTTY) return "fastify";
 
   const choice = (await p.select({
@@ -810,15 +803,8 @@ async function resolvePrimaryBackend(
 
   if (p.isCancel(choice)) process.exit(0);
 
-  // Save to .projx
-  try {
-    const data = JSON.parse(await readFile(configPath, "utf-8"));
-    data.primaryBackend = choice;
-    await writeFile(configPath, JSON.stringify(data, null, 2) + "\n");
-    p.log.success(`Saved primaryBackend: ${choice} to .projx`);
-  } catch {
-    // non-critical
-  }
+  await writeProjxConfig(cwd, { ...config, primaryBackend: choice });
+  p.log.success(`Saved primaryBackend: ${choice} to .projx`);
 
   return choice as BackendTarget;
 }
@@ -831,14 +817,13 @@ export async function gen(
 ): Promise<void> {
   p.intro(`projx gen entity ${entityName}`);
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
 
-  const projxData = JSON.parse(await readFile(configPath, "utf-8"));
-  const pmName: PackageManager = projxData.packageManager ?? "npm";
+  const projxData = await readProjxConfig(cwd);
+  const pmName: PackageManager = (projxData.packageManager as PackageManager) ?? "npm";
   const pm = pmCommands(pmName);
 
   const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);

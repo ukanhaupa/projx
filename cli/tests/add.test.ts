@@ -29,7 +29,7 @@ describe("add", () => {
     expect(existsSync(join(dest, "frontend/.projx-component"))).toBe(true);
   });
 
-  it("updates .projx config with new component", async () => {
+  it("registers new component via .projx-component marker", async () => {
     dest = join(tmpdir(), `projx-add-${Date.now()}`);
     await scaffold(
       { name: "my-app", components: ["fastify"], git: true, install: false },
@@ -39,9 +39,15 @@ describe("add", () => {
 
     await add(dest, ["e2e"], REPO_DIR, true);
 
-    const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
-    expect(config.components).toContain("fastify");
-    expect(config.components).toContain("e2e");
+    const fastifyMarker = JSON.parse(
+      await readFile(join(dest, "fastify/.projx-component"), "utf-8"),
+    );
+    expect(fastifyMarker.component).toBe("fastify");
+
+    const e2eMarker = JSON.parse(
+      await readFile(join(dest, "e2e/.projx-component"), "utf-8"),
+    );
+    expect(e2eMarker.component).toBe("e2e");
   });
 
   it("regenerates shared files with all components", async () => {

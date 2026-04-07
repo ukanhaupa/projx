@@ -8,7 +8,7 @@ import {
   toTitle,
   render,
   readFileOrNull,
-  writeComponentMarker,
+  upsertComponentMarker,
   discoverComponentPaths,
   replaceInFile,
   replaceInDir,
@@ -149,7 +149,7 @@ describe("readFileOrNull", () => {
   });
 });
 
-describe("writeComponentMarker", () => {
+describe("upsertComponentMarker", () => {
   let tmp: string;
 
   beforeEach(async () => {
@@ -161,31 +161,268 @@ describe("writeComponentMarker", () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  it("writes marker file with component and origin", async () => {
-    await writeComponentMarker(tmp, "fastapi");
+  it("writes marker file with singular component", async () => {
+    await upsertComponentMarker(tmp, "fastapi");
     const content = JSON.parse(await readFile(join(tmp, COMPONENT_MARKER), "utf-8"));
-    expect(content.components).toEqual(["fastapi"]);
-    expect(content.origin).toBe("scaffold");
+    expect(content.component).toBe("fastapi");
+    expect(content.skip).toEqual([]);
+    expect(content.origin).toBeUndefined();
+    expect(content.components).toBeUndefined();
   });
 
-  it("writes init origin", async () => {
-    await writeComponentMarker(tmp, "fastapi", "init");
+  it("preserves skip patterns when re-upserting same component", async () => {
+    await upsertComponentMarker(tmp, "fastapi", ["src/**"]);
+    await upsertComponentMarker(tmp, "fastapi");
     const content = JSON.parse(await readFile(join(tmp, COMPONENT_MARKER), "utf-8"));
-    expect(content.origin).toBe("init");
+    expect(content.component).toBe("fastapi");
+    expect(content.skip).toEqual(["src/**"]);
   });
 
-  it("appends component to existing marker", async () => {
-    await writeComponentMarker(tmp, "frontend");
-    await writeComponentMarker(tmp, "e2e");
+  it("overwrites with new component when called with different name", async () => {
+    await upsertComponentMarker(tmp, "frontend");
+    await upsertComponentMarker(tmp, "e2e");
     const content = JSON.parse(await readFile(join(tmp, COMPONENT_MARKER), "utf-8"));
-    expect(content.components).toEqual(["frontend", "e2e"]);
+    expect(content.component).toBe("e2e");
+  });
+});
+
+describe("readComponentMarker — schema migration", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = join(tmpdir(), `projx-mig-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
   });
 
-  it("does not duplicate existing component", async () => {
-    await writeComponentMarker(tmp, "fastapi");
-    await writeComponentMarker(tmp, "fastapi");
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("reads old format with components plural and origin", async () => {
+    const { readComponentMarker } = await import("../src/utils.js");
+    await writeFile(join(tmp, ".projx-component"), JSON.stringify({
+      components: ["fastapi"],
+      origin: "scaffold",
+      skip: ["src/**"],
+    }));
+    const marker = await readComponentMarker(tmp);
+    expect(marker).not.toBeNull();
+    expect(marker!.component).toBe("fastapi");
+    expect(marker!.skip).toEqual(["src/**"]);
+  });
+
+  it("reads even older format with singular component field", async () => {
+    const { readComponentMarker } = await import("../src/utils.js");
+    await writeFile(join(tmp, ".projx-component"), JSON.stringify({
+      component: "fastify",
+      origin: "init",
+    }));
+    const marker = await readComponentMarker(tmp);
+    expect(marker!.component).toBe("fastify");
+    expect(marker!.skip).toEqual([]);
+  });
+
+  it("upsert migrates old format on next write", async () => {
+    await writeFile(join(tmp, ".projx-component"), JSON.stringify({
+      components: ["frontend"],
+      origin: "scaffold",
+      skip: ["dist/**"],
+    }));
+    await upsertComponentMarker(tmp, "frontend");
     const content = JSON.parse(await readFile(join(tmp, COMPONENT_MARKER), "utf-8"));
-    expect(content.components).toEqual(["fastapi"]);
+    expect(content.component).toBe("frontend");
+    expect(content.skip).toEqual(["dist/**"]);
+    expect(content.components).toBeUndefined();
+    expect(content.origin).toBeUndefined();
+  });
+
+  it("returns null for invalid component name", async () => {
+    const { readComponentMarker } = await import("../src/utils.js");
+    await writeFile(join(tmp, ".projx-component"), JSON.stringify({
+      component: "not-a-real-component",
+    }));
+    const marker = await readComponentMarker(tmp);
+    expect(marker).toBeNull();
+  });
+
+  it("returns null for malformed JSON", async () => {
+    const { readComponentMarker } = await import("../src/utils.js");
+    await writeFile(join(tmp, ".projx-component"), "{not json");
+    const marker = await readComponentMarker(tmp);
+    expect(marker).toBeNull();
+  });
+});
+
+describe("writeProjxConfig — schema migration", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = join(tmpdir(), `projx-cfg-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("preserves arbitrary user fields via spread", async () => {
+    const { readProjxConfig, writeProjxConfig } = await import("../src/utils.js");
+    await writeFile(join(tmp, ".projx"), JSON.stringify({
+      version: "1.4.0",
+      createdAt: "2026-01-01",
+      packageManager: "pnpm",
+      customField: "user-value",
+      primaryBackend: "fastify",
+    }));
+    const existing = await readProjxConfig(tmp);
+    await writeProjxConfig(tmp, { ...existing, version: "1.5.0" });
+    const next = JSON.parse(await readFile(join(tmp, ".projx"), "utf-8"));
+    expect(next.version).toBe("1.5.0");
+    expect(next.customField).toBe("user-value");
+    expect(next.primaryBackend).toBe("fastify");
+    expect(next.packageManager).toBe("pnpm");
+    expect(next.createdAt).toBe("2026-01-01");
+  });
+
+  it("adds skip [] default when missing", async () => {
+    const { writeProjxConfig } = await import("../src/utils.js");
+    await writeProjxConfig(tmp, { version: "1.5.0" });
+    const written = JSON.parse(await readFile(join(tmp, ".projx"), "utf-8"));
+    expect(written.skip).toEqual([]);
+  });
+
+  it("preserves existing skip array", async () => {
+    const { writeProjxConfig } = await import("../src/utils.js");
+    await writeProjxConfig(tmp, { version: "1.5.0", skip: ["README.md"] });
+    const written = JSON.parse(await readFile(join(tmp, ".projx"), "utf-8"));
+    expect(written.skip).toEqual(["README.md"]);
+  });
+
+  it("auto-fills createdAt when missing", async () => {
+    const { writeProjxConfig } = await import("../src/utils.js");
+    await writeProjxConfig(tmp, { version: "1.5.0" });
+    const written = JSON.parse(await readFile(join(tmp, ".projx"), "utf-8"));
+    expect(written.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("detectPackageManagerFromComponents", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = join(tmpdir(), `projx-pm-detect-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("detects pnpm from fastify dir lockfile", async () => {
+    const { detectPackageManagerFromComponents } = await import("../src/utils.js");
+    await mkdir(join(tmp, "backend"));
+    await writeFile(join(tmp, "backend/pnpm-lock.yaml"), "");
+    const pm = detectPackageManagerFromComponents(tmp, { fastify: "backend" });
+    expect(pm).toBe("pnpm");
+  });
+
+  it("detects npm from frontend dir lockfile", async () => {
+    const { detectPackageManagerFromComponents } = await import("../src/utils.js");
+    await mkdir(join(tmp, "web"));
+    await writeFile(join(tmp, "web/package-lock.json"), "{}");
+    const pm = detectPackageManagerFromComponents(tmp, { frontend: "web" });
+    expect(pm).toBe("npm");
+  });
+
+  it("falls back to project root lockfile when component dir has none", async () => {
+    const { detectPackageManagerFromComponents } = await import("../src/utils.js");
+    await writeFile(join(tmp, "yarn.lock"), "");
+    const pm = detectPackageManagerFromComponents(tmp, {});
+    expect(pm).toBe("yarn");
+  });
+
+  it("returns null when no lockfile anywhere", async () => {
+    const { detectPackageManagerFromComponents } = await import("../src/utils.js");
+    const pm = detectPackageManagerFromComponents(tmp, {});
+    expect(pm).toBeNull();
+  });
+
+  it("checks fastify before frontend before e2e", async () => {
+    const { detectPackageManagerFromComponents } = await import("../src/utils.js");
+    await mkdir(join(tmp, "backend"));
+    await mkdir(join(tmp, "web"));
+    await writeFile(join(tmp, "backend/pnpm-lock.yaml"), "");
+    await writeFile(join(tmp, "web/package-lock.json"), "{}");
+    const pm = detectPackageManagerFromComponents(tmp, { fastify: "backend", frontend: "web" });
+    expect(pm).toBe("pnpm");
+  });
+});
+
+describe("buildDisplayNames", () => {
+  it("uses canonical nice names when path matches component name", async () => {
+    const { buildDisplayNames } = await import("../src/baseline.js");
+    const result = buildDisplayNames({
+      fastapi: "fastapi",
+      fastify: "fastify",
+      frontend: "frontend",
+      mobile: "mobile",
+      e2e: "e2e",
+      infra: "infra",
+    });
+    expect(result.fastapi).toBe("FastAPI");
+    expect(result.fastify).toBe("Fastify");
+    expect(result.frontend).toBe("Frontend");
+    expect(result.mobile).toBe("Flutter");
+    expect(result.e2e).toBe("E2E");
+    expect(result.infra).toBe("Terraform");
+  });
+
+  it("uses path as-is when component is renamed", async () => {
+    const { buildDisplayNames } = await import("../src/baseline.js");
+    const result = buildDisplayNames({
+      fastapi: "ai",
+      fastify: "backend",
+      frontend: "web",
+      mobile: "mobile",
+      e2e: "e2e",
+      infra: "infra",
+    });
+    expect(result.fastapi).toBe("ai");
+    expect(result.fastify).toBe("backend");
+    expect(result.frontend).toBe("web");
+    expect(result.mobile).toBe("Flutter");
+  });
+});
+
+describe("buildPathsUpper", () => {
+  it("converts paths to uppercase shell-safe identifiers", async () => {
+    const { buildPathsUpper } = await import("../src/baseline.js");
+    const result = buildPathsUpper({
+      fastapi: "ai",
+      fastify: "backend",
+      frontend: "web-app",
+      mobile: "mobile",
+      e2e: "e2e",
+      infra: "infra",
+    });
+    expect(result.fastapi).toBe("AI");
+    expect(result.fastify).toBe("BACKEND");
+    expect(result.frontend).toBe("WEB_APP");
+    expect(result.mobile).toBe("MOBILE");
+  });
+
+  it("preserves canonical names when paths match component names", async () => {
+    const { buildPathsUpper } = await import("../src/baseline.js");
+    const result = buildPathsUpper({
+      fastapi: "fastapi",
+      fastify: "fastify",
+      frontend: "frontend",
+      mobile: "mobile",
+      e2e: "e2e",
+      infra: "infra",
+    });
+    expect(result.fastapi).toBe("FASTAPI");
+    expect(result.fastify).toBe("FASTIFY");
   });
 });
 
@@ -203,9 +440,9 @@ describe("discoverComponentPaths", () => {
 
   it("discovers renamed component directories", async () => {
     await mkdir(join(tmp, "backend"));
-    await writeComponentMarker(join(tmp, "backend"), "fastapi");
+    await upsertComponentMarker(join(tmp, "backend"), "fastapi");
     await mkdir(join(tmp, "web"));
-    await writeComponentMarker(join(tmp, "web"), "frontend");
+    await upsertComponentMarker(join(tmp, "web"), "frontend");
 
     const paths = await discoverComponentPaths(tmp, ["fastapi", "frontend"] as Component[]);
     expect(paths.fastapi).toBe("backend");
@@ -219,9 +456,9 @@ describe("discoverComponentPaths", () => {
 
   it("ignores dotfiles and excluded directories", async () => {
     await mkdir(join(tmp, ".hidden"));
-    await writeComponentMarker(join(tmp, ".hidden"), "fastapi");
+    await upsertComponentMarker(join(tmp, ".hidden"), "fastapi");
     await mkdir(join(tmp, "node_modules"));
-    await writeComponentMarker(join(tmp, "node_modules"), "fastify");
+    await upsertComponentMarker(join(tmp, "node_modules"), "fastify");
 
     const paths = await discoverComponentPaths(tmp, ["fastapi", "fastify"] as Component[]);
     expect(paths.fastapi).toBe("fastapi");

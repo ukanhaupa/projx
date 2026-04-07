@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
@@ -7,23 +7,19 @@ import {
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
+  type PackageManager,
   cleanupRepo,
+  detectPackageManagerFromComponents,
   detectProjectName,
-  discoverComponentPaths,
   discoverComponentsFromMarkers,
   downloadRepo,
   pmCommands,
   readComponentMarker,
+  readProjxConfig,
+  writeComponentMarker,
+  writeProjxConfig,
 } from "./utils.js";
-import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-  createdAt: string;
-  skip?: string[];
-  packageManager?: string;
-}
+import { applyTemplate, detectPackageNameOverrides, saveBaselineRef, type GeneratorVars } from "./baseline.js";
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {
   p.intro("projx update");
@@ -40,38 +36,49 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     // non-critical
   }
 
+  const raw = await readProjxConfig(cwd);
+  const { components, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+
+  const pendingConflicts = findFilesWithConflictMarkers(cwd);
+  if (pendingConflicts.length > 0) {
+    p.log.warn(`Found ${pendingConflicts.length} file(s) with unresolved conflict markers from a prior update:`);
+    for (const f of pendingConflicts) p.log.info(`  ${f}`);
+    p.log.info("");
+
+    const resumeVersion = String(raw.version ?? "unknown");
+    const handled = await promptSkipLearning(cwd, componentPaths, resumeVersion, pendingConflicts);
+    if (!handled) {
+      p.log.info("");
+      p.log.info("Resolve manually with `git diff` then `git add` / `git checkout --`,");
+      p.log.info("or re-run `npx create-projx update` to resume the prompt.");
+    }
+    return;
+  }
+
   if (hasUncommittedChanges(cwd)) {
     p.log.error("You have uncommitted changes. Commit or stash them first.");
     process.exit(1);
   }
 
-  const configPath = join(cwd, ".projx");
-  let config: ProjxConfig;
-
-  if (existsSync(configPath)) {
-    const raw = JSON.parse(await readFile(configPath, "utf-8"));
-    const { components: discovered } = await discoverComponentsFromMarkers(cwd);
-    config = { ...raw, components: discovered.length > 0 ? discovered : raw.components };
-    p.log.info(`Found .projx (v${config.version}, components: ${config.components.join(", ")})`);
-  } else {
-    p.log.warn("No .projx file found. Detecting components from directories.");
-    const { components: discovered } = await discoverComponentsFromMarkers(cwd);
-    if (discovered.length === 0) {
-      p.log.error("No projx components found. Run 'projx init' first.");
-      process.exit(1);
-    }
-    config = { version: "0.0.0", components: discovered, createdAt: "unknown" };
-    p.log.info(`Detected: ${discovered.join(", ")}`);
+  if (components.length === 0) {
+    p.log.error("No projx components found. Run 'projx init' first.");
+    process.exit(1);
   }
 
-  const componentPaths = await discoverComponentPaths(cwd, config.components);
-  for (const c of config.components) {
+  if (Object.keys(raw).length > 0) {
+    p.log.info(`Found .projx (v${raw.version ?? "unknown"}, components: ${components.join(", ")})`);
+  } else {
+    p.log.warn("No .projx file found. Detected components from markers.");
+    p.log.info(`Detected: ${components.join(", ")}`);
+  }
+
+  for (const c of components) {
     const dir = componentPaths[c];
     p.log.info(dir !== c ? `${c} → ${dir}/` : `${c}/`);
   }
 
   const componentSkips: Record<string, string[]> = {};
-  for (const component of config.components) {
+  for (const component of components) {
     const dir = componentPaths[component];
     const marker = await readComponentMarker(join(cwd, dir));
     if (marker?.skip && marker.skip.length > 0) {
@@ -92,16 +99,36 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
 
-    const name = detectProjectName(cwd, config.components, componentPaths);
-    const raw = existsSync(configPath) ? JSON.parse(await readFile(configPath, "utf-8")) : {};
-    const pm = raw.packageManager ?? "npm";
-    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths, pm: pmCommands(pm) };
+    const name = detectProjectName(cwd, components, componentPaths);
+    const recordedPm = raw.packageManager as PackageManager | undefined;
+    const detectedPm = detectPackageManagerFromComponents(cwd, componentPaths);
+    const pm: PackageManager = detectedPm ?? recordedPm ?? "npm";
+    if (detectedPm && recordedPm && detectedPm !== recordedPm) {
+      p.log.warn(`packageManager mismatch: .projx says "${recordedPm}" but lockfile is "${detectedPm}". Using "${detectedPm}".`);
+      await writeProjxConfig(cwd, { ...raw, packageManager: detectedPm });
+    } else if (detectedPm && !recordedPm) {
+      await writeProjxConfig(cwd, { ...raw, packageManager: detectedPm });
+    }
+    const nameOverrides = await detectPackageNameOverrides(cwd, components, componentPaths);
+    const vars: GeneratorVars = { projectName: name, components, paths: componentPaths, pm: pmCommands(pm), nameOverrides };
 
     const spinner = p.spinner();
     spinner.start("Applying template update");
-    const rootSkip = config.skip ?? [];
-    const result = await applyTemplate(cwd, repoDir, config.components, componentPaths, vars, version, "scaffold", componentSkips, rootSkip);
+    const rootSkip: string[] = Array.isArray(raw.skip) ? (raw.skip as string[]) : [];
+    const isLegacyMigration = !raw.defaultsApplied;
+    if (isLegacyMigration) {
+      p.log.info("Legacy project detected — applying default skip patterns for user-owned files.");
+    }
+    const result = await applyTemplate(cwd, repoDir, components, componentPaths, vars, version, componentSkips, rootSkip, isLegacyMigration);
     spinner.stop("Template applied.");
+
+    const pinnedUpdates = await findPinnedFilesWithUpdates(cwd, repoDir, components, componentPaths, vars, version, componentSkips, rootSkip);
+    if (pinnedUpdates.length > 0) {
+      p.log.info("");
+      p.log.info(`${pinnedUpdates.length} pinned file(s) have template updates available:`);
+      for (const f of pinnedUpdates) p.log.info(`  ${f}`);
+      p.log.info("Run `npx create-projx unpin <file> && npx create-projx update` to opt in.");
+    }
 
     if (result.status === "merged") {
       saveBaselineRef(cwd);
@@ -118,7 +145,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
           p.log.info(`  ${f}`);
         }
       }
-      const handled = await promptSkipLearning(cwd, componentPaths, version);
+      const handled = await promptSkipLearning(cwd, componentPaths, version, result.conflictedFiles ?? []);
       if (!handled) {
         p.log.info("");
         p.log.info("Review:  git diff");
@@ -157,43 +184,134 @@ function hasUncommittedChanges(cwd: string): boolean {
   }
 }
 
+export async function findPinnedFilesWithUpdates(
+  cwd: string,
+  repoDir: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+  vars: GeneratorVars,
+  version: string,
+  componentSkips: Record<string, string[]> | undefined,
+  rootSkip: string[],
+): Promise<string[]> {
+  const { mkdir, rm, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { writeTemplateToDir } = await import("./baseline.js");
+
+  const config = await readProjxConfig(cwd);
+  const rootPinned: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+  const componentPinned: { component: Component; dir: string; patterns: string[] }[] = [];
+  for (const component of components) {
+    const dir = componentPaths[component];
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (marker?.skip && marker.skip.length > 0) {
+      componentPinned.push({ component, dir, patterns: marker.skip });
+    }
+  }
+  if (rootPinned.length === 0 && componentPinned.length === 0) return [];
+
+  const tmpTemplate = join(tmpdir(), `projx-pinned-${Date.now()}`);
+  await mkdir(tmpTemplate, { recursive: true });
+
+  void componentSkips;
+  void rootSkip;
+
+  try {
+    await writeTemplateToDir(tmpTemplate, repoDir, components, componentPaths, vars, version, {
+      componentSkips: {},
+      rootSkip: [],
+      realCwd: tmpTemplate,
+    });
+
+    const updates: string[] = [];
+
+    for (const file of rootPinned) {
+      const tmplPath = join(tmpTemplate, file);
+      const userPath = join(cwd, file);
+      if (!existsSync(tmplPath) || !existsSync(userPath)) continue;
+      const tmplContent = await readFile(tmplPath, "utf-8");
+      const userContent = await readFile(userPath, "utf-8");
+      if (tmplContent !== userContent) updates.push(file);
+    }
+
+    for (const { dir, patterns } of componentPinned) {
+      for (const pattern of patterns) {
+        if (pattern.includes("*")) continue;
+        const rel = `${dir}/${pattern}`;
+        const tmplPath = join(tmpTemplate, rel);
+        const userPath = join(cwd, rel);
+        if (!existsSync(tmplPath) || !existsSync(userPath)) continue;
+        const tmplContent = await readFile(tmplPath, "utf-8");
+        const userContent = await readFile(userPath, "utf-8");
+        if (tmplContent !== userContent) updates.push(rel);
+      }
+    }
+
+    return updates;
+  } finally {
+    await rm(tmpTemplate, { recursive: true, force: true });
+  }
+}
+
+export function findFilesWithConflictMarkers(cwd: string): string[] {
+  try {
+    const out = execSync(
+      `git -c core.quotepath=off grep -lE '^<<<<<<< (your changes|HEAD)'`,
+      { cwd, stdio: "pipe" },
+    ).toString().trim();
+    if (!out) return [];
+    return out.split("\n").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function promptSkipLearning(
   cwd: string,
   componentPaths: ComponentPaths,
   version: string,
+  conflictedFiles: string[],
 ): Promise<boolean> {
-  if (!process.stdin.isTTY) return false;
+  const changedFiles = conflictedFiles.filter((f) => {
+    const base = f.split("/").pop()!;
+    if (base === ".projx" || base === COMPONENT_MARKER) return false;
+    return true;
+  });
+
+  if (changedFiles.length === 0) return false;
+
+  if (!process.stdin.isTTY) {
+    p.log.info("Non-interactive: skipping prompt. Resolve conflicts manually with `git diff` then `git add`.");
+    p.log.info("Re-run `npx create-projx update` later to interactively decide which files to keep.");
+    return false;
+  }
 
   const statusOutput = execSync("git status --porcelain", { cwd, stdio: "pipe" })
     .toString()
     .trim();
-  if (!statusOutput) return false;
-
   const entries = statusOutput.split("\n").filter(Boolean).map((line) => ({
     status: line.slice(0, 2).trim(),
     file: line.slice(3).trim(),
   }));
 
-  const changedFiles = entries
-    .map((e) => e.file)
-    .filter((f) => {
-      const base = f.split("/").pop()!;
-      if (base === ".projx" || base === COMPONENT_MARKER) return false;
-      return true;
-    });
-
-  if (changedFiles.length === 0) return false;
-
-  p.log.warn(`${changedFiles.length} template file(s) differ from your code.`);
+  p.log.warn(`${changedFiles.length} file(s) have conflicts to resolve.`);
+  p.log.info("Each file is currently in your working tree with conflict markers.");
+  p.log.info("");
+  p.log.info("CHECKED  = keep your version, resolve markers manually, commit when ready");
+  p.log.info("UNCHECKED = discard template's changes AND skip this file on future updates");
+  p.log.info("");
 
   const selected = (await p.multiselect({
-    message:
-      "Select files to KEEP (unselected will be discarded and skipped on future updates)",
+    message: "Which files do you want to KEEP?",
     options: changedFiles.map((f) => ({ value: f, label: f })),
     required: false,
   })) as string[] | symbol;
 
-  if (p.isCancel(selected)) return false;
+  if (p.isCancel(selected)) {
+    p.log.warn("Cancelled. Conflict markers remain in the working tree.");
+    p.log.info("Re-run `npx create-projx update` later to resume the prompt.");
+    return false;
+  }
 
   const kept = new Set(selected as string[]);
   const discarded = changedFiles.filter((f) => !kept.has(f));
@@ -219,7 +337,7 @@ async function promptSkipLearning(
   }
 
   if (kept.size > 0) {
-    p.log.info(`${kept.size} file(s) kept — commit when ready:`);
+    p.log.info(`${kept.size} file(s) kept with conflict markers — resolve and commit:`);
     p.log.info(
       `  git add . && git commit -m "projx: update to v${version}"`,
     );
@@ -262,27 +380,17 @@ export async function learnSkips(
 
   for (const [component, additions] of Object.entries(componentSkipAdds)) {
     const dir = componentPaths[component as Component];
-    const markerPath = join(cwd, dir, COMPONENT_MARKER);
-    try {
-      const data = JSON.parse(await readFile(markerPath, "utf-8"));
-      const existing: string[] = data.skip ?? [];
-      data.skip = [...new Set([...existing, ...additions])];
-      await writeFile(markerPath, JSON.stringify(data, null, 2) + "\n");
-    } catch {
-      // marker missing or invalid
-    }
+    const marker = await readComponentMarker(join(cwd, dir));
+    if (!marker) continue;
+    const merged = [...new Set([...marker.skip, ...additions])];
+    await writeComponentMarker(join(cwd, dir), { ...marker, skip: merged });
   }
 
   if (rootSkipAdds.length > 0) {
-    const configPath = join(cwd, ".projx");
-    try {
-      const data = JSON.parse(await readFile(configPath, "utf-8"));
-      const existing: string[] = data.skip ?? [];
-      data.skip = [...new Set([...existing, ...rootSkipAdds])];
-      await writeFile(configPath, JSON.stringify(data, null, 2) + "\n");
-    } catch {
-      // config missing or invalid
-    }
+    const config = await readProjxConfig(cwd);
+    const existing: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+    const merged = [...new Set([...existing, ...rootSkipAdds])];
+    await writeProjxConfig(cwd, { ...config, skip: merged });
   }
 }
 

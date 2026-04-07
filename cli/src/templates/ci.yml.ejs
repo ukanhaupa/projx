@@ -14,22 +14,22 @@ jobs:
       pull-requests: read
     outputs:
 <% if (components.includes('fastapi')) { %>
-      fastapi: ${{ steps.filter.outputs.<%= paths.fastapi %> }}
+      <%= paths.fastapi %>: ${{ steps.filter.outputs.<%= paths.fastapi %> }}
 <% } %>
 <% if (components.includes('fastify')) { %>
-      fastify: ${{ steps.filter.outputs.<%= paths.fastify %> }}
+      <%= paths.fastify %>: ${{ steps.filter.outputs.<%= paths.fastify %> }}
 <% } %>
 <% if (components.includes('frontend')) { %>
-      frontend: ${{ steps.filter.outputs.<%= paths.frontend %> }}
+      <%= paths.frontend %>: ${{ steps.filter.outputs.<%= paths.frontend %> }}
 <% } %>
 <% if (components.includes('mobile')) { %>
-      mobile: ${{ steps.filter.outputs.<%= paths.mobile %> }}
+      <%= paths.mobile %>: ${{ steps.filter.outputs.<%= paths.mobile %> }}
 <% } %>
 <% if (components.includes('e2e')) { %>
-      e2e: ${{ steps.filter.outputs.<%= paths.e2e %> }}
+      <%= paths.e2e %>: ${{ steps.filter.outputs.<%= paths.e2e %> }}
 <% } %>
 <% if (components.includes('infra')) { %>
-      infra: ${{ steps.filter.outputs.<%= paths.infra %> }}
+      <%= paths.infra %>: ${{ steps.filter.outputs.<%= paths.infra %> }}
 <% } %>
     steps:
       - uses: actions/checkout@v5
@@ -63,10 +63,10 @@ jobs:
 <% } %>
 <% if (components.includes('fastapi')) { %>
 
-  fastapi:
-    name: FastAPI (format + lint)
+  <%= paths.fastapi %>:
+    name: <%= displayNames.fastapi %> (format + lint)
     needs: changes
-    if: needs.changes.outputs.fastapi == 'true'
+    if: needs.changes.outputs.<%= paths.fastapi %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,10 +80,10 @@ jobs:
 <% } %>
 <% if (components.includes('fastify')) { %>
 
-  fastify:
-    name: Fastify (format + lint + typecheck)
+  <%= paths.fastify %>:
+    name: <%= displayNames.fastify %> (format + lint + typecheck)
     needs: changes
-    if: needs.changes.outputs.fastify == 'true'
+    if: needs.changes.outputs.<%= paths.fastify %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -113,10 +113,10 @@ jobs:
 <% } %>
 <% if (components.includes('frontend')) { %>
 
-  frontend:
-    name: Frontend (format + lint + typecheck)
+  <%= paths.frontend %>:
+    name: <%= displayNames.frontend %> (format + lint + typecheck)
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.<%= paths.frontend %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -145,10 +145,10 @@ jobs:
 <% } %>
 <% if (components.includes('mobile')) { %>
 
-  mobile:
-    name: Flutter (format + analyze)
+  <%= paths.mobile %>:
+    name: <%= displayNames.mobile %> (format + analyze)
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    if: needs.changes.outputs.<%= paths.mobile %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -165,10 +165,10 @@ jobs:
 <% } %>
 <% if (components.includes('e2e')) { %>
 
-  e2e:
-    name: E2E (format + lint + typecheck)
+  <%= paths.e2e %>:
+    name: <%= displayNames.e2e %> (format + lint + typecheck)
     needs: changes
-    if: needs.changes.outputs.e2e == 'true'
+    if: needs.changes.outputs.<%= paths.e2e %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -197,10 +197,10 @@ jobs:
 <% } %>
 <% if (components.includes('infra')) { %>
 
-  infra:
-    name: Terraform (fmt + validate)
+  <%= paths.infra %>:
+    name: <%= displayNames.infra %> (fmt + validate)
     needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.<%= paths.infra %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

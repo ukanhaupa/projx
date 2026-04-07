@@ -6,13 +6,17 @@ import { tmpdir } from "node:os";
 import {
   type Component,
   type ComponentPaths,
-  type ComponentOrigin,
+  DEFAULT_COMPONENT_SKIP_PATTERNS,
+  DEFAULT_ROOT_SKIP_PATTERNS,
   copyComponent,
   copyStaticFiles,
+  readComponentMarker,
+  readProjxConfig,
   replaceInFile,
   replaceInDir,
   toSnake,
-  writeComponentMarker,
+  upsertComponentMarker,
+  writeProjxConfig,
 } from "./utils.js";
 import {
   generateDockerCompose,
@@ -28,7 +32,36 @@ export interface GeneratorVars {
   projectName: string;
   components: Component[];
   paths: ComponentPaths;
+  pathsUpper?: Partial<Record<Component, string>>;
+  displayNames?: Partial<Record<Component, string>>;
+  nameOverrides?: Partial<Record<Component, string>>;
   [key: string]: unknown;
+}
+
+export function buildPathsUpper(paths: ComponentPaths): Partial<Record<Component, string>> {
+  const result: Partial<Record<Component, string>> = {};
+  for (const [component, dir] of Object.entries(paths)) {
+    result[component as Component] = dir.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase();
+  }
+  return result;
+}
+
+const CANONICAL_DISPLAY_NAMES: Record<Component, string> = {
+  fastapi: "FastAPI",
+  fastify: "Fastify",
+  frontend: "Frontend",
+  mobile: "Flutter",
+  e2e: "E2E",
+  infra: "Terraform",
+};
+
+export function buildDisplayNames(paths: ComponentPaths): Partial<Record<Component, string>> {
+  const result: Partial<Record<Component, string>> = {};
+  for (const [component, dir] of Object.entries(paths)) {
+    const canonical = component as Component;
+    result[canonical] = dir === canonical ? CANONICAL_DISPLAY_NAMES[canonical] : dir;
+  }
+  return result;
 }
 
 export interface MergeResult {
@@ -39,37 +72,52 @@ export interface MergeResult {
 
 export const BASELINE_REF = "refs/projx/baseline";
 
+async function migrateComponentMarkers(
+  cwd: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+  applyDefaults: boolean,
+): Promise<void> {
+  const { readComponentMarker, writeComponentMarker } = await import("./utils.js");
+  for (const component of components) {
+    const dir = componentPaths[component];
+    const markerDir = join(cwd, dir);
+    if (!existsSync(markerDir)) continue;
+    const marker = await readComponentMarker(markerDir);
+    if (!marker) continue;
+    const next = { ...marker };
+    if (applyDefaults) {
+      const defaults = DEFAULT_COMPONENT_SKIP_PATTERNS[component] ?? [];
+      next.skip = [...new Set([...marker.skip, ...defaults])];
+    }
+    await writeComponentMarker(markerDir, next);
+  }
+}
+
 async function writeManagedProjx(
   cwd: string,
   version: string,
   vars: GeneratorVars,
-  components?: Component[],
+  applyDefaults: boolean,
 ): Promise<void> {
-  const projxPath = join(cwd, ".projx");
-  let existing: Record<string, unknown> = {};
-  if (existsSync(projxPath)) {
-    try {
-      existing = JSON.parse(await readFile(projxPath, "utf-8"));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`projx: existing .projx is unreadable (${msg}); writing fresh.`);
-    }
-  }
+  const existing = await readProjxConfig(cwd);
+  delete existing.components;
+  const today = new Date().toISOString().split("T")[0];
   const merged: Record<string, unknown> = {
     ...existing,
     version,
+    updatedAt: today,
   };
-  if (components !== undefined) {
-    merged.components = components;
-  }
-  if (typeof merged.createdAt !== "string") {
-    merged.createdAt = new Date().toISOString().split("T")[0];
-  }
   const pmObj = vars.pm as { name?: string } | undefined;
   if (pmObj?.name && !merged.packageManager) {
     merged.packageManager = pmObj.name;
   }
-  await writeFile(projxPath, JSON.stringify(merged, null, 2) + "\n");
+  if (applyDefaults && !merged.defaultsApplied) {
+    const userSkip = Array.isArray(merged.skip) ? (merged.skip as string[]) : [];
+    merged.skip = [...new Set([...userSkip, ...DEFAULT_ROOT_SKIP_PATTERNS])];
+    merged.defaultsApplied = true;
+  }
+  await writeProjxConfig(cwd, merged);
 }
 
 export function matchesSkip(filePath: string, patterns: string[]): boolean {
@@ -182,21 +230,49 @@ export async function collectAllFiles(dir: string, base: string): Promise<string
   return results;
 }
 
+function buildPathFallbacks(componentPaths: ComponentPaths): Record<string, string> {
+  const fallbacks: Record<string, string> = {};
+  for (const [component, dir] of Object.entries(componentPaths)) {
+    if (dir !== component) fallbacks[dir] = component;
+  }
+  return fallbacks;
+}
+
+function lookupBaseContent(
+  cwd: string,
+  baselineRef: string,
+  file: string,
+  pathFallbacks: Record<string, string>,
+): string | null {
+  const direct = getFileAtRef(cwd, baselineRef, file);
+  if (direct !== null) return direct;
+
+  const slash = file.indexOf("/");
+  if (slash === -1) return null;
+  const topDir = file.slice(0, slash);
+  const canonical = pathFallbacks[topDir];
+  if (!canonical) return null;
+  return getFileAtRef(cwd, baselineRef, canonical + file.slice(slash));
+}
+
 async function tryThreeWayMerge(
   cwd: string,
   templateDir: string,
   baselineRef: string,
+  componentPaths: ComponentPaths,
 ): Promise<{ merged: string[]; conflicted: string[] }> {
   const templateFiles = await collectAllFiles(templateDir, templateDir);
   const merged: string[] = [];
   const conflicted: string[] = [];
+  const pathFallbacks = buildPathFallbacks(componentPaths);
 
   for (const file of templateFiles) {
     if (file === ".projx") continue;
+    if (file.endsWith("/.projx-component") || file === ".projx-component") continue;
     const oursPath = join(cwd, file);
     if (!existsSync(oursPath)) continue;
 
-    const baseContent = getFileAtRef(cwd, baselineRef, file);
+    const baseContent = lookupBaseContent(cwd, baselineRef, file, pathFallbacks);
     if (baseContent === null) continue;
 
     let theirsContent: string;
@@ -274,6 +350,7 @@ function cleanupWorktree(cwd: string, worktree: string, branch: string): void {
 async function removeSkippedFiles(
   dir: string,
   skipPatterns: string[],
+  realDir?: string,
 ): Promise<void> {
   if (skipPatterns.length === 0) return;
 
@@ -288,6 +365,7 @@ async function removeSkippedFiles(
       if (entry.isDirectory()) {
         await walk(full, base);
       } else if (entry.name !== ".projx-component" && matchesSkip(rel, skipPatterns)) {
+        if (realDir && !existsSync(join(realDir, rel))) continue;
         await unlink(full);
       }
     }
@@ -298,6 +376,13 @@ async function removeSkippedFiles(
 
 // --- Template writing ---
 
+export interface WriteTemplateOptions {
+  componentSkips?: Record<string, string[]>;
+  rootSkip?: string[];
+  applyDefaults?: boolean;
+  realCwd?: string;
+}
+
 export async function writeTemplateToDir(
   dest: string,
   repoDir: string,
@@ -305,23 +390,31 @@ export async function writeTemplateToDir(
   componentPaths: ComponentPaths,
   vars: GeneratorVars,
   version: string,
-  origin: ComponentOrigin,
-  componentSkips?: Record<string, string[]>,
-  rootSkip?: string[],
+  options: WriteTemplateOptions = {},
 ): Promise<void> {
+  const { componentSkips, rootSkip, applyDefaults = false, realCwd = dest } = options;
   const name = vars.projectName;
   const nameSnake = toSnake(name);
 
   for (const component of components) {
     const targetDir = componentPaths[component];
-    const skipPatterns = componentSkips?.[component] ?? [];
+    const baseSkip = componentSkips?.[component] ?? [];
+
+    const realMarker = await readComponentMarker(join(realCwd, targetDir));
+    const isNewMarker = !realMarker;
+    const shouldApplyComponentDefault = isNewMarker || applyDefaults;
+    const defaultSkip = shouldApplyComponentDefault
+      ? (DEFAULT_COMPONENT_SKIP_PATTERNS[component] ?? [])
+      : [];
+    const skipPatterns = [...new Set([...baseSkip, ...defaultSkip])];
 
     const tmpDir = join(dest, "__cptmp__");
     await copyComponent(repoDir, component, tmpDir);
     const srcDir = join(tmpDir, component);
 
     if (skipPatterns.length > 0) {
-      await removeSkippedFiles(srcDir, skipPatterns);
+      const realComponentDir = join(realCwd, targetDir);
+      await removeSkippedFiles(srcDir, skipPatterns, realComponentDir);
     }
 
     const outDir = join(dest, targetDir);
@@ -332,16 +425,27 @@ export async function writeTemplateToDir(
     }
     await rm(tmpDir, { recursive: true, force: true });
 
-    await writeComponentMarker(join(dest, targetDir), component, origin, skipPatterns.length > 0 ? skipPatterns : undefined);
+    await upsertComponentMarker(join(dest, targetDir), component, skipPatterns.length > 0 ? skipPatterns : undefined);
   }
 
-  await substituteNames(dest, components, componentPaths, name, nameSnake);
+  if (!vars.pathsUpper) {
+    vars.pathsUpper = buildPathsUpper(componentPaths);
+  }
+  if (!vars.displayNames) {
+    vars.displayNames = buildDisplayNames(componentPaths);
+  }
+  await substituteNames(dest, components, componentPaths, name, nameSnake, vars.nameOverrides);
 
   const hasBackend =
     components.includes("fastapi") || components.includes("fastify");
 
-  const skip = rootSkip ?? [];
-  const shouldWrite = (file: string) => !matchesSkip(file, skip);
+  const userSkip = rootSkip ?? [];
+  const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];
+  const effectiveSkip = [...new Set([...userSkip, ...defaultRootSkip])];
+  const shouldWrite = (file: string) => {
+    if (!matchesSkip(file, effectiveSkip)) return true;
+    return !existsSync(join(realCwd, file));
+  };
 
   if (hasBackend || components.includes("frontend")) {
     if (shouldWrite("docker-compose.yml"))
@@ -376,7 +480,7 @@ export async function writeTemplateToDir(
     await writeFile(join(dest, ".vscode/settings.json"), generateVscodeSettings(vars));
   }
 
-  await writeManagedProjx(dest, version, vars, components);
+  await writeManagedProjx(dest, version, vars, applyDefaults);
 }
 
 async function substituteNames(
@@ -385,22 +489,87 @@ async function substituteNames(
   paths: ComponentPaths,
   name: string,
   nameSnake: string,
+  overrides?: Partial<Record<Component, string>>,
 ): Promise<void> {
   if (components.includes("fastapi")) {
-    await replaceInFile(join(dest, `${paths.fastapi}/pyproject.toml`), "projx-fastapi", `${name}-fastapi`);
+    const target = overrides?.fastapi ?? `${name}-fastapi`;
+    await replaceInFile(join(dest, `${paths.fastapi}/pyproject.toml`), "projx-fastapi", target);
   }
   if (components.includes("fastify")) {
-    await replaceInFile(join(dest, `${paths.fastify}/package.json`), "projx-fastify", `${name}-fastify`);
+    const target = overrides?.fastify ?? `${name}-fastify`;
+    await replaceInFile(join(dest, `${paths.fastify}/package.json`), "projx-fastify", target);
   }
   if (components.includes("frontend")) {
-    await replaceInFile(join(dest, `${paths.frontend}/package.json`), "projx-frontend", `${name}-frontend`);
+    const target = overrides?.frontend ?? `${name}-frontend`;
+    await replaceInFile(join(dest, `${paths.frontend}/package.json`), "projx-frontend", target);
   }
   if (components.includes("e2e")) {
-    await replaceInFile(join(dest, `${paths.e2e}/package.json`), "projx-e2e", `${name}-e2e`);
+    const target = overrides?.e2e ?? `${name}-e2e`;
+    await replaceInFile(join(dest, `${paths.e2e}/package.json`), "projx-e2e", target);
   }
   if (components.includes("mobile")) {
-    await replaceInFile(join(dest, `${paths.mobile}/pubspec.yaml`), "projx_mobile", `${nameSnake}_mobile`);
-    await replaceInDir(join(dest, `${paths.mobile}`), "package:projx_mobile/", `package:${nameSnake}_mobile/`, ".dart");
+    const target = overrides?.mobile ?? `${nameSnake}_mobile`;
+    await replaceInFile(join(dest, `${paths.mobile}/pubspec.yaml`), "projx_mobile", target);
+    await replaceInDir(join(dest, `${paths.mobile}`), "package:projx_mobile/", `package:${target}/`, ".dart");
+  }
+}
+
+export async function detectPackageNameOverrides(
+  cwd: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+): Promise<Partial<Record<Component, string>>> {
+  const overrides: Partial<Record<Component, string>> = {};
+
+  if (components.includes("fastapi")) {
+    const file = join(cwd, componentPaths.fastapi, "pyproject.toml");
+    const name = await readTomlProjectName(file);
+    if (name) overrides.fastapi = name;
+  }
+  for (const c of ["fastify", "frontend", "e2e"] as const) {
+    if (!components.includes(c)) continue;
+    const file = join(cwd, componentPaths[c], "package.json");
+    const name = await readJsonName(file);
+    if (name) overrides[c] = name;
+  }
+  if (components.includes("mobile")) {
+    const file = join(cwd, componentPaths.mobile, "pubspec.yaml");
+    const name = await readPubspecName(file);
+    if (name) overrides.mobile = name;
+  }
+
+  return overrides;
+}
+
+async function readTomlProjectName(file: string): Promise<string | null> {
+  if (!existsSync(file)) return null;
+  try {
+    const content = await readFile(file, "utf-8");
+    const match = content.match(/^\s*name\s*=\s*"([^"]+)"/m);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function readJsonName(file: string): Promise<string | null> {
+  if (!existsSync(file)) return null;
+  try {
+    const data = JSON.parse(await readFile(file, "utf-8"));
+    return typeof data.name === "string" ? data.name : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readPubspecName(file: string): Promise<string | null> {
+  if (!existsSync(file)) return null;
+  try {
+    const content = await readFile(file, "utf-8");
+    const match = content.match(/^\s*name\s*:\s*([A-Za-z0-9_]+)/m);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -413,9 +582,9 @@ export async function applyTemplate(
   componentPaths: ComponentPaths,
   vars: GeneratorVars,
   version: string,
-  origin: ComponentOrigin = "scaffold",
   componentSkips?: Record<string, string[]>,
   rootSkip?: string[],
+  applyDefaults = false,
 ): Promise<MergeResult> {
   const hasHead = (() => {
     try {
@@ -427,7 +596,12 @@ export async function applyTemplate(
   })();
 
   if (!hasHead) {
-    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, origin, componentSkips, rootSkip);
+    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, {
+      componentSkips,
+      rootSkip,
+      applyDefaults,
+      realCwd: cwd,
+    });
     return { status: "clean" };
   }
 
@@ -435,7 +609,12 @@ export async function applyTemplate(
   const { worktree, branch } = createOrphanWorktree(cwd);
 
   try {
-    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, origin, componentSkips, rootSkip);
+    await writeTemplateToDir(worktree, repoDir, components, componentPaths, vars, version, {
+      componentSkips,
+      rootSkip,
+      applyDefaults,
+      realCwd: cwd,
+    });
 
     execSync("git add -A", { cwd: worktree, stdio: "pipe" });
 
@@ -446,7 +625,7 @@ export async function applyTemplate(
     }
 
     execSync(
-      `git commit --no-verify -m "projx: template v${version} [${components.join(", ")}]"`,
+      `git -c core.hooksPath=/dev/null commit -m "projx: template v${version} [${components.join(", ")}]"`,
       { cwd: worktree, stdio: "pipe" },
     );
 
@@ -486,6 +665,7 @@ export async function applyTemplate(
     }
 
     if (mergeClean) {
+      await migrateComponentMarkers(cwd, components, componentPaths, applyDefaults);
       saveBaselineRef(cwd);
       return { status: "clean" };
     }
@@ -495,20 +675,34 @@ export async function applyTemplate(
     if (baselineRef) {
       const tmpTemplate = join(tmpdir(), `projx-tpl-${Date.now()}`);
       await mkdir(tmpTemplate, { recursive: true });
-      await writeTemplateToDir(tmpTemplate, repoDir, components, componentPaths, vars, version, origin, componentSkips, rootSkip);
+      await writeTemplateToDir(tmpTemplate, repoDir, components, componentPaths, vars, version, {
+        componentSkips,
+        rootSkip,
+        applyDefaults,
+        realCwd: cwd,
+      });
 
-      const result = await tryThreeWayMerge(cwd, tmpTemplate, baselineRef);
+      const result = await tryThreeWayMerge(cwd, tmpTemplate, baselineRef, componentPaths);
       await rm(tmpTemplate, { recursive: true, force: true });
 
+      await migrateComponentMarkers(cwd, components, componentPaths, applyDefaults);
+
       if (result.conflicted.length === 0) {
-        await writeManagedProjx(cwd, version, vars);
+        await writeManagedProjx(cwd, version, vars, applyDefaults);
         execSync("git add -A", { cwd, stdio: "pipe" });
         const staged = execSync("git diff --cached --stat", { cwd, stdio: "pipe" }).toString().trim();
         if (staged) {
-          execSync(
-            `git commit --no-verify -m "projx: update to template v${version} (3-way merge)"`,
-            { cwd, stdio: "pipe" },
-          );
+          try {
+            execSync(
+              `git commit -m "projx: update to template v${version} (3-way merge)"`,
+              { cwd, stdio: "pipe" },
+            );
+          } catch (err) {
+            throw new Error(
+              `Pre-commit hook rejected the merged template content. Resolve the issues and commit manually:\n  git commit -m "projx: update to template v${version} (3-way merge)"`,
+              { cause: err },
+            );
+          }
         }
         saveBaselineRef(cwd);
         return result.merged.length > 0
@@ -516,7 +710,7 @@ export async function applyTemplate(
           : { status: "clean" };
       }
 
-      await writeManagedProjx(cwd, version, vars);
+      await writeManagedProjx(cwd, version, vars, applyDefaults);
 
       for (const f of result.merged) {
         try {
@@ -526,6 +720,17 @@ export async function applyTemplate(
         }
       }
       execSync("git add .projx", { cwd, stdio: "pipe" });
+      for (const component of components) {
+        const dir = componentPaths[component];
+        const markerRel = `${dir}/.projx-component`;
+        if (existsSync(join(cwd, markerRel))) {
+          try {
+            execSync(`git add "${markerRel}"`, { cwd, stdio: "pipe" });
+          } catch {
+            // best effort
+          }
+        }
+      }
 
       return {
         status: "conflicts",
@@ -535,8 +740,13 @@ export async function applyTemplate(
     }
 
     // --- Tier 3: Direct copy (no baseline available) ---
-    // Overwrite template files, user reviews everything with git diff
-    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, origin, componentSkips, rootSkip);
+    await writeTemplateToDir(cwd, repoDir, components, componentPaths, vars, version, {
+      componentSkips,
+      rootSkip,
+      applyDefaults,
+      realCwd: cwd,
+    });
+    await migrateComponentMarkers(cwd, components, componentPaths, applyDefaults);
     return { status: "conflicts" };
 
   } catch (err) {
