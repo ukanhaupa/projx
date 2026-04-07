@@ -22,6 +22,7 @@ interface ProjxConfig {
   components: Component[];
   createdAt: string;
   skip?: string[];
+  packageManager?: string;
 }
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {

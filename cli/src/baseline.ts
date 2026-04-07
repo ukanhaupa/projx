@@ -39,6 +39,39 @@ export interface MergeResult {
 
 export const BASELINE_REF = "refs/projx/baseline";
 
+async function writeManagedProjx(
+  cwd: string,
+  version: string,
+  vars: GeneratorVars,
+  components?: Component[],
+): Promise<void> {
+  const projxPath = join(cwd, ".projx");
+  let existing: Record<string, unknown> = {};
+  if (existsSync(projxPath)) {
+    try {
+      existing = JSON.parse(await readFile(projxPath, "utf-8"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`projx: existing .projx is unreadable (${msg}); writing fresh.`);
+    }
+  }
+  const merged: Record<string, unknown> = {
+    ...existing,
+    version,
+  };
+  if (components !== undefined) {
+    merged.components = components;
+  }
+  if (typeof merged.createdAt !== "string") {
+    merged.createdAt = new Date().toISOString().split("T")[0];
+  }
+  const pmObj = vars.pm as { name?: string } | undefined;
+  if (pmObj?.name && !merged.packageManager) {
+    merged.packageManager = pmObj.name;
+  }
+  await writeFile(projxPath, JSON.stringify(merged, null, 2) + "\n");
+}
+
 export function matchesSkip(filePath: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     if (pattern === "**") return true;
@@ -116,7 +149,10 @@ function mergeFileThreeWay(
   try {
     writeFileSync(baseTmp, baseContent);
     writeFileSync(theirsTmp, theirsContent);
-    execSync(`git merge-file "${oursPath}" "${baseTmp}" "${theirsTmp}"`, { stdio: "pipe" });
+    execSync(
+      `git merge-file -L "your changes" -L "previous projx baseline" -L "new projx template" "${oursPath}" "${baseTmp}" "${theirsTmp}"`,
+      { stdio: "pipe" },
+    );
     return true;
   } catch {
     return false;
@@ -156,6 +192,7 @@ async function tryThreeWayMerge(
   const conflicted: string[] = [];
 
   for (const file of templateFiles) {
+    if (file === ".projx") continue;
     const oursPath = join(cwd, file);
     if (!existsSync(oursPath)) continue;
 
@@ -171,13 +208,16 @@ async function tryThreeWayMerge(
 
     const oursContent = await readFile(oursPath, "utf-8");
 
-    // Skip files where user hasn't changed from baseline (tier 1 would handle)
-    if (oursContent === baseContent) continue;
-
-    // Skip files where template hasn't changed from baseline
     if (theirsContent === baseContent) continue;
 
-    // Both sides changed — need 3-way merge
+    if (oursContent === baseContent) {
+      await writeFile(oursPath, theirsContent);
+      merged.push(file);
+      continue;
+    }
+
+    if (oursContent === theirsContent) continue;
+
     const clean = mergeFileThreeWay(oursPath, baseContent, theirsContent);
     if (clean) {
       merged.push(file);
@@ -336,14 +376,7 @@ export async function writeTemplateToDir(
     await writeFile(join(dest, ".vscode/settings.json"), generateVscodeSettings(vars));
   }
 
-  const projxConfig: Record<string, unknown> = {
-    version,
-    components,
-    createdAt: new Date().toISOString().split("T")[0],
-  };
-  const pmObj = vars.pm as { name?: string } | undefined;
-  if (pmObj?.name) projxConfig.packageManager = pmObj.name;
-  await writeFile(join(dest, ".projx"), JSON.stringify(projxConfig, null, 2) + "\n");
+  await writeManagedProjx(dest, version, vars, components);
 }
 
 async function substituteNames(
@@ -467,17 +500,8 @@ export async function applyTemplate(
       const result = await tryThreeWayMerge(cwd, tmpTemplate, baselineRef);
       await rm(tmpTemplate, { recursive: true, force: true });
 
-      const projxConfig: Record<string, unknown> = {
-        version,
-        components,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-      const pmObj = vars.pm as { name?: string } | undefined;
-  if (pmObj?.name) projxConfig.packageManager = pmObj.name;
-      await writeFile(join(cwd, ".projx"), JSON.stringify(projxConfig, null, 2) + "\n");
-
       if (result.conflicted.length === 0) {
-        // All clean — stage and commit
+        await writeManagedProjx(cwd, version, vars);
         execSync("git add -A", { cwd, stdio: "pipe" });
         const staged = execSync("git diff --cached --stat", { cwd, stdio: "pipe" }).toString().trim();
         if (staged) {
@@ -492,17 +516,8 @@ export async function applyTemplate(
           : { status: "clean" };
       }
 
-      // Partial — stage clean merges, leave conflicts unstaged for review
-      // Revert conflict markers from failed files (restore user's version)
-      for (const f of result.conflicted) {
-        try {
-          execSync(`git checkout -- "${f}"`, { cwd, stdio: "pipe" });
-        } catch {
-          // file may be new/untracked
-        }
-      }
+      await writeManagedProjx(cwd, version, vars);
 
-      // Stage the clean merges + .projx
       for (const f of result.merged) {
         try {
           execSync(`git add "${f}"`, { cwd, stdio: "pipe" });
