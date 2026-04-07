@@ -105,7 +105,7 @@ export async function init(
 
     const applySpinner = p.spinner();
     applySpinner.start("Applying template");
-    const result = await applyTemplate(cwd, repoDir, components, paths, vars, version, "init");
+    const result = await applyTemplate(cwd, repoDir, components, paths, vars, version, undefined, undefined, true);
     applySpinner.stop("Template applied.");
 
     if (existsSync(join(cwd, ".githooks"))) {

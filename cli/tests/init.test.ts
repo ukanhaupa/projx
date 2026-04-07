@@ -3,7 +3,7 @@ import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { detectComponents } from "../src/detect.js";
-import { discoverComponentPaths, writeComponentMarker } from "../src/utils.js";
+import { discoverComponentPaths, upsertComponentMarker } from "../src/utils.js";
 import type { Component } from "../src/utils.js";
 
 describe("init workflow", () => {
@@ -49,10 +49,10 @@ describe("init workflow", () => {
     await mkdir(tmp, { recursive: true });
 
     await mkdir(join(tmp, "backend"));
-    await writeComponentMarker(join(tmp, "backend"), "fastapi", "init");
+    await upsertComponentMarker(join(tmp, "backend"), "fastapi", "init");
 
     await mkdir(join(tmp, "web"));
-    await writeComponentMarker(join(tmp, "web"), "frontend", "init");
+    await upsertComponentMarker(join(tmp, "web"), "frontend", "init");
 
     const paths = await discoverComponentPaths(tmp, ["fastapi", "frontend"] as Component[]);
     expect(paths.fastapi).toBe("backend");
@@ -79,7 +79,7 @@ describe("init workflow", () => {
     expect(detected).toHaveLength(2);
 
     for (const d of detected) {
-      await writeComponentMarker(join(tmp, d.directory), d.component, "init");
+      await upsertComponentMarker(join(tmp, d.directory), d.component, "init");
     }
 
     const components = detected.map((d) => d.component) as Component[];

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as p from "@clack/prompts";
 import {
-  type Component,
   type ComponentPaths,
   cleanupRepo,
   detectProjectName,
@@ -12,6 +11,7 @@ import {
   downloadRepo,
   pmCommands,
   readComponentMarker,
+  readProjxConfig,
 } from "./utils.js";
 import {
   collectAllFiles,
@@ -34,14 +34,6 @@ interface FileAnalysis {
   file: string;
   status: FileStatus;
   component?: string;
-}
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-  createdAt: string;
-  skip?: string[];
-  packageManager?: string;
 }
 
 function isSkipped(
@@ -76,25 +68,23 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
   p.intro("projx diff");
   const isLocal = !!localRepo;
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
 
-  const raw: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
-  const config = { ...raw, components: discovered.length > 0 ? discovered : raw.components };
+  const raw = await readProjxConfig(cwd);
+  const { components, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
 
   const componentSkips: Record<string, string[]> = {};
-  for (const component of config.components) {
+  for (const component of components) {
     const dir = componentPaths[component];
     const marker = await readComponentMarker(join(cwd, dir));
     if (marker?.skip && marker.skip.length > 0) {
       componentSkips[component] = marker.skip;
     }
   }
-  const rootSkip = config.skip ?? [];
+  const rootSkip: string[] = Array.isArray(raw.skip) ? (raw.skip as string[]) : [];
 
   const dlSpinner = p.spinner();
   dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");
@@ -109,18 +99,21 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
     const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
     const version = pkg.version;
 
-    p.log.info(`Current: v${config.version} → Template: v${version}`);
+    p.log.info(`Current: v${raw.version ?? "unknown"} → Template: v${version}`);
 
-    const name = detectProjectName(cwd, config.components, componentPaths);
-    const vars: GeneratorVars = { projectName: name, components: config.components, paths: componentPaths, pm: pmCommands((raw.packageManager ?? "npm") as "npm") };
+    const name = detectProjectName(cwd, components, componentPaths);
+    const vars: GeneratorVars = { projectName: name, components, paths: componentPaths, pm: pmCommands((raw.packageManager ?? "npm") as "npm") };
 
     const spinner = p.spinner();
     spinner.start("Analyzing changes");
 
-    // Write template to temp dir
     const tmpTemplate = join(tmpdir(), `projx-diff-${Date.now()}`);
     await mkdir(tmpTemplate, { recursive: true });
-    await writeTemplateToDir(tmpTemplate, repoDir, config.components, componentPaths, vars, version, "scaffold", componentSkips, rootSkip);
+    await writeTemplateToDir(tmpTemplate, repoDir, components, componentPaths, vars, version, {
+      componentSkips,
+      rootSkip,
+      realCwd: cwd,
+    });
 
     const baselineRef = getBaselineRef(cwd);
     const templateFiles = await collectAllFiles(tmpTemplate, tmpTemplate);

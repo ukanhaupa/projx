@@ -236,15 +236,28 @@ class TestRegistryValidation:
         assert "bad_soft_delete_test" not in EntityRegistry._entities
         EntityRegistry._entities = saved
 
-    def test_build_readonly_controller(self):
+    def test_readonly_entity_only_exposes_get_routes(self):
+        from src.app import app
         from src.entities.base import EntityRegistry
 
-        meta = EntityRegistry._entities.get("audit_logs")
-        if meta:
-            ctrl = EntityRegistry._build_controller(meta)
-            from src.entities.base._registry import _ReadOnlyController
+        readonly_entities = [(name, meta) for name, meta in EntityRegistry._entities.items() if meta.readonly]
+        if not readonly_entities:
+            pytest.skip("no readonly entities registered")
 
-            assert isinstance(ctrl, _ReadOnlyController)
+        write_methods = {"POST", "PUT", "PATCH", "DELETE"}
+
+        for name, _meta in readonly_entities:
+            kebab = name.replace("_", "-")
+            observed_methods: set[str] = set()
+            for route in app.routes:
+                path = getattr(route, "path", "")
+                if f"/{name}" in path or f"/{kebab}" in path:
+                    observed_methods.update(getattr(route, "methods", set()) or set())
+
+            if observed_methods:
+                assert observed_methods.isdisjoint(write_methods), (
+                    f"readonly entity {name} should not expose write routes, got {observed_methods & write_methods}"
+                )
 
 
 class TestDatabaseConfig:

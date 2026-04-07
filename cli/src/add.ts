@@ -9,19 +9,14 @@ import {
   cleanupRepo,
   detectProjectName,
   discoverComponentPaths,
+  discoverComponentsFromMarkers,
   downloadRepo,
   exec,
   hasCommand,
   pmCommands,
+  readProjxConfig,
 } from "./utils.js";
 import { writeTemplateToDir, type GeneratorVars } from "./baseline.js";
-
-interface ProjxConfig {
-  version: string;
-  components: Component[];
-  createdAt: string;
-  packageManager?: PackageManager;
-}
 
 export async function add(
   cwd: string,
@@ -32,14 +27,13 @@ export async function add(
   p.intro("projx add");
   const isLocal = !!localRepo;
 
-  const configPath = join(cwd, ".projx");
-  if (!existsSync(configPath)) {
+  if (!existsSync(join(cwd, ".projx"))) {
     p.log.error("No .projx file found. Run 'npx create-projx <name>' to create a project first.");
     process.exit(1);
   }
 
-  const config: ProjxConfig = JSON.parse(await readFile(configPath, "utf-8"));
-  const existing = config.components;
+  const config = await readProjxConfig(cwd);
+  const { components: existing } = await discoverComponentsFromMarkers(cwd);
 
   const alreadyExists = newComponents.filter((c) => existing.includes(c));
   if (alreadyExists.length > 0) {
@@ -69,7 +63,7 @@ export async function add(
     const paths: ComponentPaths = { ...existingPaths };
     for (const c of toAdd) paths[c] = c;
 
-    const pm: PackageManager = config.packageManager ?? "npm";
+    const pm: PackageManager = (config.packageManager as PackageManager) ?? "npm";
     const name = detectProjectName(cwd, existing, paths);
     const vars: GeneratorVars = { projectName: name, components: allComponents, paths, pm: pmCommands(pm) };
 
@@ -78,7 +72,7 @@ export async function add(
 
     const spinner = p.spinner();
     spinner.start("Adding components");
-    await writeTemplateToDir(cwd, repoDir, allComponents, paths, vars, version, "scaffold");
+    await writeTemplateToDir(cwd, repoDir, allComponents, paths, vars, version, { realCwd: cwd });
     spinner.stop("Components added.");
 
     if (!skipInstall) {

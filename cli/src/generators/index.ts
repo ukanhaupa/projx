@@ -6,6 +6,8 @@ interface GeneratorVars {
   projectName: string;
   components: Component[];
   paths: ComponentPaths;
+  pathsUpper?: Partial<Record<Component, string>>;
+  displayNames?: Partial<Record<Component, string>>;
   [key: string]: unknown;
 }
 

@@ -44,12 +44,11 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
 
     if (opts.git) {
       exec("git init", dest);
-      exec("git config core.hooksPath .githooks", dest);
     }
 
     const spinner = p.spinner();
     spinner.start("Scaffolding project");
-    await applyTemplate(dest, repoDir, opts.components, paths, vars, version);
+    await applyTemplate(dest, repoDir, opts.components, paths, vars, version, undefined, undefined, true);
     spinner.stop("Scaffold complete.");
 
     if (opts.install) {
@@ -61,7 +60,8 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
     if (opts.git) {
       try {
         exec("git add -A", dest);
-        exec('git commit --no-verify -m "Initial scaffold from projx"', dest);
+        exec('git commit -m "Initial scaffold from projx"', dest);
+        exec("git config core.hooksPath .githooks", dest);
         saveBaselineRef(dest);
       } catch {
         // deps/env may add untracked files

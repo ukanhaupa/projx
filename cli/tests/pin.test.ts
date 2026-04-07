@@ -70,10 +70,11 @@ describe("pin", () => {
       REPO_DIR,
     );
 
+    const before = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     await pin(dest, [".projx"]);
-
-    const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
-    expect(config.skip).toBeUndefined();
+    const after = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    expect(after.skip).toEqual(before.skip);
+    expect(after.skip).not.toContain(".projx");
   });
 
   it("pins glob patterns", async () => {
@@ -134,7 +135,7 @@ describe("unpin", () => {
     expect(marker.skip).toContain("Dockerfile");
   });
 
-  it("removes skip field when last pattern unpinned", async () => {
+  it("can unpin a default skip pattern", async () => {
     dest = join(tmpdir(), `projx-unpin-last-${Date.now()}`);
     await scaffold(
       { name: "unpin-app", components: ["fastify"], git: true, install: false },
@@ -142,10 +143,12 @@ describe("unpin", () => {
       REPO_DIR,
     );
 
-    await pin(dest, ["README.md"]);
+    const before = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    expect(before.skip).toContain("README.md");
+
     await unpin(dest, ["README.md"]);
 
-    const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
-    expect(config.skip).toBeUndefined();
+    const after = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
+    expect(after.skip).not.toContain("README.md");
   });
 });

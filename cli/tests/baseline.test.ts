@@ -67,14 +67,13 @@ describe("skip patterns in update", () => {
     );
 
     await writeFile(join(dest, "fastify/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-      origin: "init",
+      component: "fastify",
       skip: ["src/**", "tests/**"],
     }, null, 2));
-    execSync("git add -A && git commit --no-verify -m 'set skip'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'set skip'", { cwd: dest, stdio: "pipe" });
 
     await writeFile(join(dest, "fastify/src/custom.ts"), "// custom\n");
-    execSync("git add -A && git commit --no-verify -m 'add custom'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -91,11 +90,10 @@ describe("skip patterns in update", () => {
     );
 
     await writeFile(join(dest, "fastify/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-      origin: "scaffold",
+      component: "fastify",
       skip: [],
     }, null, 2));
-    execSync("git add -A && git commit --no-verify -m 'set no skip'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'set no skip'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -134,7 +132,7 @@ describe("3-way merge", () => {
     let pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"custom-field": "user-value",\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'user customization'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'user customization'", { cwd: dest, stdio: "pipe" });
 
     // Run update — tier 1 will fail (orphan merge), tier 2 should 3-way merge
     await update(dest, REPO_DIR);
@@ -198,7 +196,7 @@ describe("tier 1: git merge via worktree", () => {
 
     await writeFile(join(dest, "fastify/src/my-service.ts"), "export class MyService {}\n");
     await writeFile(join(dest, "notes.txt"), "project notes\n");
-    execSync("git add -A && git commit --no-verify -m 'add custom files'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom files'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -253,13 +251,13 @@ describe("tier 1: git merge via worktree", () => {
 
     // Rename fastify/ → api/
     execSync(`mv "${join(dest, "fastify")}" "${join(dest, "api")}"`, { stdio: "pipe" });
-    execSync("git add -A && git commit --no-verify -m 'rename fastify to api'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename fastify to api'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
     // Component marker still works
     const marker = JSON.parse(await readFile(join(dest, "api/.projx-component"), "utf-8"));
-    expect(marker.components).toContain("fastify");
+    expect(marker.component).toBe("fastify");
   });
 });
 
@@ -283,7 +281,7 @@ describe("tier 2: per-file 3-way merge", () => {
     let pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"custom-dep": "1.0.0",\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'add custom dep'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom dep'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -304,7 +302,7 @@ describe("tier 2: per-file 3-way merge", () => {
     let env = await readFile(envPath, "utf-8");
     env += "\n# Custom\nMY_CUSTOM_VAR=secret\n";
     await writeFile(envPath, env);
-    execSync("git add -A && git commit --no-verify -m 'add custom env'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom env'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -321,7 +319,7 @@ describe("tier 2: per-file 3-way merge", () => {
     );
 
     await writeFile(join(dest, "fastify/src/my-middleware.ts"), "export const mw = () => {}\n");
-    execSync("git add -A && git commit --no-verify -m 'add middleware'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add middleware'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -348,7 +346,7 @@ describe("tier 2: per-file 3-way merge", () => {
     let pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"my-field": "kept",\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'user change'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'user change'", { cwd: dest, stdio: "pipe" });
 
     // Update should find baseline from git log -- .projx
     await update(dest, REPO_DIR);
@@ -376,7 +374,7 @@ describe("tier 2: per-file 3-way merge", () => {
     epkg = epkg.replace('"private":', '"e2e-custom": true,\n  "private":');
     await writeFile(e2ePkg, epkg);
 
-    execSync("git add -A && git commit --no-verify -m 'customize both'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'customize both'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -394,13 +392,12 @@ describe("tier 2: per-file 3-way merge", () => {
 
     // Set skip on src/**
     await writeFile(join(dest, "fastify/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-      origin: "scaffold",
+      component: "fastify",
       skip: ["src/**"],
     }, null, 2));
 
     await writeFile(join(dest, "fastify/src/custom.ts"), "// my custom code\n");
-    execSync("git add -A && git commit --no-verify -m 'skip + custom'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'skip + custom'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -425,13 +422,13 @@ describe("tier 3: direct copy fallback", () => {
     );
 
     await writeFile(join(dest, "fastify/src/billing.ts"), "export const billing = {}\n");
-    execSync("git add -A && git commit --no-verify -m 'add billing'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add billing'", { cwd: dest, stdio: "pipe" });
 
     // Direct template write (simulates tier 3)
     const paths: ComponentPaths = { fastapi: "fastapi", fastify: "fastify", frontend: "frontend", mobile: "mobile", e2e: "e2e", infra: "infra" };
     const vars: GeneratorVars = { projectName: "t3-app", components: ["fastify"] as any, paths };
     const { writeTemplateToDir } = await import("../src/baseline.js");
-    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6", "scaffold");
+    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6");
 
     expect(await readFile(join(dest, "fastify/src/billing.ts"), "utf-8")).toContain("billing");
   });
@@ -445,12 +442,12 @@ describe("tier 3: direct copy fallback", () => {
     );
 
     await writeFile(join(dest, "fastify/Dockerfile"), "# user dockerfile\n");
-    execSync("git add -A && git commit --no-verify -m 'custom dockerfile'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'custom dockerfile'", { cwd: dest, stdio: "pipe" });
 
     const paths: ComponentPaths = { fastapi: "fastapi", fastify: "fastify", frontend: "frontend", mobile: "mobile", e2e: "e2e", infra: "infra" };
     const vars: GeneratorVars = { projectName: "t3-app", components: ["fastify"] as any, paths };
     const { writeTemplateToDir } = await import("../src/baseline.js");
-    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6", "scaffold");
+    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6");
 
     const dockerfile = await readFile(join(dest, "fastify/Dockerfile"), "utf-8");
     expect(dockerfile).not.toContain("user dockerfile");
@@ -469,7 +466,10 @@ describe("tier 3: direct copy fallback", () => {
     const paths: ComponentPaths = { fastapi: "fastapi", fastify: "fastify", frontend: "frontend", mobile: "mobile", e2e: "e2e", infra: "infra" };
     const vars: GeneratorVars = { projectName: "t3-app", components: ["fastify"] as any, paths };
     const { writeTemplateToDir } = await import("../src/baseline.js");
-    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6", "scaffold", { fastify: ["Dockerfile"] });
+    await writeTemplateToDir(dest, REPO_DIR, ["fastify"], paths, vars, "1.3.6", {
+      componentSkips: { fastify: ["Dockerfile"] },
+      realCwd: dest,
+    });
 
     const dockerfile = await readFile(join(dest, "fastify/Dockerfile"), "utf-8");
     expect(dockerfile).toContain("custom");
@@ -496,7 +496,7 @@ describe("cross-tier edge cases", () => {
     let pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"cycle-one": true,\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'cycle 1'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'cycle 1'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
     expect(await readFile(pkgPath, "utf-8")).toContain("cycle-one");
@@ -505,7 +505,7 @@ describe("cross-tier edge cases", () => {
     pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"cycle-two": true,\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'cycle 2'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'cycle 2'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -547,7 +547,7 @@ describe("cross-tier edge cases", () => {
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     config.version = "0.0.1";
     await writeFile(join(dest, ".projx"), JSON.stringify(config, null, 2) + "\n");
-    execSync("git add -A && git commit --no-verify -m 'downgrade version'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'downgrade version'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 
@@ -571,7 +571,7 @@ describe("cross-tier edge cases", () => {
 
     // Customize docker-compose
     await writeFile(join(dest, "docker-compose.yml"), "# my custom compose\n");
-    execSync("git add -A && git commit --no-verify -m 'custom compose + skip'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'custom compose + skip'", { cwd: dest, stdio: "pipe" });
 
     await update(dest, REPO_DIR);
 

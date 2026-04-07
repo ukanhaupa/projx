@@ -6,30 +6,30 @@ echo "Git hooks configured."
 <% if (components.includes('fastapi')) { %>
 
 cd <%= paths.fastapi %> && uv sync --all-extras && cd ..
-echo "FastAPI dependencies installed."
+echo "<%= displayNames.fastapi %> dependencies installed."
 <% } %>
 <% if (components.includes('fastify')) { %>
 
 cd <%= paths.fastify %> && <%= pm.ci %> && cd ..
-echo "Fastify dependencies installed."
+echo "<%= displayNames.fastify %> dependencies installed."
 <% } %>
 <% if (components.includes('frontend')) { %>
 
 cd <%= paths.frontend %> && <%= pm.ci %> && cd ..
-echo "Frontend dependencies installed."
+echo "<%= displayNames.frontend %> dependencies installed."
 <% } %>
 <% if (components.includes('e2e')) { %>
 
 cd <%= paths.e2e %> && <%= pm.ci %> && cd ..
-echo "E2E dependencies installed."
+echo "<%= displayNames.e2e %> dependencies installed."
 <% } %>
 <% if (components.includes('mobile')) { %>
 
 if command -v flutter &>/dev/null; then
   cd <%= paths.mobile %> && flutter pub get && cd ..
-  echo "Flutter dependencies installed."
+  echo "<%= displayNames.mobile %> dependencies installed."
 else
-  echo "Flutter SDK not installed — skipping mobile."
+  echo "<%= displayNames.mobile %> skipped (SDK not installed)."
 fi
 <% } %>
 

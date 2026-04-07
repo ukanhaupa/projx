@@ -300,10 +300,9 @@ describe("gen entity", () => {
     execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
 
     const projx = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
-    projx.components = ["ai", "backend"];
     projx.primaryBackend = "fastify";
     await writeFile(join(dest, ".projx"), JSON.stringify(projx, null, 2) + "\n");
-    execSync("git add -A && git commit --no-verify -m 'rename dirs'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename dirs'", { cwd: dest, stdio: "pipe" });
 
     await gen(dest, "tenant", "name:string,domain:string");
 

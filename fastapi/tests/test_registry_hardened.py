@@ -12,10 +12,7 @@ from src.entities.base import (
     create_create_schema,
     create_update_schema,
 )
-from src.entities.base._registry import (
-    _AutoController,
-    _ReadOnlyController,
-)
+from src.entities.base._registry import _AutoController, _ReadOnlyController
 
 from .test_base_crud import Widget
 

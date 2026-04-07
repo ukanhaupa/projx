@@ -38,7 +38,7 @@ describe("diff", () => {
     let pkg = await readFile(pkgPath, "utf-8");
     pkg = pkg.replace('"description":', '"custom": true,\n  "description":');
     await writeFile(pkgPath, pkg);
-    execSync("git add -A && git commit --no-verify -m 'user mod'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'user mod'", { cwd: dest, stdio: "pipe" });
 
     await diff(dest, REPO_DIR);
   });
@@ -66,7 +66,7 @@ describe("diff", () => {
     const marker = JSON.parse(await readFile(markerPath, "utf-8"));
     marker.skip = ["src/**"];
     await writeFile(markerPath, JSON.stringify(marker, null, 2) + "\n");
-    execSync("git add -A && git commit --no-verify -m 'set skip'", { cwd: dest, stdio: "pipe" });
+    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'set skip'", { cwd: dest, stdio: "pipe" });
 
     await diff(dest, REPO_DIR);
   });

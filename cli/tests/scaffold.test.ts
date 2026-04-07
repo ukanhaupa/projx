@@ -37,8 +37,14 @@ describe("scaffold", () => {
     );
 
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
-    expect(config.components).toEqual(["fastify"]);
+    expect(config.version).toBeTruthy();
+    expect(config.components).toBeUndefined();
     expect(config.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(config.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(config.defaultsApplied).toBe(true);
+    expect(config.skip).toContain("docker-compose.yml");
+    expect(config.skip).toContain("docker-compose.dev.yml");
+    expect(config.skip).toContain("README.md");
   });
 
   it("writes .projx-component markers", async () => {
@@ -52,13 +58,14 @@ describe("scaffold", () => {
     const fastifyMarker = JSON.parse(
       await readFile(join(dest, "fastify/.projx-component"), "utf-8"),
     );
-    expect(fastifyMarker.components).toEqual(["fastify"]);
-    expect(fastifyMarker.origin).toBe("scaffold");
+    expect(fastifyMarker.component).toBe("fastify");
+    expect(fastifyMarker.skip).toContain("package.json");
+    expect(fastifyMarker.origin).toBeUndefined();
 
     const frontendMarker = JSON.parse(
       await readFile(join(dest, "frontend/.projx-component"), "utf-8"),
     );
-    expect(frontendMarker.components).toEqual(["frontend"]);
+    expect(frontendMarker.component).toBe("frontend");
   });
 
   it("generates shared files", async () => {
@@ -74,6 +81,35 @@ describe("scaffold", () => {
     expect(existsSync(join(dest, ".github/workflows/ci.yml"))).toBe(true);
     expect(existsSync(join(dest, "README.md"))).toBe(true);
     expect(existsSync(join(dest, ".vscode/settings.json"))).toBe(true);
+  });
+
+  it("ci.yml uses canonical display names (FastAPI, Fastify, Frontend, Flutter)", async () => {
+    dest = join(tmpdir(), `projx-display-${Date.now()}`);
+    await scaffold(
+      { name: "display-app", components: ["fastapi", "fastify", "frontend", "mobile"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
+    expect(ci).toContain("name: FastAPI (format + lint)");
+    expect(ci).toContain("name: Fastify (format + lint + typecheck)");
+    expect(ci).toContain("name: Frontend (format + lint + typecheck)");
+    expect(ci).toContain("name: Flutter (format + analyze)");
+  });
+
+  it("setup.sh uses canonical display names", async () => {
+    dest = join(tmpdir(), `projx-setup-display-${Date.now()}`);
+    await scaffold(
+      { name: "display-app", components: ["fastapi", "fastify", "frontend"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const setup = await readFile(join(dest, "setup.sh"), "utf-8");
+    expect(setup).toContain("FastAPI dependencies installed.");
+    expect(setup).toContain("Fastify dependencies installed.");
+    expect(setup).toContain("Frontend dependencies installed.");
   });
 
   it("substitutes project name in package.json", async () => {
