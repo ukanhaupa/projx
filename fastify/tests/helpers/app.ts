@@ -26,7 +26,7 @@ export async function buildTestApp(): Promise<FastifyInstance> {
         );
       }
 
-      instance.get('/_meta', async () => {
+      instance.get('/_meta', { onRequest: [instance.authenticate] }, async () => {
         return EntityRegistry.getMeta();
       });
     },

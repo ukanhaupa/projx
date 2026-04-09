@@ -90,6 +90,10 @@ class EntityRegistry:
             if table_name in cls._entities:
                 continue
 
+            if getattr(model_cls, "__private__", False):
+                logger.debug(f"Skipping {model_cls.__name__}: __private__=True (entity hidden from API)")
+                continue
+
             api_prefix = getattr(model_cls, "__api_prefix__", None) or "/" + table_name.replace("_", "-")
             if not re.match(r"^/[a-z0-9][a-z0-9\-]*$", api_prefix):
                 logger.warning(

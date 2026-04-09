@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { Type } from '@sinclair/typebox';
-import type { EntityConfig } from './entity-registry.js';
+import { ensureEffectiveHiddenFields, type EntityConfig } from './entity-registry.js';
 import { BaseRepository } from './repository.js';
 import { BaseService } from './service.js';
 import { formatPaginatedResponse, type QueryParams } from './query-engine.js';
@@ -52,10 +52,12 @@ function buildAuthHooks(fastify: FastifyInstance, entityConfig: EntityConfig, op
 }
 
 export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: EntityConfig): void {
+  const hiddenFields = ensureEffectiveHiddenFields(entityConfig);
   const repo = new BaseRepository(fastify.prisma, entityConfig.prismaModel, {
     columnNames: entityConfig.columnNames,
     searchableFields: entityConfig.searchableFields,
     softDelete: entityConfig.softDelete,
+    hiddenFields,
   });
   const service = new BaseService(repo);
   const tag = entityConfig.tags;

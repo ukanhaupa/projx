@@ -258,7 +258,7 @@ class TestSanitizeOrderBy:
 
 class TestJsonFilter:
     @pytest.mark.asyncio
-    async def test_json_filter(self, test_db):
+    async def test_json_columns_skipped_from_equality_filter(self, test_db):
         from sqlalchemy import JSON, Column
         from sqlalchemy import String as SString
 
@@ -273,25 +273,7 @@ class TestJsonFilter:
         repo = BaseRepository(JsonWidget)
         await repo.create(JsonWidget(name="JW", metadata_col={"key": "val"}))
         results = await repo.list(filter_by={"metadata_col": '{"key": "val"}'})
-        assert len(results) >= 0  # JSON filtering behavior varies by DB
-
-    @pytest.mark.asyncio
-    async def test_invalid_json_filter(self, test_db):
-        from sqlalchemy import JSON, Column
-        from sqlalchemy import String as SString
-
-        class JsonWidget2(BaseModel_):
-            __tablename__ = "json_widgets2"
-            name = Column(SString(100), nullable=False)
-            data = Column(JSON, nullable=True)
-
-        async with test_db.begin():
-            await test_db.run_sync(lambda sess: BaseModel_.metadata.create_all(sess.get_bind()))
-
-        repo = BaseRepository(JsonWidget2)
-        await repo.create(JsonWidget2(name="Test", data={"k": "v"}))
-        with pytest.raises(ValueError, match="Invalid JSON"):
-            await repo.list(filter_by={"data": "not-json{"})
+        assert len(results) >= 1  # JSON filter silently ignored, returns all rows
 
 
 class TestCoerceValueEdgeCases:

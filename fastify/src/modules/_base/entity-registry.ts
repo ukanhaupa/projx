@@ -1,5 +1,20 @@
 import type { TObject, TProperties } from '@sinclair/typebox';
 
+export const BUILT_IN_PRIVATE_COLUMNS = new Set([
+  'password',
+  'password_hash',
+  'secret',
+  'secret_hash',
+  'token_hash',
+  'refresh_token_jti',
+  'mfa_secret',
+  'recovery_codes',
+  'salt',
+  'api_key',
+  'private_key',
+  'encryption_key',
+]);
+
 export interface FieldMeta {
   key: string;
   label: string;
@@ -25,6 +40,8 @@ export interface EntityConfig {
   bulkOperations: boolean;
   columnNames: string[];
   searchableFields: string[];
+  hiddenFields?: string[];
+  private?: boolean;
   fields: FieldMeta[];
   schema: TObject<TProperties>;
   createSchema: TObject<TProperties>;
@@ -40,12 +57,24 @@ export interface EntityConfig {
       delete?: string;
     };
   };
+  _effectiveHiddenFields?: Set<string>;
+}
+
+export function ensureEffectiveHiddenFields(config: EntityConfig): Set<string> {
+  if (config._effectiveHiddenFields) return config._effectiveHiddenFields;
+  const columnSet = new Set(config.columnNames);
+  const explicit = new Set(config.hiddenFields ?? []);
+  const baseline = new Set([...BUILT_IN_PRIVATE_COLUMNS].filter((col) => columnSet.has(col)));
+  config._effectiveHiddenFields = new Set([...explicit, ...baseline]);
+  return config._effectiveHiddenFields;
 }
 
 class EntityRegistryClass {
   private entities: Map<string, EntityConfig> = new Map();
 
   register(config: EntityConfig): void {
+    if (config.private) return;
+
     if (config.softDelete && !config.columnNames.includes('deleted_at')) {
       throw new Error(
         `Entity "${config.name}" has softDelete enabled but "deleted_at" is not in columnNames. ` +
@@ -62,6 +91,8 @@ class EntityRegistryClass {
         );
       }
     }
+
+    ensureEffectiveHiddenFields(config);
 
     this.entities.set(config.tableName, config);
   }
@@ -80,16 +111,19 @@ class EntityRegistryClass {
 
   getMeta(): { entities: Array<Record<string, unknown>> } {
     return {
-      entities: this.getAll().map((entity) => ({
-        name: entity.name,
-        table_name: entity.tableName,
-        api_prefix: entity.apiPrefix,
-        tags: entity.tags,
-        readonly: entity.readonly,
-        soft_delete: entity.softDelete,
-        bulk_operations: entity.bulkOperations && !entity.readonly,
-        fields: entity.fields,
-      })),
+      entities: this.getAll().map((entity) => {
+        const hidden = entity._effectiveHiddenFields ?? new Set<string>();
+        return {
+          name: entity.name,
+          table_name: entity.tableName,
+          api_prefix: entity.apiPrefix,
+          tags: entity.tags,
+          readonly: entity.readonly,
+          soft_delete: entity.softDelete,
+          bulk_operations: entity.bulkOperations && !entity.readonly,
+          fields: entity.fields.filter((f) => !hidden.has(f.key)),
+        };
+      }),
     };
   }
 }

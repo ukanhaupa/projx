@@ -1,9 +1,26 @@
 from collections.abc import Iterator
 
-from sqlalchemy import BigInteger, Column, DateTime, Integer, func
+from sqlalchemy import BigInteger, Column, DateTime, Integer, event, func
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
+
+_BUILT_IN_PRIVATE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "password",
+        "password_hash",
+        "secret",
+        "secret_hash",
+        "token_hash",
+        "refresh_token_jti",
+        "mfa_secret",
+        "recovery_codes",
+        "salt",
+        "api_key",
+        "private_key",
+        "encryption_key",
+    }
+)
 
 
 class BaseModel_(Base):
@@ -18,6 +35,7 @@ class BaseModel_(Base):
     __api_prefix__: str | None = None  # e.g. "/users" — defaults to tablename with hyphens
     __api_tags__: list | None = None  # OpenAPI tags — defaults to [api_prefix]
     __readonly__: bool = False  # True = only GET endpoints registered
+    __private__: bool = False  # True = entity hidden from auto-discovery (no routes, not in /_meta)
     __soft_delete__: bool = False  # True = adds deleted_at column, filters by default
     __bulk_operations__: bool = True  # True = registers /bulk endpoints
     __create_fields__: set[str] | None = None  # Fields allowed on create (None = all non-base)
@@ -59,3 +77,14 @@ class BusinessRuleError(Exception):
     def __init__(self, detail: str):
         self.detail = detail
         super().__init__(detail)
+
+
+@event.listens_for(BaseModel_, "instrument_class", propagate=True)
+def _apply_built_in_private_columns(mapper, cls):  # type: ignore[no-untyped-def]
+    if cls is BaseModel_ or cls.__dict__.get("__abstract__", False):
+        return
+    if not hasattr(cls, "__table__"):
+        return
+    col_names = {c.key for c in cls.__table__.columns}
+    existing = set(cls.__dict__.get("__hidden_fields__", set()) or set())
+    cls.__hidden_fields__ = existing | (_BUILT_IN_PRIVATE_COLUMNS & col_names)
