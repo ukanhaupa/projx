@@ -26,14 +26,14 @@ export async function buildTestApp(): Promise<FastifyInstance> {
         );
       }
 
-      instance.get('/_meta', { onRequest: [instance.authenticate] }, async () => {
+      instance.get('/_meta', async () => {
         return EntityRegistry.getMeta();
       });
     },
     { prefix: '/api/v1' },
   );
 
-  app.get('/api/health', async (_request, reply) => {
+  app.get('/api/health', { config: { public: true } }, async (_request, reply) => {
     const checks: Record<string, string> = { app: 'ok' };
     try {
       await app.prisma.$queryRaw`SELECT 1`;

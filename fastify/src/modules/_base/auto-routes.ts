@@ -40,14 +40,10 @@ function parseRawQuery(request: FastifyRequest): QueryParams {
 }
 
 function buildAuthHooks(fastify: FastifyInstance, entityConfig: EntityConfig, operation?: string) {
-  if (!entityConfig.auth?.protected) return {};
-
-  const hooks: { onRequest: unknown[] } = { onRequest: [fastify.authenticate] };
   const permission =
-    entityConfig.auth.permissions?.[operation as keyof typeof entityConfig.auth.permissions];
-  if (permission) {
-    hooks.onRequest.push(fastify.authorize(permission));
-  }
+    entityConfig.auth?.permissions?.[operation as keyof typeof entityConfig.auth.permissions];
+  if (!permission) return {};
+  const hooks: { onRequest: unknown[] } = { onRequest: [fastify.authorize(permission)] };
   return hooks;
 }
 

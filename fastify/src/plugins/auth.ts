@@ -49,6 +49,11 @@ export default fp(async (fastify) => {
       return reply.status(403).send({ detail: 'Forbidden' });
     };
   });
+
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (request.routeOptions.config?.public) return;
+    await fastify.authenticate(request, reply);
+  });
 });
 
 declare module 'fastify' {
@@ -60,5 +65,8 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     authUser?: AuthUser;
+  }
+  interface FastifyContextConfig {
+    public?: boolean;
   }
 }

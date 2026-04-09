@@ -43,6 +43,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get(
     '/api/health',
     {
+      config: { public: true },
       schema: {
         tags: ['health'],
       },
@@ -88,7 +89,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
               },
             },
           },
-          onRequest: [instance.authenticate],
         },
         async () => {
           return EntityRegistry.getMeta();
