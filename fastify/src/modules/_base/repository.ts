@@ -26,6 +26,7 @@ export class BaseRepository {
   protected columnNames: Set<string>;
   protected searchableFields: string[];
   protected softDelete: boolean;
+  protected hiddenFields: Set<string>;
 
   constructor(
     prisma: PrismaClient,
@@ -34,6 +35,7 @@ export class BaseRepository {
       columnNames: string[];
       searchableFields?: string[];
       softDelete?: boolean;
+      hiddenFields?: Set<string>;
     },
   ) {
     this.modelName = modelName;
@@ -45,6 +47,16 @@ export class BaseRepository {
     this.columnNames = new Set(options.columnNames);
     this.searchableFields = options.searchableFields ?? [];
     this.softDelete = options.softDelete ?? false;
+    this.hiddenFields = options.hiddenFields ?? new Set();
+  }
+
+  protected stripHidden<T>(record: T): T {
+    if (!this.hiddenFields.size || !record || typeof record !== 'object') return record;
+    const obj = record as Record<string, unknown>;
+    for (const field of this.hiddenFields) {
+      delete obj[field];
+    }
+    return record;
   }
 
   protected softDeleteWhere(): Record<string, unknown> {
@@ -77,12 +89,12 @@ export class BaseRepository {
       findArgs.include = includeRelations;
     }
 
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       this.delegate.findMany(findArgs),
       this.delegate.count({ where }),
     ]);
 
-    return { data, total };
+    return { data: rawData.map((r) => this.stripHidden(r)), total };
   }
 
   async findById(id: string, includeRelations?: Record<string, boolean>): Promise<unknown> {
@@ -96,16 +108,18 @@ export class BaseRepository {
 
     const record = await this.delegate.findUnique(findArgs);
     if (!record) throw new NotFoundError(this.modelName, id);
-    return record;
+    return this.stripHidden(record);
   }
 
   async create(data: Record<string, unknown>): Promise<unknown> {
-    return this.delegate.create({ data });
+    const record = await this.delegate.create({ data });
+    return this.stripHidden(record);
   }
 
   async update(id: string, data: Record<string, unknown>): Promise<unknown> {
     await this.findById(id);
-    return this.delegate.update({ where: { id }, data });
+    const record = await this.delegate.update({ where: { id }, data });
+    return this.stripHidden(record);
   }
 
   async delete(id: string): Promise<void> {

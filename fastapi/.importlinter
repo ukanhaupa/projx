@@ -25,4 +25,5 @@ ignore_imports =
     tests.test_app -> src.configs._database
     tests.test_auth_config -> src.configs._auth
     tests.test_controller_http -> src.entities.base._registry
+    tests.test_field_privacy -> src.entities.base._registry
     tests.test_registry_hardened -> src.entities.base._registry

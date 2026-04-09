@@ -115,12 +115,13 @@ class MyEntity(BaseModel_):
     __api_prefix__ = "/my-entities"        # default: tablename with hyphens
     __api_tags__ = ["my-entities"]          # default: [api_prefix]
     __readonly__ = False                    # True = only GET endpoints (list + get)
+    __private__ = False                    # True = entity hidden from API entirely (no routes, not in /_meta)
     __soft_delete__ = False                 # True = soft delete via deleted_at timestamp
     __bulk_operations__ = True              # True = /bulk endpoints
 
     # Field config
     __searchable_fields__ = {"name"}        # full-text search fields (default: all String/Text columns)
-    __hidden_fields__ = {"secret"}          # excluded from API responses
+    __hidden_fields__ = {"secret"}          # excluded from API responses and /_meta
     __create_fields__ = {"name", "email"}   # allowed fields on POST (default: all non-auto)
     __update_fields__ = {"name"}            # allowed fields on PATCH (default: all non-auto)
 ```

@@ -175,27 +175,35 @@ Your custom files (controllers, pages, middleware) are never deleted. Files you 
 
 ### Skip Files
 
-To skip component source files, add `skip` to `.projx-component`:
+Common user-owned files are **default-skipped** automatically — template updates won't touch them:
+
+| Scope | Default skips |
+|-------|---------------|
+| Root (`.projx`) | `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `setup.sh` |
+| fastapi | `pyproject.toml` |
+| fastify / frontend / e2e | `package.json` |
+| mobile | `pubspec.yaml` |
+
+Defaults are applied once on first `update` and saved to the `skip` array. To skip additional files, add them to `skip` in `.projx` (root-level) or `.projx-component` (per-component):
 
 ```json
+// .projx — root skip
 {
-  "components": ["fastapi"],
+  "version": "x.y.z",
+  "skip": ["docker-compose.yml", "README.md", "my-custom-config.yml"]
+}
+```
+
+```json
+// fastapi/.projx-component — component skip
+{
+  "component": "fastapi",
   "origin": "init",
-  "skip": ["src/**", "tests/**"]
+  "skip": ["pyproject.toml", "src/custom_middleware.py"]
 }
 ```
 
-To skip root-level files (docker-compose, README), add `skip` to `.projx`:
-
-```json
-{
-  "version": "1.5.2",
-  "components": ["fastapi", "frontend"],
-  "skip": ["docker-compose.yml", "README.md"]
-}
-```
-
-Skipped files are excluded from template updates.
+To opt back in to updates for a skipped file, use `npx create-projx unpin <file>`.
 
 ## Options
 
@@ -274,12 +282,12 @@ When both `fastapi` and `fastify` exist, the entity generates in the **primary b
 
 Override with `--ai` (fastapi) or `--backend` (fastify).
 
-| Component                 | Generated                                                                                     |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| Primary backend (fastapi) | `src/entities/<name>/_model.py` + `tests/test_<name>_entity.py` — model + 11 CRUD/auth tests  |
-| Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + `tests/modules/<name>.test.ts`  |
-| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                         |
-| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith                   |
+| Component                 | Generated                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| Primary backend (fastapi) | `src/entities/<name>/_model.py` + `tests/test_<name>_entity.py` — model + 11 CRUD/auth tests |
+| Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + `tests/modules/<name>.test.ts` |
+| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
+| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith                  |
 
 **Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres for Fastify, SQLite-in-memory for FastAPI today). New entities ship green from day one — no scrambling to bolt on tests at go-live.
 
@@ -342,6 +350,8 @@ Only the components you selected appear. Shared files (docker-compose, CI, hooks
 The core idea: define a data model, get everything else for free.
 
 **Backend** — Drop a model file. The registry auto-discovers it and generates CRUD routes, schemas, pagination, filtering, sorting, search, FK expansion, and OpenAPI docs.
+
+**Field privacy** — Sensitive columns (`password_hash`, `secret`, `api_key`, `mfa_secret`, etc.) are automatically stripped from API responses and `/_meta` via a built-in baseline. Add project-specific hidden fields per entity (`__hidden_fields__` in FastAPI, `hiddenFields` in Fastify). Mark entire entities as `__private__` / `private: true` to hide them from the API entirely — no routes registered, not listed in `/_meta`. The `/_meta` endpoint requires authentication on both backends.
 
 **Frontend** — Fetches metadata from `GET /api/v1/_meta`, renders table + form UI automatically. Customize with overrides.
 

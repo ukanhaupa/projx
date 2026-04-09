@@ -65,6 +65,8 @@ class BaseRepository:
                 continue
             if "," in str(v):
                 continue
+            if isinstance(self.model.__table__.columns[k].type, JSON):
+                continue
             sanitized[k] = v
         return self._convert_filter_values(sanitized)
 

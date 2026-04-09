@@ -88,6 +88,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
               },
             },
           },
+          onRequest: [instance.authenticate],
         },
         async () => {
           return EntityRegistry.getMeta();
