@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
+import authzPlugin from '../../src/plugins/authz.js';
 import { registerEntityRoutes } from '../../src/modules/_base/auto-routes.js';
 import type { EntityConfig } from '../../src/modules/_base/entity-registry.js';
 
@@ -125,6 +126,7 @@ async function buildRouteTestApp(
   app.decorate('prisma', prisma);
   await app.register(errorHandler);
   await app.register(authPlugin);
+  await app.register(authzPlugin);
 
   await app.register(
     async (instance) => {
@@ -372,26 +374,12 @@ describe('registerEntityRoutes', () => {
     });
   });
 
-  describe('auth-protected entity', () => {
+  describe('auth-protected entity (global authz)', () => {
     beforeEach(async () => {
-      // Enable auth for this test
       const { config } = await import('../../src/config.js');
       (config as { AUTH_ENABLED: boolean }).AUTH_ENABLED = true;
 
-      const result = await buildRouteTestApp(
-        makeEntityConfig({
-          auth: {
-            protected: true,
-            permissions: {
-              list: 'widgets:read',
-              get: 'widgets:read',
-              create: 'widgets:write',
-              update: 'widgets:write',
-              delete: 'widgets:delete',
-            },
-          },
-        }),
-      );
+      const result = await buildRouteTestApp(makeEntityConfig());
       app = result.app;
       prisma = result.prisma;
     });
@@ -406,8 +394,8 @@ describe('registerEntityRoutes', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('GET / succeeds with valid JWT and wildcard permission', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['*'] });
+    it('GET / succeeds with wildcard permission', async () => {
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['*:*.*'] });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
@@ -416,8 +404,8 @@ describe('registerEntityRoutes', () => {
       expect(res.statusCode).toBe(200);
     });
 
-    it('GET / succeeds with valid JWT and matching permission', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read'] });
+    it('GET / succeeds with matching resource:action.scope permission', async () => {
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.all'] });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
@@ -426,14 +414,47 @@ describe('registerEntityRoutes', () => {
       expect(res.statusCode).toBe(200);
     });
 
-    it('GET / returns 403 with valid JWT but wrong permission', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['other:read'] });
+    it('GET / returns 403 with wrong resource permission', async () => {
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['other:read.all'] });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
         headers: { authorization: `Bearer ${token}` },
       });
       expect(res.statusCode).toBe(403);
+    });
+
+    it('GET /:id maps to resource:read.one', async () => {
+      const id = crypto.randomUUID();
+      prisma._records[id] = { id, name: 'W', created_at: '', updated_at: '' };
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.one'] });
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/widgets/${id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('POST / maps to resource:create.one', async () => {
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:create.one'] });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/widgets/',
+        payload: { name: 'New' },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(201);
+    });
+
+    it('wildcard action matches any scope', async () => {
+      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.*'] });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
     });
   });
 

@@ -19,6 +19,11 @@ const ConfigSchema = Type.Object({
   ),
   JWT_PUBLIC_KEY: Type.String({ default: '' }),
   JWT_JWKS_URL: Type.String({ default: '' }),
+  JWT_ALGORITHMS: Type.String({ default: '' }),
+  JWT_ISSUER: Type.String({ default: '' }),
+  JWT_AUDIENCE: Type.String({ default: '' }),
+  JWT_REQUIRE_EXP: Type.Boolean({ default: true }),
+  JWT_VERIFY_NBF: Type.Boolean({ default: true }),
   CORS_ALLOW_ORIGINS: Type.String({ default: 'http://localhost:5173' }),
 });
 
@@ -35,6 +40,11 @@ function loadConfig(): Config {
     JWT_PROVIDER: process.env.JWT_PROVIDER ?? 'shared_secret',
     JWT_PUBLIC_KEY: process.env.JWT_PUBLIC_KEY ?? '',
     JWT_JWKS_URL: process.env.JWT_JWKS_URL ?? '',
+    JWT_ALGORITHMS: process.env.JWT_ALGORITHMS ?? '',
+    JWT_ISSUER: process.env.JWT_ISSUER ?? '',
+    JWT_AUDIENCE: process.env.JWT_AUDIENCE ?? '',
+    JWT_REQUIRE_EXP: process.env.JWT_REQUIRE_EXP !== 'false',
+    JWT_VERIFY_NBF: process.env.JWT_VERIFY_NBF !== 'false',
     CORS_ALLOW_ORIGINS: process.env.CORS_ALLOW_ORIGINS ?? 'http://localhost:5173',
   };
 

@@ -5,6 +5,8 @@ import { config } from './config.js';
 import prismaPlugin from './plugins/prisma.js';
 import errorHandler from './plugins/error-handler.js';
 import authPlugin from './plugins/auth.js';
+import authzPlugin from './plugins/authz.js';
+import requestIdPlugin from './plugins/request-id.js';
 import swaggerPlugin from './plugins/swagger.js';
 import { EntityRegistry, registerEntityRoutes } from './modules/_base/index.js';
 
@@ -26,7 +28,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
             }
           : undefined,
     },
-    genReqId: () => crypto.randomUUID(),
+    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -38,7 +40,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(swaggerPlugin);
   await app.register(prismaPlugin);
   await app.register(errorHandler);
+  await app.register(requestIdPlugin);
   await app.register(authPlugin);
+  await app.register(authzPlugin);
 
   app.get(
     '/api/health',

@@ -4,10 +4,11 @@ import { Type } from '@sinclair/typebox';
 import prismaPlugin from '../../src/plugins/prisma.js';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
+import authzPlugin from '../../src/plugins/authz.js';
 import { EntityRegistry, registerEntityRoutes } from '../../src/modules/_base/index.js';
 import { config } from '../../src/config.js';
 
-describe('Auth-protected routes', () => {
+describe('Auth-protected routes (global)', () => {
   let app: FastifyInstance;
   const originalAuthEnabled = config.AUTH_ENABLED;
 
@@ -19,6 +20,7 @@ describe('Auth-protected routes', () => {
     await app.register(prismaPlugin);
     await app.register(errorHandler);
     await app.register(authPlugin);
+    await app.register(authzPlugin);
 
     EntityRegistry.register({
       name: 'AuditLog',
@@ -46,9 +48,6 @@ describe('Auth-protected routes', () => {
       schema: Type.Object({ id: Type.String() }),
       createSchema: Type.Object({ table_name: Type.String() }),
       updateSchema: Type.Object({}),
-      auth: {
-        protected: true,
-      },
     });
 
     const entities = EntityRegistry.getAll();
@@ -74,12 +73,12 @@ describe('Auth-protected routes', () => {
     if (app) await app.close();
   });
 
-  it('GET list returns 401 without token on protected entity', async () => {
+  it('GET list returns 401 without token', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/audit-logs' });
     expect(res.statusCode).toBe(401);
   });
 
-  it('GET by id returns 401 without token on protected entity', async () => {
+  it('GET by id returns 401 without token', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs/00000000-0000-0000-0000-000000000000',
@@ -87,13 +86,23 @@ describe('Auth-protected routes', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('GET list succeeds with valid JWT on protected entity', async () => {
-    const token = app.jwt.sign({ sub: 'user-1', permissions: ['*'] });
+  it('GET list succeeds with valid JWT and matching permission', async () => {
+    const token = app.jwt.sign({ sub: 'user-1', permissions: ['audit_logs:read.all'] });
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('GET list returns 403 with wrong resource permission', async () => {
+    const token = app.jwt.sign({ sub: 'user-1', permissions: ['users:read.all'] });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/audit-logs',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });

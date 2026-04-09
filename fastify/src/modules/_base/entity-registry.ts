@@ -47,16 +47,6 @@ export interface EntityConfig {
   createSchema: TObject<TProperties>;
   updateSchema: TObject<TProperties>;
   relations?: Record<string, { model: string; field: string }>;
-  auth?: {
-    protected: boolean;
-    permissions?: {
-      list?: string;
-      get?: string;
-      create?: string;
-      update?: string;
-      delete?: string;
-    };
-  };
   _effectiveHiddenFields?: Set<string>;
 }
 
