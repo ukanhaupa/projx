@@ -23,11 +23,20 @@ export interface FieldMeta {
   is_auto: boolean;
   is_primary_key: boolean;
   filterable: boolean;
+  searchable?: boolean;
   has_foreign_key: boolean;
+  foreign_key_target?: string;
+  in_create?: boolean;
+  in_update?: boolean;
   field_type: string;
   max_length?: number;
   options?: string[];
 }
+
+export type CustomRouteRegistrar = (
+  fastify: import('fastify').FastifyInstance,
+  entityConfig: EntityConfig,
+) => void;
 
 export interface EntityConfig {
   name: string;
@@ -47,6 +56,7 @@ export interface EntityConfig {
   createSchema: TObject<TProperties>;
   updateSchema: TObject<TProperties>;
   relations?: Record<string, { model: string; field: string }>;
+  customRoutes?: CustomRouteRegistrar;
   _effectiveHiddenFields?: Set<string>;
 }
 

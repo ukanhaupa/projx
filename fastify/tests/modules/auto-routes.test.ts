@@ -122,8 +122,7 @@ async function buildRouteTestApp(
   const app = Fastify({ logger: false });
   const prisma = mockPrisma ?? makeMockPrisma();
 
-  // Register prisma as a decorator directly (skip the real plugin)
-  app.decorate('prisma', prisma);
+  app.decorate('prisma', prisma as never);
   await app.register(errorHandler);
   await app.register(authPlugin);
   await app.register(authzPlugin);

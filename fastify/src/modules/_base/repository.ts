@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { ExtendedPrismaClient } from '../../plugins/prisma.js';
 import { NotFoundError } from '../../errors.js';
 import {
   buildWhereClause,
@@ -29,7 +29,7 @@ export class BaseRepository {
   protected hiddenFields: Set<string>;
 
   constructor(
-    prisma: PrismaClient,
+    prisma: ExtendedPrismaClient,
     modelName: string,
     options: {
       columnNames: string[];

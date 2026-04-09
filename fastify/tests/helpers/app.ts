@@ -18,9 +18,10 @@ export async function buildTestApp(): Promise<FastifyInstance> {
       const entities = EntityRegistry.getAll();
 
       for (const entityConfig of entities) {
+        const routeRegistrar = entityConfig.customRoutes ?? registerEntityRoutes;
         await instance.register(
           async (entityInstance) => {
-            registerEntityRoutes(entityInstance, entityConfig);
+            routeRegistrar(entityInstance, entityConfig);
           },
           { prefix: entityConfig.apiPrefix },
         );

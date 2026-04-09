@@ -142,7 +142,7 @@ async function buildPrivacyTestApp(
   const app = Fastify({ logger: false });
   const prisma = mockPrisma ?? makeMockPrisma();
 
-  app.decorate('prisma', prisma);
+  app.decorate('prisma', prisma as never);
   await app.register(errorHandler);
   await app.register(authPlugin);
 
