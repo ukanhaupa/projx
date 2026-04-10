@@ -49,10 +49,10 @@ describe("init workflow", () => {
     await mkdir(tmp, { recursive: true });
 
     await mkdir(join(tmp, "backend"));
-    await upsertComponentMarker(join(tmp, "backend"), "fastapi", "init");
+    await upsertComponentMarker(join(tmp, "backend"), "fastapi");
 
     await mkdir(join(tmp, "web"));
-    await upsertComponentMarker(join(tmp, "web"), "frontend", "init");
+    await upsertComponentMarker(join(tmp, "web"), "frontend");
 
     const paths = await discoverComponentPaths(tmp, ["fastapi", "frontend"] as Component[]);
     expect(paths.fastapi).toBe("backend");
@@ -79,7 +79,7 @@ describe("init workflow", () => {
     expect(detected).toHaveLength(2);
 
     for (const d of detected) {
-      await upsertComponentMarker(join(tmp, d.directory), d.component, "init");
+      await upsertComponentMarker(join(tmp, d.directory), d.component);
     }
 
     const components = detected.map((d) => d.component) as Component[];
