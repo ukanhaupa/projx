@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync, unlinkSync } from "node:fs";
-import { chmod, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile, rm, readFile, copyFile } from "node:fs/promises";
 import { execSync } from "node:child_process";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import {
   type Component,
@@ -270,7 +270,13 @@ async function tryThreeWayMerge(
     if (file === ".projx") continue;
     if (file.endsWith("/.projx-component") || file === ".projx-component") continue;
     const oursPath = join(cwd, file);
-    if (!existsSync(oursPath)) continue;
+
+    if (!existsSync(oursPath)) {
+      await mkdir(dirname(oursPath), { recursive: true });
+      await copyFile(join(templateDir, file), oursPath);
+      merged.push(file);
+      continue;
+    }
 
     const baseContent = lookupBaseContent(cwd, baselineRef, file, pathFallbacks);
     if (baseContent === null) continue;
