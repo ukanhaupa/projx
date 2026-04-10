@@ -1,6 +1,6 @@
 {
   "name": "create-projx",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.",
   "type": "module",
   "bin": {
