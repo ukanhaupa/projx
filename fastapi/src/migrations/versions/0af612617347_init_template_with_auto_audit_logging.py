@@ -24,7 +24,7 @@ def upgrade():
         "audit_logs",
         sa.Column("table_name", sa.String(length=255), nullable=False),
         sa.Column("record_id", sa.BigInteger(), nullable=False),
-        sa.Column("action", sa.String(length=20), nullable=False),
+        sa.Column("action", sa.String(length=64), nullable=False),
         sa.Column("old_value", sa.JSON(), nullable=True),
         sa.Column("new_value", sa.JSON(), nullable=True),
         sa.Column(
