@@ -9,6 +9,9 @@ set -e
 
 DOMAIN="${1:?Usage: ./setup-ssl.sh <domain> <email>}"
 EMAIL="${2:?Usage: ./setup-ssl.sh <domain> <email>}"
+BASE_DOMAIN="${DOMAIN#www.}"
+DOMAIN="$BASE_DOMAIN"
+WWW_DOMAIN="www.$BASE_DOMAIN"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -35,11 +38,20 @@ if [ -n "$MY_IP" ] && [ "$RESOLVED_IP" != "$MY_IP" ]; then
 fi
 echo "DNS OK: $DOMAIN -> $RESOLVED_IP"
 
+CERT_DOMAINS=("$DOMAIN")
+WWW_RESOLVED=$(dig +short "$WWW_DOMAIN" 2>/dev/null | tail -1)
+if [ -n "$WWW_RESOLVED" ]; then
+  CERT_DOMAINS+=("$WWW_DOMAIN")
+  echo "DNS OK: $WWW_DOMAIN -> $WWW_RESOLVED"
+else
+  echo "WARNING: $WWW_DOMAIN does not resolve yet; issuing cert for $DOMAIN only."
+fi
+
 echo "Checking port 80..."
 curl -s --max-time 5 -o /dev/null "http://$DOMAIN/.well-known/acme-challenge/test" 2>/dev/null || \
   echo "WARNING: Could not reach http://$DOMAIN — ensure port 80 is open."
 
-echo "=== Issuing certificate for $DOMAIN ==="
+echo "=== Issuing certificate for ${CERT_DOMAINS[*]} ==="
 
 COMPOSE_PROJECT=$(docker compose -f "$COMPOSE_FILE" config --format json 2>/dev/null \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('name',''))" 2>/dev/null \
@@ -56,13 +68,18 @@ fi
 
 echo "Using volumes: $LE_VOLUME, $CW_VOLUME"
 
+CERTBOT_DOMAIN_ARGS=()
+for cert_domain in "${CERT_DOMAINS[@]}"; do
+  CERTBOT_DOMAIN_ARGS+=("-d" "$cert_domain")
+done
+
 if docker run --rm \
   -v "$LE_VOLUME:/etc/letsencrypt" \
   -v "$CW_VOLUME:/var/www/certbot" \
   certbot/certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
-    -d "$DOMAIN" \
+    "${CERTBOT_DOMAIN_ARGS[@]}" \
     --email "$EMAIL" \
     --agree-tos \
     --no-eff-email \
@@ -82,5 +99,6 @@ echo "$EXISTING" | grep -v "certbot renew" | { cat; echo "$CRON_CMD"; } | cronta
 
 echo ""
 echo "=== Done ==="
+echo "Certificate issued for: ${CERT_DOMAINS[*]}"
 echo "https://$DOMAIN is now secured with Let's Encrypt."
 echo "Auto-renewal runs daily at 3 AM."
