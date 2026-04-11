@@ -15,7 +15,7 @@ class AuditLog(BaseModel_):
 
     table_name = Column(String(255), nullable=False, index=True)
     record_id = Column(BigInteger, nullable=False, index=True)
-    action = Column(String(20), nullable=False)
+    action = Column(String(64), nullable=False)
     old_value = Column(JSON, nullable=True)
     new_value = Column(JSON, nullable=True)
     performed_at = Column(DateTime, server_default=func.now(), nullable=False)

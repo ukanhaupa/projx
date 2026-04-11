@@ -11,7 +11,7 @@ model AuditLog {
   id           String   @id @default(uuid())
   table_name   String   @db.VarChar(255)
   record_id    String   @db.VarChar(255)
-  action       String   @db.VarChar(20)
+  action       String   @db.VarChar(64)
   old_value    Json?
   new_value    Json?
   performed_at DateTime @default(now())
