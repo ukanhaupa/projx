@@ -7,6 +7,8 @@
 
 **Go from blank folder to production-ready project in 30 seconds.** Backend-only API, AI/ML app, mobile, full-stack, infra setup — pick what you need and get it wired with auth, database, Docker, CI/CD, hooks, and tests. All optional. All yours.
 
+![projx demo](.github/demo.gif)
+
 ```bash
 npx create-projx my-app
 ```
