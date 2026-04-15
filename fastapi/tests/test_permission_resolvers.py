@@ -1,4 +1,4 @@
-from src.middlewares import DefaultPermissionResolver, KeycloakPermissionResolver
+from src.middlewares import DefaultPermissionResolver, OidcPermissionResolver
 
 
 class TestDefaultPermissionResolver:
@@ -25,8 +25,8 @@ class TestDefaultPermissionResolver:
         assert self.resolver.extract_raw_permissions({"permissions": ""}) == []
 
 
-class TestKeycloakPermissionResolver:
-    resolver = KeycloakPermissionResolver()
+class TestOidcPermissionResolver:
+    resolver = OidcPermissionResolver()
 
     def test_basic_permissions(self):
         result = self.resolver.extract_raw_permissions({"permissions": ["perm1"]})

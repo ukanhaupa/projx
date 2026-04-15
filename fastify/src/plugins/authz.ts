@@ -28,7 +28,7 @@ export class DefaultPermissionResolver implements PermissionResolver {
   }
 }
 
-export class KeycloakPermissionResolver implements PermissionResolver {
+export class OidcPermissionResolver implements PermissionResolver {
   extractRawPermissions(payload: Record<string, unknown>): string[] {
     const perms = payload.permissions;
     const list: string[] = [];
@@ -188,7 +188,7 @@ export async function computeScopeFilters(
 
 function createResolver(): PermissionResolver {
   const provider = process.env.JWT_PROVIDER ?? 'shared_secret';
-  if (provider === 'keycloak') return new KeycloakPermissionResolver();
+  if (provider === 'oidc') return new OidcPermissionResolver();
   return new DefaultPermissionResolver();
 }
 

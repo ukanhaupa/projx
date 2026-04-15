@@ -20,13 +20,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   Future<void> _checkAuth() async {
     final authService = ref.read(authServiceProvider);
-    final config = ref.read(appConfigProvider);
-
-    if (!config.authEnabled) {
-      if (!mounted) return;
-      context.go(Routes.dashboard);
-      return;
-    }
 
     final isAuthenticated = await authService.isAuthenticated();
     if (!mounted) return;

@@ -17,9 +17,9 @@ npm run dev              # http://localhost:3000
 ```
 src/
 ├── main.tsx              # Entry — ErrorBoundary > ThemeProvider > ToastProvider > ConfirmProvider > App
-├── App.tsx               # Auth gate (VITE_AUTH_ENABLED toggle), entity loading, routing, NotFound route
+├── App.tsx               # Auth gate, entity loading, routing, NotFound route
 ├── api.ts                # HTTP client (raw, list, get, create, update, delete, bulkCreate, bulkDelete)
-├── auth.ts               # Keycloak/OIDC auth (login, token storage, refresh, role helpers)
+├── auth.ts               # OIDC auth (login, token storage, refresh, role helpers)
 ├── types.ts              # EntityConfig, MetaEntity, MetaField, metaToEntityConfig()
 ├── theme.tsx             # Light/dark theme context with localStorage persistence
 ├── index.css             # Design token system (70+ CSS variables)
@@ -36,7 +36,7 @@ src/
 │   ├── useEntityUrlState.ts  # Syncs page, sort, search, and filter state to URL search params
 │   └── useKeyboardShortcuts.ts # Global keyboard shortcuts (Cmd/Ctrl+K to focus search)
 ├── pages/
-│   ├── Login.tsx         # Keycloak password grant login with SVG eye toggle for password visibility
+│   ├── Login.tsx         # OIDC password grant login with SVG eye toggle for password visibility
 │   ├── Dashboard.tsx     # Entity card grid
 │   ├── EntityPage.tsx    # Generic CRUD page for any entity (confirm dialog for delete, entity-not-found state)
 │   └── NotFound.tsx      # Themed 404 page with link back to dashboard
@@ -101,15 +101,13 @@ Use the `className` override to scope custom styles:
 
 ## Authentication
 
-Authentication uses Keycloak via the Resource Owner Password Grant flow. The auth module (`src/auth.ts`) handles:
+Authentication uses the OIDC Resource Owner Password Grant flow. The auth module (`src/auth.ts`) handles:
 
-- Login with username/password against the Keycloak token endpoint
+- Login with username/password against the OIDC token endpoint
 - Token storage in localStorage with automatic refresh 30s before expiry
 - Role extraction from JWT (both realm and client-level roles)
 - `hasAnyRole()` helper for role-based access checks
 - Auto-logout on failed token refresh
-
-Set `VITE_AUTH_ENABLED=false` to bypass login entirely during local development.
 
 ## Hooks
 
@@ -260,13 +258,12 @@ Output goes to `dist/`. Vite uses esbuild for TypeScript transpilation (no tsc i
 
 ## Environment Variables
 
-| Variable                  | Default                 | Description                             |
-| ------------------------- | ----------------------- | --------------------------------------- |
-| `VITE_API_URL`            | `http://localhost:8000` | Backend base URL                        |
-| `VITE_AUTH_ENABLED`       | `true`                  | Set to `false` to bypass login entirely |
-| `VITE_KEYCLOAK_URL`       | `http://localhost:8080` | OIDC provider URL                       |
-| `VITE_KEYCLOAK_REALM`     | `master`                | Keycloak realm                          |
-| `VITE_KEYCLOAK_CLIENT_ID` | `frontend`              | OIDC client ID                          |
+| Variable              | Default                 | Description       |
+| --------------------- | ----------------------- | ----------------- |
+| `VITE_API_URL`        | `http://localhost:8000` | Backend base URL  |
+| `VITE_OIDC_URL`       | `http://localhost:8080` | OIDC provider URL |
+| `VITE_OIDC_REALM`     | `master`                | OIDC realm        |
+| `VITE_OIDC_CLIENT_ID` | `frontend`              | OIDC client ID    |
 
 ## Scripts Reference
 

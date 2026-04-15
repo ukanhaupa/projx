@@ -26,10 +26,9 @@ Variables are injected via `--dart-define` at build time. Defaults are set in `l
 | Variable                | Default                                   | Description                                        |
 | ----------------------- | ----------------------------------------- | -------------------------------------------------- |
 | `API_BASE_URL`          | `http://localhost:8000`                   | Backend API base URL                               |
-| `AUTH_ENABLED`          | `true`                                    | Enable Keycloak OIDC authentication                |
-| `KEYCLOAK_REALM_URL`    | `http://localhost:8080/realms/my-project` | Keycloak realm URL                                 |
-| `KEYCLOAK_CLIENT_ID`    | `mobile-app`                              | OIDC client ID                                     |
-| `KEYCLOAK_REDIRECT_URI` | `com.example.app://callback`              | OIDC redirect URI (deep link)                      |
+| `OIDC_REALM_URL`    | `http://localhost:8080/realms/my-project` | OIDC realm URL                                     |
+| `OIDC_CLIENT_ID`    | `mobile-app`                              | OIDC client ID                                     |
+| `OIDC_REDIRECT_URI` | `com.example.app://callback`              | OIDC redirect URI (deep link)                      |
 | `FCM_ENABLED`           | `false`                                   | Enable Firebase Cloud Messaging push notifications |
 
 Example with overrides:
@@ -37,10 +36,9 @@ Example with overrides:
 ```bash
 flutter run \
   --dart-define=API_BASE_URL=https://api.staging.example.com \
-  --dart-define=AUTH_ENABLED=true \
-  --dart-define=KEYCLOAK_REALM_URL=https://auth.example.com/realms/my-project \
-  --dart-define=KEYCLOAK_CLIENT_ID=mobile-app \
-  --dart-define=KEYCLOAK_REDIRECT_URI=com.example.app://callback
+  --dart-define=OIDC_REALM_URL=https://auth.example.com/realms/my-project \
+  --dart-define=OIDC_CLIENT_ID=mobile-app \
+  --dart-define=OIDC_REDIRECT_URI=com.example.app://callback
 ```
 
 ## Project Structure
@@ -183,14 +181,12 @@ The `SyncIndicator` widget displays the count of pending mutations so the user k
 
 ## Authentication
 
-Authentication uses **Keycloak OIDC** via `flutter_appauth`.
+Authentication uses **OIDC** via `flutter_appauth`.
 
 - **Login**: `AuthService.login()` opens the system browser for the OIDC authorization code flow, exchanges the code for tokens, and stores them in `flutter_secure_storage`.
 - **Token refresh**: `AuthInterceptor` automatically refreshes expired access tokens on 401 responses.
 - **Logout**: Ends the OIDC session and clears stored tokens.
 - **Biometric unlock**: Optional fingerprint / Face ID gate via `local_auth`.
-- **Dev mode**: When `AUTH_ENABLED=false`, a synthetic JWT is generated locally so the app works without a Keycloak server.
-
 ## Theming
 
 Material 3 with full light and dark theme support.
@@ -273,7 +269,7 @@ flutter build ios --release
 | `flutter_riverpod`              | State management + dependency injection |
 | `go_router`                     | Declarative routing with auth guards    |
 | `dio`                           | HTTP client with interceptors           |
-| `flutter_appauth`               | Keycloak OIDC authentication            |
+| `flutter_appauth`               | OIDC authentication                     |
 | `flutter_secure_storage`        | Encrypted token storage                 |
 | `local_auth`                    | Biometric authentication                |
 | `isar` / `isar_flutter_libs`    | Local NoSQL database for offline cache  |

@@ -32,9 +32,9 @@ src/
 │   ├── _database.py          # Async SQLAlchemy engine + session with statement timeout
 │   └── _auth.py              # JWT verification (shared_secret / public_key / jwks)
 ├── middlewares/
-│   ├── _authn.py             # Authentication — JWT extraction + AUTH_ENABLED toggle
+│   ├── _authn.py             # Authentication — JWT extraction and verification
 │   ├── _authz.py             # Authorization — permission checking + scope filters
-│   ├── _permission_resolvers.py  # Pluggable permission extraction (default + Keycloak)
+│   ├── _permission_resolvers.py  # Pluggable permission extraction (default + OIDC)
 │   ├── _public_paths.py      # Routes exempt from auth
 │   ├── _request_id.py        # X-Request-ID correlation (generate or pass through)
 │   └── _user_context.py      # Request-scoped user context via contextvars
@@ -187,20 +187,18 @@ JWT-based authentication with three provider modes:
 | --------------- | -------------------------------------------- | ---------------------------------- |
 | `shared_secret` | `JWT_SECRET`                                 | Development, simple setups         |
 | `public_key`    | `JWT_PUBLIC_KEY` (PEM)                       | Static key verification            |
-| `jwks`          | `JWT_JWKS_URL` or inferred from `JWT_ISSUER` | Keycloak, Auth0, any OIDC provider |
+| `jwks`          | `JWT_JWKS_URL` or inferred from `JWT_ISSUER` | Any OIDC provider (Keycloak, Auth0, etc.) |
 
 When `JWT_PROVIDER=auto` (default), the provider is inferred: JWKS URL present -> `jwks`, public key present -> `public_key`, otherwise -> `shared_secret`.
 
-When `JWT_ISSUER` is set and no explicit `JWT_JWKS_URL` is provided, the JWKS URL is inferred as `<issuer>/protocol/openid-connect/certs` (Keycloak convention).
-
-Set `AUTH_ENABLED=false` to disable authentication entirely. This injects a dev superuser with `*:*.*` permissions on every request.
+When `JWT_ISSUER` is set and no explicit `JWT_JWKS_URL` is provided, the JWKS URL is inferred as `<issuer>/protocol/openid-connect/certs` (standard OIDC convention).
 
 ### Permission Resolvers
 
 Two built-in resolvers for extracting permissions from JWT payloads:
 
 - **DefaultPermissionResolver** -- reads `permissions` field (list of strings)
-- **KeycloakPermissionResolver** -- reads `permissions` + Keycloak-specific `resource_access` and `realm_access` role fields
+- **OidcPermissionResolver** -- reads `permissions` + OIDC `resource_access` and `realm_access` role fields
 
 ## Permissions
 
@@ -277,7 +275,7 @@ uv run test.py                  # or: uv run pytest
 uv run pytest -k test_my_thing  # run specific tests
 ```
 
-Tests use in-memory SQLite (configured in `.env.test`). Coverage threshold is 80% (configured in `pyproject.toml`).
+Tests use the database configured in `.env.test`. Coverage threshold is 80% (configured in `pyproject.toml`).
 
 ### Base Test Class
 
@@ -342,7 +340,7 @@ Middleware executes in reverse registration order (outermost first):
 
 1. **CORS** -- standard FastAPI CORS handling
 2. **RequestIDMiddleware** -- reads `X-Request-ID` header or generates a 16-char hex ID; attaches to response and binds to loguru for log correlation
-3. **AuthenticationMiddleware** -- extracts and validates JWT Bearer token; when `AUTH_ENABLED=false`, injects a dev superuser with `*:*.*` permissions
+3. **AuthenticationMiddleware** -- extracts and validates JWT Bearer token
 4. **AuthorizationMiddleware** -- checks permissions against the required `resource:action.scope` pattern
 
 Log format includes the request ID for correlation:
@@ -359,7 +357,6 @@ To correlate logs across services, pass your own `X-Request-ID` header in the re
 | ------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
 | `SQLALCHEMY_DATABASE_URI` | --                                   | Database connection string (async driver required)                  |
 | `CORS_ALLOW_ORIGINS`      | `http://localhost, http://127.0.0.1` | Comma-separated allowed origins                                     |
-| `AUTH_ENABLED`            | `true`                               | Set to `false` to disable auth (injects dev superuser with `*:*.*`) |
 | `LOG_LEVEL`               | `DEBUG`                              | Loguru log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)            |
 | `DB_STATEMENT_TIMEOUT`    | `5`                                  | Database statement timeout in seconds                               |
 | `DB_POOL_SIZE`            | `10`                                 | SQLAlchemy connection pool size                                     |
@@ -395,7 +392,7 @@ To correlate logs across services, pass your own `X-Request-ID` header in the re
 | Package        | Purpose                                                                      |
 | -------------- | ---------------------------------------------------------------------------- |
 | FastAPI        | Web framework                                                                |
-| SQLAlchemy 2.x | Async ORM (asyncpg for PostgreSQL, aiosqlite for SQLite, aiomysql for MySQL) |
+| SQLAlchemy 2.x | Async ORM (asyncpg for PostgreSQL, aiomysql for MySQL) |
 | Alembic        | Database migrations                                                          |
 | Pydantic 2.x   | Runtime schema generation and validation                                     |
 | PyJWT          | JWT verification                                                             |

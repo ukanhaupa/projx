@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env.test", override=True)
 
@@ -22,18 +21,14 @@ from src.configs import _database as database_module
 from src.configs import get_db_session
 from src.entities import BaseModel_
 
-TEST_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite+aiosqlite:///:memory:")
-IS_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
+TEST_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URI")
+if not TEST_DATABASE_URL:
+    raise RuntimeError("SQLALCHEMY_DATABASE_URI must be set in the environment or .env.test")
 
 
 @pytest.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
-    engine_kwargs: dict = {"echo": False}
-    if IS_SQLITE:
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
-        engine_kwargs["poolclass"] = StaticPool
-
-    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 
     database_module._engine = engine
     database_module._session_factory = async_sessionmaker(
@@ -44,15 +39,13 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     )
 
     async with engine.begin() as conn:
-        if not IS_SQLITE:
-            await conn.run_sync(BaseModel_.metadata.drop_all)
+        await conn.run_sync(BaseModel_.metadata.drop_all)
         await conn.run_sync(BaseModel_.metadata.create_all)
 
     yield engine
 
-    if not IS_SQLITE:
-        async with engine.begin() as conn:
-            await conn.run_sync(BaseModel_.metadata.drop_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(BaseModel_.metadata.drop_all)
 
     database_module._session_factory = None
     database_module._engine = None

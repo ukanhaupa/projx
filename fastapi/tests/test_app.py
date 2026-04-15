@@ -124,12 +124,6 @@ class TestMetaEndpoint:
 
 class TestAuthnMiddlewareEdgeCases:
     @pytest.mark.asyncio
-    async def test_auth_disabled_bypasses_checks(self, client: AsyncClient, monkeypatch):
-        monkeypatch.setenv("AUTH_ENABLED", "false")
-        response = await client.get("/api/v1/audit-logs/")
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
     async def test_empty_auth_header(self, client: AsyncClient):
         response = await client.get(
             "/api/v1/audit-logs/",

@@ -14,7 +14,7 @@ export class LoginPage extends BasePage {
     super(page);
     this.form = page.getByLabel('Login form');
     this.usernameInput = page.getByLabel('Username');
-    this.passwordInput = page.getByLabel('Password');
+    this.passwordInput = page.locator('#login-password');
     this.submitButton = page.getByRole('button', { name: 'Sign In' });
     this.errorAlert = page.getByRole('alert');
     this.passwordToggle = page.getByLabel(/password$/i);

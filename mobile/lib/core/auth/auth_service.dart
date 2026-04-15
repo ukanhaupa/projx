@@ -18,19 +18,11 @@ class AuthService {
         _appAuth = appAuth ?? const FlutterAppAuth();
 
   Future<bool> login() async {
-    if (!_config.authEnabled) {
-      await _storage.setTokens(
-        accessToken: _devToken(),
-        refreshToken: 'dev-refresh-token',
-      );
-      return true;
-    }
-
     final result = await _appAuth.authorizeAndExchangeCode(
       AuthorizationTokenRequest(
-        _config.keycloakClientId,
-        _config.keycloakRedirectUri,
-        discoveryUrl: _config.keycloakDiscoveryUrl,
+        _config.oidcClientId,
+        _config.oidcRedirectUri,
+        discoveryUrl: _config.oidcDiscoveryUrl,
         scopes: ['openid', 'profile', 'email'],
       ),
     );
@@ -44,17 +36,15 @@ class AuthService {
   }
 
   Future<bool> refreshToken() async {
-    if (!_config.authEnabled) return true;
-
     final refreshToken = await _storage.getRefreshToken();
     if (refreshToken == null) return false;
 
     try {
       final result = await _appAuth.token(
         TokenRequest(
-          _config.keycloakClientId,
-          _config.keycloakRedirectUri,
-          discoveryUrl: _config.keycloakDiscoveryUrl,
+          _config.oidcClientId,
+          _config.oidcRedirectUri,
+          discoveryUrl: _config.oidcDiscoveryUrl,
           refreshToken: refreshToken,
         ),
       );
@@ -71,20 +61,18 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    if (_config.authEnabled) {
-      final idToken = await _storage.getIdToken();
-      if (idToken != null) {
-        try {
-          await _appAuth.endSession(
-            EndSessionRequest(
-              idTokenHint: idToken,
-              postLogoutRedirectUrl: _config.keycloakRedirectUri,
-              discoveryUrl: _config.keycloakDiscoveryUrl,
-            ),
-          );
-        } catch (_) {
-          // Ignore errors from OIDC end-session
-        }
+    final idToken = await _storage.getIdToken();
+    if (idToken != null) {
+      try {
+        await _appAuth.endSession(
+          EndSessionRequest(
+            idTokenHint: idToken,
+            postLogoutRedirectUrl: _config.oidcRedirectUri,
+            discoveryUrl: _config.oidcDiscoveryUrl,
+          ),
+        );
+      } catch (_) {
+        // Ignore errors from OIDC end-session
       }
     }
     await _storage.clearTokens();
@@ -105,24 +93,5 @@ class AuthService {
     final normalized = base64Url.normalize(payload);
     final decoded = utf8.decode(base64Url.decode(normalized));
     return jsonDecode(decoded) as Map<String, dynamic>;
-  }
-
-  String _devToken() {
-    final header = base64Url.encode(utf8.encode('{"alg":"none"}'));
-    final payload = base64Url.encode(
-      utf8.encode(
-        jsonEncode({
-          'sub': 'dev-user',
-          'name': 'Dev User',
-          'email': 'dev@example.com',
-          'permissions': ['*:*.*'],
-          'exp': DateTime.now()
-                  .add(const Duration(hours: 24))
-                  .millisecondsSinceEpoch ~/
-              1000,
-        }),
-      ),
-    );
-    return '$header.$payload.';
   }
 }

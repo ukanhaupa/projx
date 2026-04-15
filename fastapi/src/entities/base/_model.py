@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from sqlalchemy import BigInteger, Column, DateTime, Integer, event, func
+from sqlalchemy import BigInteger, Column, DateTime, event, func
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -43,7 +43,7 @@ class BaseModel_(Base):
 
     # ── Base columns ─────────────────────────────────────────────────────
     id = Column(
-        BigInteger().with_variant(Integer, "sqlite"),
+        BigInteger,
         primary_key=True,
         autoincrement=True,
         nullable=False,

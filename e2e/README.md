@@ -14,7 +14,7 @@ e2e/
 ├── frontend/
 │   ├── fixtures/          # Test fixtures (auth, entity helpers, custom test fn)
 │   │   ├── index.ts       # Re-exports for convenient imports
-│   │   ├── auth.ts        # Auth-related constants (TEST_USER, TEST_PASS, AUTH_ENABLED)
+│   │   ├── auth.ts        # Auth-related constants (TEST_USER, TEST_PASS)
 │   │   └── entity.ts      # Entity API helpers and extended test fixture
 │   ├── pages/             # Page Object Models
 │   │   ├── base.page.ts           # Theme toggle, toasts, axe-core a11y scan
@@ -112,12 +112,11 @@ test('displays entity list', async ({ page, entities }) => {
 
 ## Configuration
 
-| Variable            | Default                 | Description                                                                     |
-| ------------------- | ----------------------- | ------------------------------------------------------------------------------- |
-| `BASE_URL`          | `http://localhost:3000` | Frontend URL to test against                                                    |
-| `VITE_AUTH_ENABLED` | (from `frontend/.env`)  | Set to `false` to skip auth flows                                               |
-| `TEST_USER`         | `admin`                 | Login username for auth tests                                                   |
-| `TEST_PASS`         | `admin`                 | Login password for auth tests                                                   |
-| `CI`                | --                      | Enables CI mode (1 worker, 2 retries, GitHub reporter, no webServer auto-start) |
+| Variable    | Default                 | Description                                                                     |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------- |
+| `BASE_URL`  | `http://localhost:3000` | Frontend URL to test against                                                    |
+| `TEST_USER` | `admin`                 | Login username for auth tests                                                   |
+| `TEST_PASS` | `admin`                 | Login password for auth tests                                                   |
+| `CI`        | --                      | Enables CI mode (1 worker, 2 retries, GitHub reporter, no webServer auto-start) |
 
 In local development, Playwright auto-starts both the backend (`fastapi/`) and frontend (`frontend/`) dev servers via the `webServer` config. In CI, servers are expected to already be running.

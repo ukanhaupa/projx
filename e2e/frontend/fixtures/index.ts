@@ -5,4 +5,4 @@ export {
   createEntityViaApi,
   deleteEntityViaApi,
 } from './entity';
-export { AUTH_ENABLED, TEST_USER, TEST_PASS } from './auth';
+export { TEST_USER, TEST_PASS } from './auth';

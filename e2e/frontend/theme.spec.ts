@@ -1,17 +1,14 @@
-import { test, expect, AUTH_ENABLED } from './fixtures';
-import { LoginPage } from './pages/login.page';
+import { test, expect } from './fixtures';
 
 test.describe('Theme Switching', () => {
   test('toggle switches between light and dark on login page', async ({
-    page,
+    loginPage,
   }) => {
-    test.skip(!AUTH_ENABLED, 'Auth disabled — login page not shown');
-    const login = new LoginPage(page);
-    await login.goto();
+    await loginPage.goto();
 
-    const initial = await login.getTheme();
-    await login.toggleTheme();
-    const toggled = await login.getTheme();
+    const initial = await loginPage.getTheme();
+    await loginPage.toggleTheme();
+    const toggled = await loginPage.getTheme();
     expect(toggled).not.toBe(initial);
     expect(['light', 'dark']).toContain(toggled);
   });

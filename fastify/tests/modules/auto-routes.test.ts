@@ -22,6 +22,11 @@ const updateSchema = Type.Object({
   name: Type.Optional(Type.String()),
 });
 
+function superuserHeaders(app: FastifyInstance): Record<string, string> {
+  const token = app.jwt.sign({ sub: 'test-superuser', permissions: ['*:*.*'] });
+  return { authorization: `Bearer ${token}` };
+}
+
 function makeMockPrisma() {
   const records: Record<string, Record<string, unknown>> = {};
 
@@ -141,6 +146,7 @@ async function buildRouteTestApp(
 describe('registerEntityRoutes', () => {
   let app: FastifyInstance;
   let prisma: ReturnType<typeof makeMockPrisma>;
+  let headers: Record<string, string>;
 
   afterAll(async () => {
     if (app) await app.close();
@@ -151,10 +157,11 @@ describe('registerEntityRoutes', () => {
       const result = await buildRouteTestApp(makeEntityConfig());
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('GET / returns paginated list', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets' });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.data).toBeDefined();
@@ -162,12 +169,16 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / with search param triggers search', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?search=foo' });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?search=foo', headers });
       expect(res.statusCode).toBe(200);
     });
 
     it('GET / with expand param triggers expand', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?expand=category' });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets?expand=category',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
     });
 
@@ -175,6 +186,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets?page=2&page_size=5',
+        headers,
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -186,6 +198,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets?order_by=-name',
+        headers,
       });
       expect(res.statusCode).toBe(200);
     });
@@ -195,6 +208,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/widgets/${created.id}`,
+        headers,
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().name).toBe('Test');
@@ -205,6 +219,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/widgets/${created.id}?expand=category`,
+        headers,
       });
       expect(res.statusCode).toBe(200);
     });
@@ -213,6 +228,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
+        headers,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -221,6 +237,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/widgets',
+        headers,
         payload: { name: 'New Widget' },
       });
       expect(res.statusCode).toBe(201);
@@ -232,6 +249,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'PATCH',
         url: `/api/v1/widgets/${created.id}`,
+        headers,
         payload: { name: 'New Name' },
       });
       expect(res.statusCode).toBe(200);
@@ -243,6 +261,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'PATCH',
         url: `/api/v1/widgets/${created.id}`,
+        headers,
         payload: {},
       });
       expect(res.statusCode).toBe(400);
@@ -253,6 +272,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'PATCH',
         url: '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
+        headers,
         payload: { name: 'Updated' },
       });
       expect(res.statusCode).toBe(404);
@@ -263,6 +283,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: `/api/v1/widgets/${created.id}`,
+        headers,
       });
       expect(res.statusCode).toBe(204);
     });
@@ -271,6 +292,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
+        headers,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -281,10 +303,11 @@ describe('registerEntityRoutes', () => {
       const result = await buildRouteTestApp(makeEntityConfig({ readonly: true }));
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('GET / works on readonly entity', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets' });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
       expect(res.statusCode).toBe(200);
     });
 
@@ -292,6 +315,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/widgets',
+        headers,
         payload: { name: 'Test' },
       });
       expect(res.statusCode).toBe(404);
@@ -301,6 +325,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'PATCH',
         url: '/api/v1/widgets/some-id',
+        headers,
         payload: { name: 'Test' },
       });
       expect(res.statusCode).toBe(404);
@@ -310,6 +335,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/api/v1/widgets/some-id',
+        headers,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -320,12 +346,14 @@ describe('registerEntityRoutes', () => {
       const result = await buildRouteTestApp(makeEntityConfig({ bulkOperations: true }));
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('POST /bulk creates multiple records', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/widgets/bulk',
+        headers,
         payload: {
           items: [{ name: 'Widget A' }, { name: 'Widget B' }],
         },
@@ -340,6 +368,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/api/v1/widgets/bulk',
+        headers,
         payload: { ids: [r1.id, r2.id] },
       });
       expect(res.statusCode).toBe(204);
@@ -351,12 +380,14 @@ describe('registerEntityRoutes', () => {
       const result = await buildRouteTestApp(makeEntityConfig({ bulkOperations: false }));
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('POST /bulk returns 404 when bulk ops disabled', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/widgets/bulk',
+        headers,
         payload: { items: [{ name: 'A' }] },
       });
       expect(res.statusCode).toBe(404);
@@ -366,26 +397,18 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/api/v1/widgets/bulk',
+        headers,
         payload: { ids: ['id1'] },
       });
-      // "bulk" is not a valid UUID, so it hits the /:id route and fails validation
       expect([400, 404]).toContain(res.statusCode);
     });
   });
 
   describe('auth-protected entity (global authz)', () => {
     beforeEach(async () => {
-      const { config } = await import('../../src/config.js');
-      (config as { AUTH_ENABLED: boolean }).AUTH_ENABLED = true;
-
       const result = await buildRouteTestApp(makeEntityConfig());
       app = result.app;
       prisma = result.prisma;
-    });
-
-    afterAll(async () => {
-      const { config } = await import('../../src/config.js');
-      (config as { AUTH_ENABLED: boolean }).AUTH_ENABLED = false;
     });
 
     it('GET / returns 401 without token', async () => {
@@ -457,19 +480,6 @@ describe('registerEntityRoutes', () => {
     });
   });
 
-  describe('entity without auth', () => {
-    beforeEach(async () => {
-      const result = await buildRouteTestApp(makeEntityConfig());
-      app = result.app;
-      prisma = result.prisma;
-    });
-
-    it('GET / works without auth when not protected', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets' });
-      expect(res.statusCode).toBe(200);
-    });
-  });
-
   describe('expand with relations', () => {
     beforeEach(async () => {
       const result = await buildRouteTestApp(
@@ -481,12 +491,14 @@ describe('registerEntityRoutes', () => {
       );
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('GET / with expand=category passes include to query', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets?expand=category',
+        headers,
       });
       expect(res.statusCode).toBe(200);
     });
@@ -496,6 +508,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/widgets/${created.id}?expand=category`,
+        headers,
       });
       expect(res.statusCode).toBe(200);
     });
@@ -506,23 +519,28 @@ describe('registerEntityRoutes', () => {
       const result = await buildRouteTestApp(makeEntityConfig());
       app = result.app;
       prisma = result.prisma;
+      headers = superuserHeaders(app);
     });
 
     it('GET / with no query string', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets' });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
       expect(res.statusCode).toBe(200);
       expect(res.json().pagination.current_page).toBe(1);
       expect(res.json().pagination.page_size).toBe(10);
     });
 
     it('GET / with invalid page defaults to 1', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?page=0' });
+      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?page=0', headers });
       expect(res.statusCode).toBe(200);
       expect(res.json().pagination.current_page).toBe(1);
     });
 
     it('GET / with huge page_size clamps to 100', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?page_size=500' });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets?page_size=500',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
       expect(res.json().pagination.page_size).toBe(100);
     });
@@ -531,6 +549,7 @@ describe('registerEntityRoutes', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets?name=TestWidget',
+        headers,
       });
       expect(res.statusCode).toBe(200);
     });

@@ -291,7 +291,7 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 | `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
 | `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith                  |
 
-**Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres for Fastify, SQLite-in-memory for FastAPI today). New entities ship green from day one — no scrambling to bolt on tests at go-live.
+**Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres). New entities ship green from day one — no scrambling to bolt on tests at go-live.
 
 No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 

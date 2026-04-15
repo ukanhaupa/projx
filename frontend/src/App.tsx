@@ -8,8 +8,6 @@ import { EntityPage } from './pages/EntityPage';
 import { Login } from './pages/Login';
 import { NotFound } from './pages/NotFound';
 
-const AUTH_ENABLED = (import.meta.env.VITE_AUTH_ENABLED ?? 'true') !== 'false';
-
 function useLoadEntities(authed: boolean) {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -46,9 +44,7 @@ function useLoadEntities(authed: boolean) {
 }
 
 export function App() {
-  const [authed, setAuthed] = useState(() =>
-    AUTH_ENABLED ? initAuth() : true,
-  );
+  const [authed, setAuthed] = useState(() => initAuth());
   const {
     ready,
     loadError,

@@ -1,8 +1,8 @@
-const KC_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080';
-const KC_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'master';
-const KC_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'frontend';
+const OIDC_URL = import.meta.env.VITE_OIDC_URL || 'http://localhost:8080';
+const OIDC_REALM = import.meta.env.VITE_OIDC_REALM || 'master';
+const OIDC_CLIENT_ID = import.meta.env.VITE_OIDC_CLIENT_ID || 'frontend';
 
-const TOKEN_URL = `${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/token`;
+const TOKEN_URL = `${OIDC_URL}/realms/${OIDC_REALM}/protocol/openid-connect/token`;
 
 interface StoredTokens {
   access_token: string;
@@ -27,7 +27,6 @@ function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   if (!tokens) return;
   const msUntilExpiry = tokens.expires_at - Date.now();
-  // Refresh 30s before expiry, minimum 1s
   const delay = Math.max(msUntilExpiry - 30_000, 1_000);
   refreshTimer = window.setTimeout(() => {
     doRefresh();
@@ -52,13 +51,13 @@ export async function login(username: string, password: string) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'password',
-        client_id: KC_CLIENT_ID,
+        client_id: OIDC_CLIENT_ID,
         username,
         password,
       }),
     });
   } catch {
-    throw new Error(`Unable to reach authentication server at ${KC_URL}`);
+    throw new Error(`Unable to reach authentication server at ${OIDC_URL}`);
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -75,7 +74,7 @@ async function doRefresh(): Promise<void> {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        client_id: KC_CLIENT_ID,
+        client_id: OIDC_CLIENT_ID,
         refresh_token: tokens.refresh_token,
       }),
     });
@@ -86,10 +85,8 @@ async function doRefresh(): Promise<void> {
   }
 }
 
-/** Ensure token is fresh. Returns true if valid. */
 export async function ensureFreshToken(): Promise<boolean> {
   if (!tokens) return false;
-  // If token expires within 10s, refresh now
   if (tokens.expires_at - Date.now() < 10_000) {
     if (!refreshPromise) {
       refreshPromise = doRefresh().finally(() => {
@@ -109,7 +106,6 @@ export function isAuthenticated(): boolean {
   return !!tokens;
 }
 
-/** Returns all Keycloak roles for the current user (realm + client-level). */
 export function getRoles(): string[] {
   if (!tokens) return [];
   try {
@@ -124,10 +120,6 @@ export function getRoles(): string[] {
   }
 }
 
-/**
- * Returns true if the user has at least one of the given roles.
- * If `required` is empty/omitted, always returns true (no restriction).
- */
 export function hasAnyRole(required: string[] = []): boolean {
   if (!required.length) return true;
   const userRoles = getRoles();
@@ -161,9 +153,8 @@ export function initAuth(): boolean {
     const parsed: StoredTokens = JSON.parse(stored);
     if (!parsed.access_token || !parsed.refresh_token) return false;
     tokens = parsed;
-    // If access token already expired, try refreshing immediately
     if (tokens.expires_at - Date.now() < 10_000) {
-      doRefresh(); // fire-and-forget, UI shows while refreshing
+      doRefresh();
     } else {
       scheduleRefresh();
     }

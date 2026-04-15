@@ -1,5 +1,3 @@
-import os
-
 from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -8,14 +6,9 @@ from src.configs import JWTVerificationError, verify_jwt_token
 
 from ._public_paths import is_public_path
 from ._user_context import (
-    UserContext,
     build_user_context_from_payload,
     set_current_user,
 )
-
-
-def _is_auth_enabled() -> bool:
-    return os.getenv("AUTH_ENABLED", "true").lower() not in ("false", "0", "no")
 
 
 class AuthenticationMiddleware:
@@ -41,23 +34,6 @@ class AuthenticationMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
-            return
-
-        # Auth disabled — inject a dev superuser and skip all checks
-        if not _is_auth_enabled():
-            scope.setdefault("state", {})
-            dev_user = UserContext(user_id="dev", email="dev@localhost")
-            scope["state"]["user"] = dev_user
-            scope["state"]["jwt_payload"] = {
-                "sub": "dev",
-                "email": "dev@localhost",
-                "permissions": ["*:*.*"],
-            }
-            set_current_user(dev_user)
-            try:
-                await self.app(scope, receive, send)
-            finally:
-                set_current_user(None)
             return
 
         path = scope["path"]
