@@ -6,14 +6,11 @@ import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
 import authzPlugin from '../../src/plugins/authz.js';
 import { EntityRegistry, registerEntityRoutes } from '../../src/modules/_base/index.js';
-import { config } from '../../src/config.js';
 
 describe('Auth-protected routes (global)', () => {
   let app: FastifyInstance;
-  const originalAuthEnabled = config.AUTH_ENABLED;
 
   beforeEach(async () => {
-    (config as { AUTH_ENABLED: boolean }).AUTH_ENABLED = true;
     EntityRegistry.reset();
 
     app = Fastify({ logger: false });
@@ -69,7 +66,6 @@ describe('Auth-protected routes (global)', () => {
   });
 
   afterAll(async () => {
-    (config as { AUTH_ENABLED: boolean }).AUTH_ENABLED = originalAuthEnabled;
     if (app) await app.close();
   });
 

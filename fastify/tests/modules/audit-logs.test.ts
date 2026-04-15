@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { buildTestApp } from '../helpers/app.js';
+import { buildTestApp, superuserHeaders } from '../helpers/app.js';
 
 describe('AuditLogs (readonly)', () => {
   let app: FastifyInstance;
+  let headers: Record<string, string>;
 
   beforeEach(async () => {
     app = await buildTestApp();
+    headers = superuserHeaders(app);
     await app.prisma.auditLog.deleteMany();
   });
 
@@ -18,6 +20,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs',
+      headers,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -29,6 +32,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs/00000000-0000-0000-0000-000000000000',
+      headers,
     });
     expect(res.statusCode).toBe(404);
   });
@@ -47,6 +51,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs',
+      headers,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -58,6 +63,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/audit-logs',
+      headers,
       payload: {
         table_name: 'test',
         record_id: '1',
@@ -72,6 +78,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'DELETE',
       url: '/api/v1/audit-logs/00000000-0000-0000-0000-000000000000',
+      headers,
     });
     expect(res.statusCode).toBe(404);
   });
@@ -80,6 +87,7 @@ describe('AuditLogs (readonly)', () => {
     const res = await app.inject({
       method: 'PATCH',
       url: '/api/v1/audit-logs/00000000-0000-0000-0000-000000000000',
+      headers,
       payload: { action: 'UPDATE' },
     });
     expect(res.statusCode).toBe(404);

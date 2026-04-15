@@ -38,7 +38,6 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       LOG_LEVEL: debug
-      AUTH_ENABLED: 'false'
       JWT_SECRET: dev-secret
       CORS_ALLOW_ORIGINS: http://localhost:5173,http://localhost:3000
     ports:

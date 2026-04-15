@@ -1,9 +1,7 @@
-import { test, expect, AUTH_ENABLED, TEST_USER, TEST_PASS } from './fixtures';
+import { test, expect, TEST_USER, TEST_PASS } from './fixtures';
 import { LoginPage } from './pages/login.page';
 
 test.describe('Authentication Flow', () => {
-  test.skip(!AUTH_ENABLED, 'Auth is disabled');
-
   test('login with valid credentials redirects to dashboard', async ({
     loginPage,
   }) => {

@@ -5,9 +5,10 @@ import {
   type FieldMeta,
 } from '../../src/modules/_base/entity-registry.js';
 import { Type } from '@sinclair/typebox';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
+import authzPlugin from '../../src/plugins/authz.js';
 import { registerEntityRoutes } from '../../src/modules/_base/auto-routes.js';
 
 const dummySchema = Type.Object({
@@ -16,6 +17,11 @@ const dummySchema = Type.Object({
   created_at: Type.String(),
   updated_at: Type.String(),
 });
+
+function superuserHeaders(app: FastifyInstance): Record<string, string> {
+  const token = app.jwt.sign({ sub: 'test-superuser', permissions: ['*:*.*'] });
+  return { authorization: `Bearer ${token}` };
+}
 
 function makeConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
   return {
@@ -125,6 +131,7 @@ describe('Custom controller support', () => {
     app.decorate('prisma', {} as never);
     await app.register(errorHandler);
     await app.register(authPlugin);
+    await app.register(authzPlugin);
 
     let customCalled = false;
 
@@ -144,10 +151,11 @@ describe('Custom controller support', () => {
     );
 
     await app.ready();
+    const headers = superuserHeaders(app);
 
     expect(customCalled).toBe(true);
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/', headers });
     expect(res.json()).toEqual({ custom: true });
 
     await app.close();
@@ -174,6 +182,7 @@ describe('Custom controller support', () => {
     app.decorate('prisma', mockPrisma as never);
     await app.register(errorHandler);
     await app.register(authPlugin);
+    await app.register(authzPlugin);
 
     const config = makeConfig();
 
@@ -186,8 +195,9 @@ describe('Custom controller support', () => {
     );
 
     await app.ready();
+    const headers = superuserHeaders(app);
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/', headers });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveProperty('data');
     expect(res.json()).toHaveProperty('pagination');

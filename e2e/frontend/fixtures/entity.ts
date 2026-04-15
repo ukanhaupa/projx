@@ -76,7 +76,8 @@ export const test = authTest.extend<EntityFixtures>({
     await use(new ConfirmDialogPage(page));
   },
 
-  meta: async (_, use) => {
+  // eslint-disable-next-line no-empty-pattern
+  meta: async ({}, use) => {
     const entities = await fetchEntities();
     await use(entities);
   },

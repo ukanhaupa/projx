@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
+import authzPlugin from '../../src/plugins/authz.js';
 import { registerEntityRoutes } from '../../src/modules/_base/auto-routes.js';
 import { EntityRegistry, type EntityConfig } from '../../src/modules/_base/entity-registry.js';
 
@@ -24,6 +25,11 @@ const createSchema = Type.Object({
 const updateSchema = Type.Object({
   name: Type.Optional(Type.String()),
 });
+
+function superuserHeaders(app: FastifyInstance): Record<string, string> {
+  const token = app.jwt.sign({ sub: 'test-superuser', permissions: ['*:*.*'] });
+  return { authorization: `Bearer ${token}` };
+}
 
 function makeMockPrisma() {
   const records: Record<string, Record<string, unknown>> = {};
@@ -145,6 +151,7 @@ async function buildPrivacyTestApp(
   app.decorate('prisma', prisma as never);
   await app.register(errorHandler);
   await app.register(authPlugin);
+  await app.register(authzPlugin);
 
   await app.register(
     async (instance) => {
@@ -169,6 +176,7 @@ describe('Field-level privacy', () => {
     const result = await buildPrivacyTestApp(config);
     app = result.app;
     const prisma = result.prisma;
+    const headers = superuserHeaders(app);
 
     const id1 = crypto.randomUUID();
     prisma._records[id1] = {
@@ -180,7 +188,7 @@ describe('Field-level privacy', () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/', headers });
     expect(res.statusCode).toBe(200);
     const row = res.json().data[0];
     expect(row).not.toHaveProperty('internal_note');
@@ -191,6 +199,7 @@ describe('Field-level privacy', () => {
     const result = await buildPrivacyTestApp(config);
     app = result.app;
     const prisma = result.prisma;
+    const headers = superuserHeaders(app);
 
     const id2 = crypto.randomUUID();
     prisma._records[id2] = {
@@ -202,7 +211,11 @@ describe('Field-level privacy', () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await app.inject({ method: 'GET', url: `/api/v1/secret-widgets/${id2}` });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/secret-widgets/${id2}`,
+      headers,
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).not.toHaveProperty('internal_note');
   });
@@ -212,6 +225,7 @@ describe('Field-level privacy', () => {
     const result = await buildPrivacyTestApp(config);
     app = result.app;
     const prisma = result.prisma;
+    const headers = superuserHeaders(app);
 
     const id3 = crypto.randomUUID();
     prisma._records[id3] = {
@@ -223,7 +237,7 @@ describe('Field-level privacy', () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/', headers });
     const row = res.json().data[0];
     expect(row).not.toHaveProperty('password_hash');
   });
@@ -232,10 +246,12 @@ describe('Field-level privacy', () => {
     const config = makeSecretConfig();
     const result = await buildPrivacyTestApp(config);
     app = result.app;
+    const headers = superuserHeaders(app);
 
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/secret-widgets/',
+      headers,
       payload: { name: 'New', internal_note: 'secret', password_hash: 'h' },
     });
     expect(res.statusCode).toBe(201);

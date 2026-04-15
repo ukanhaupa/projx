@@ -1,22 +1,12 @@
-import { test, expect, AUTH_ENABLED } from './fixtures';
+import { test, expect } from './fixtures';
 import { LoginPage } from './pages/login.page';
-import { DashboardPage } from './pages/dashboard.page';
 
 test.describe('App Shell', () => {
-  test('shows login when auth enabled, dashboard when disabled', async ({
-    page,
-  }) => {
+  test('shows login page on initial visit', async ({ page }) => {
     await page.goto('/');
-    if (AUTH_ENABLED) {
-      const login = new LoginPage(page);
-      await expect(login.form).toBeVisible();
-      await expect(
-        page.getByRole('heading', { name: 'Sign In' }),
-      ).toBeVisible();
-    } else {
-      const dashboard = new DashboardPage(page);
-      await expect(dashboard.heading).toBeVisible({ timeout: 10000 });
-    }
+    const login = new LoginPage(page);
+    await expect(login.form).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
   });
 
   test('skip link is present and points to main content', async ({

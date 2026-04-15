@@ -296,10 +296,8 @@ The auth plugin (`src/plugins/auth.ts`) supports JWT-based authentication with t
 | Provider        | Use case                  | Config needed    |
 | --------------- | ------------------------- | ---------------- |
 | `shared_secret` | Development / simple apps | `JWT_SECRET`     |
-| `public_key`    | Keycloak / OIDC           | `JWT_PUBLIC_KEY` |
+| `public_key`    | OIDC providers            | `JWT_PUBLIC_KEY` |
 | `jwks`          | Auto-rotating keys        | `JWT_JWKS_URL`   |
-
-Set `AUTH_ENABLED=false` (the default) to bypass authentication entirely during development. When disabled, all requests run as a dev superuser with wildcard permissions.
 
 Per-entity auth is configured via the `auth` field on `EntityConfig`. When `auth.protected` is true, the `authenticate` hook runs on every route for that entity. Optional `permissions` map operations to permission strings checked against the JWT `permissions` claim.
 
@@ -380,7 +378,6 @@ Include related records inline (only works for relations defined in `EntityConfi
 | `HOST`               | `0.0.0.0`                         | Server bind address                           |
 | `PORT`               | `3000`                            | Server port                                   |
 | `LOG_LEVEL`          | `info`                            | Pino log level                                |
-| `AUTH_ENABLED`       | `false`                           | Enable JWT authentication                     |
 | `JWT_SECRET`         | `dev-secret-change-in-production` | Shared secret for JWT signing/verifying       |
 | `JWT_PROVIDER`       | `shared_secret`                   | JWT strategy: shared_secret, public_key, jwks |
 | `JWT_PUBLIC_KEY`     | (empty)                           | PEM public key for public_key provider        |

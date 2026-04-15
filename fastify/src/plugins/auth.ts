@@ -14,13 +14,6 @@ export interface AuthUser {
   [key: string]: unknown;
 }
 
-const DEV_SUPERUSER: AuthUser = {
-  sub: 'dev',
-  email: 'dev@localhost',
-  name: 'Dev Superuser',
-  permissions: ['*:*.*'],
-};
-
 function buildJwtOptions(): Parameters<typeof jwt>[1] {
   const opts: Parameters<typeof jwt>[1] = { secret: config.JWT_SECRET };
   const verify: Record<string, unknown> = {};
@@ -41,10 +34,6 @@ export default fp(async (fastify) => {
   await fastify.register(jwt, buildJwtOptions());
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!config.AUTH_ENABLED) {
-      request.authUser = DEV_SUPERUSER;
-      return;
-    }
     try {
       const decoded = await request.jwtVerify<AuthUser>();
       request.authUser = decoded;

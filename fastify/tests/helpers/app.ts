@@ -6,6 +6,11 @@ import { EntityRegistry, registerEntityRoutes } from '../../src/modules/_base/in
 
 import '../../src/modules/audit-logs/index.js';
 
+export function superuserHeaders(app: FastifyInstance): Record<string, string> {
+  const token = app.jwt.sign({ sub: 'test-superuser', permissions: ['*:*.*'] });
+  return { authorization: `Bearer ${token}` };
+}
+
 export async function buildTestApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 

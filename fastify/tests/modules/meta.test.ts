@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { buildTestApp } from '../helpers/app.js';
+import { buildTestApp, superuserHeaders } from '../helpers/app.js';
 
 describe('Meta endpoint', () => {
   let app: FastifyInstance;
+  let headers: Record<string, string>;
 
   beforeEach(async () => {
     app = await buildTestApp();
+    headers = superuserHeaders(app);
   });
 
   afterAll(async () => {
@@ -17,6 +19,7 @@ describe('Meta endpoint', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/_meta',
+      headers,
     });
 
     expect(res.statusCode).toBe(200);
@@ -30,6 +33,7 @@ describe('Meta endpoint', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/_meta',
+      headers,
     });
 
     const body = res.json();
@@ -48,6 +52,7 @@ describe('Meta endpoint', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/_meta',
+      headers,
     });
 
     const body = res.json();
@@ -71,6 +76,7 @@ describe('Meta endpoint', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/_meta',
+      headers,
     });
 
     const body = res.json();
