@@ -79,6 +79,7 @@ if docker run --rm \
   certbot/certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
+    --cert-name "$DOMAIN" \
     "${CERTBOT_DOMAIN_ARGS[@]}" \
     --email "$EMAIL" \
     --agree-tos \
