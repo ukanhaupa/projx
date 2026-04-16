@@ -124,6 +124,7 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
 pretty = true
 show_error_codes = true
 warn_unused_ignores = true
@@ -131,3 +132,4 @@ warn_redundant_casts = true
 warn_unused_configs = true
 check_untyped_defs = true
 no_implicit_optional = true
+disable_error_code = ["import-untyped"]
