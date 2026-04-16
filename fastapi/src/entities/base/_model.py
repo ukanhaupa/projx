@@ -1,9 +1,13 @@
 from collections.abc import Iterator
+from typing import Any
 
 from sqlalchemy import BigInteger, Column, DateTime, event, func
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
+
 
 _BUILT_IN_PRIVATE_COLUMNS: frozenset[str] = frozenset(
     {
@@ -26,6 +30,7 @@ _BUILT_IN_PRIVATE_COLUMNS: frozenset[str] = frozenset(
 class BaseModel_(Base):
     __abstract__ = True
     __table_args__ = {"extend_existing": True}
+    __allow_unmapped__ = True
 
     # ── Serialisation ────────────────────────────────────────────────────
     __hidden_fields__: set[str] = set()
@@ -67,7 +72,7 @@ class SoftDeleteMixin:
 
 
 class NotFoundError(Exception):
-    def __init__(self, model_name: str, id: int):
+    def __init__(self, model_name: str, id: str | int):
         self.model_name = model_name
         self.id = id
         super().__init__(f"{model_name} not found with id {id}")
@@ -80,7 +85,7 @@ class BusinessRuleError(Exception):
 
 
 @event.listens_for(BaseModel_, "instrument_class", propagate=True)
-def _apply_built_in_private_columns(mapper, cls):  # type: ignore[no-untyped-def]
+def _apply_built_in_private_columns(mapper: Any, cls: type[BaseModel_]) -> None:
     if cls is BaseModel_ or cls.__dict__.get("__abstract__", False):
         return
     if not hasattr(cls, "__table__"):

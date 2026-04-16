@@ -1,4 +1,4 @@
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
 import sqlalchemy.exc
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -20,7 +20,7 @@ class BaseController(Generic[ServiceT]):
 
     def __init__(self, service: type[ServiceT]):
         self.router = APIRouter()
-        self.service = service()
+        self.service = cast("ServiceT", cast("Any", service)())
 
         self.router.post("/", status_code=HTTP_201_CREATED)(self.create)
         self.router.get("/")(self.list)
@@ -28,9 +28,12 @@ class BaseController(Generic[ServiceT]):
         self.router.patch("/{id}")(self.patch)
         self.router.delete("/{id}")(self.delete)
 
+    def _service(self) -> ServiceT:
+        return self.service
+
     async def _get_scope_filters(self, request: Request) -> dict[str, Any] | None:
         user = getattr(request.state, "user", None)
-        model = self.service.repository.model
+        model = self._service().repository.model
         table_name = model.__tablename__
         column_names = {c.key for c in model.__table__.columns}
         return await compute_scope_filters(user, table_name, column_names)
@@ -44,15 +47,16 @@ class BaseController(Generic[ServiceT]):
         expand_fields = ExpandResolver.parse(expand or "")
         if not expand_fields:
             return items
-        return await ExpandResolver.resolve(items, expand_fields, self.service.repository.model)
+        return await ExpandResolver.resolve(items, expand_fields, self._service().repository.model)
 
     async def create(self, request: Request, data: dict = Body(...)):
-        logger.debug(f"{self.service.repository.model.__name__}: Create called")
+        logger.debug(f"{self._service().repository.model.__name__}: Create called")
         try:
+            service = self._service()
             scope_filters = await self._get_scope_filters(request)
             if scope_filters is not None:
                 data.update(scope_filters)
-            result = await self.service.create(data)
+            result = await service.create(data)
             return result
         except sqlalchemy.exc.IntegrityError as e:
             logger.warning(f"Conflict in create: {e}")
@@ -83,13 +87,14 @@ class BaseController(Generic[ServiceT]):
         search: str | None = Query(None),
         expand: str | None = Query(None),
     ):
-        logger.debug(f"{self.service.repository.model.__name__}: List with page: {page}, page_size: {page_size}")
+        logger.debug(f"{self._service().repository.model.__name__}: List with page: {page}, page_size: {page_size}")
         try:
+            service = self._service()
             filter_by = self._extract_filter_by(request)
             scope_filters = await self._get_scope_filters(request)
             if scope_filters is not None:
                 filter_by.update(scope_filters)
-            result, total_records = await self.service.list_with_count(
+            result, total_records = await service.list_with_count(
                 page=page,
                 page_size=page_size,
                 filter_by=filter_by,
@@ -119,20 +124,21 @@ class BaseController(Generic[ServiceT]):
             raise HTTPException(status_code=500, detail="Internal server error")
 
     async def get(self, id: int, request: Request, expand: str | None = Query(None)):
-        logger.debug(f"{self.service.repository.model.__name__}: Get id: {id}")
+        logger.debug(f"{self._service().repository.model.__name__}: Get id: {id}")
         try:
+            service = self._service()
             scope_filters = await self._get_scope_filters(request)
             if scope_filters is not None:
                 filter_by = {"id": id}
                 filter_by.update(scope_filters)
-                results = await self.service.list(page=1, page_size=1, filter_by=filter_by)
+                results = await service.list(page=1, page_size=1, filter_by=filter_by)
                 result = results[0] if results else None
             else:
-                result = await self.service.get(id=id)
+                result = await service.get(id=id)
             if not result:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"{self.service.repository.model.__name__} not found",
+                    detail=f"{service.repository.model.__name__} not found",
                 )
             if expand:
                 data = await self._maybe_expand([result], expand)
@@ -153,8 +159,9 @@ class BaseController(Generic[ServiceT]):
             raise HTTPException(status_code=500, detail="Internal server error")
 
     async def patch(self, id: int, request: Request, data: dict = Body(...)):
-        logger.debug(f"{self.service.repository.model.__name__}: Patch id: {id}")
+        logger.debug(f"{self._service().repository.model.__name__}: Patch id: {id}")
         try:
+            service = self._service()
             if not data:
                 raise HTTPException(
                     status_code=400,
@@ -164,13 +171,13 @@ class BaseController(Generic[ServiceT]):
             if scope_filters is not None:
                 filter_by = {"id": id}
                 filter_by.update(scope_filters)
-                results = await self.service.list(page=1, page_size=1, filter_by=filter_by)
+                results = await service.list(page=1, page_size=1, filter_by=filter_by)
                 if not results:
                     raise HTTPException(
                         status_code=404,
-                        detail=f"{self.service.repository.model.__name__} not found",
+                        detail=f"{service.repository.model.__name__} not found",
                     )
-            result = await self.service.patch(id=id, data=data)
+            result = await service.patch(id=id, data=data)
             return result
         except sqlalchemy.exc.IntegrityError as e:
             logger.warning(f"Conflict in patch: {e}")
@@ -193,19 +200,20 @@ class BaseController(Generic[ServiceT]):
             raise HTTPException(status_code=500, detail="Internal server error")
 
     async def delete(self, id: int, request: Request):
-        logger.debug(f"{self.service.repository.model.__name__}: Delete id: {id}")
+        logger.debug(f"{self._service().repository.model.__name__}: Delete id: {id}")
         try:
+            service = self._service()
             scope_filters = await self._get_scope_filters(request)
             if scope_filters is not None:
                 filter_by = {"id": id}
                 filter_by.update(scope_filters)
-                results = await self.service.list(page=1, page_size=1, filter_by=filter_by)
+                results = await service.list(page=1, page_size=1, filter_by=filter_by)
                 if not results:
                     raise HTTPException(
                         status_code=404,
-                        detail=f"{self.service.repository.model.__name__} not found",
+                        detail=f"{service.repository.model.__name__} not found",
                     )
-            await self.service.delete(id=id)
+            await service.delete(id=id)
             return Response(status_code=204)
         except sqlalchemy.exc.IntegrityError as e:
             logger.warning(f"Conflict in delete: {e}")

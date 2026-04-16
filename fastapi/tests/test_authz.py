@@ -1,10 +1,12 @@
+from typing import Any, cast
+
 from src.middlewares import AuthorizationMiddleware
 
 
 class TestAuthzPermissionLogic:
     """Test the authorization logic without HTTP — pure unit tests."""
 
-    authz = AuthorizationMiddleware(app=None)
+    authz = AuthorizationMiddleware(app=cast("Any", None))
 
     # ── normalize ────────────────────────────────────────────────────
 
@@ -80,6 +82,7 @@ class TestAuthzPermissionLogic:
 
     def test_build_required_permission_hyphen_resource(self):
         result = self.authz._build_required_permission("/api/v1/audit-logs", "GET")
+        assert result is not None
         assert result[0] == "audit_logs"
 
     # ── build permission candidates ──────────────────────────────────

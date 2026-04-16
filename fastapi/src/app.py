@@ -10,6 +10,7 @@ load_dotenv()
 
 import sys
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,7 +77,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+cast("Any", app).openapi = custom_openapi
 
 
 app.add_middleware(AuthorizationMiddleware)

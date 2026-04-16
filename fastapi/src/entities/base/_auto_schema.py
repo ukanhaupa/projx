@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, create_model
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import types as sa_types
 
 from ._model import BaseModel_
+
+if TYPE_CHECKING:
+    from sqlalchemy.sql.type_api import TypeEngine
 
 # Fields that are always auto-managed and excluded from create/update schemas
 _AUTO_FIELDS = {"id", "created_at", "updated_at", "deleted_at"}
@@ -28,14 +31,14 @@ _TYPE_MAP: list[tuple[type, type]] = [
 ]
 
 
-def _resolve_python_type(col_type) -> type:
+def _resolve_python_type(col_type: TypeEngine[Any]) -> type[Any]:
     for sa_cls, py_type in _TYPE_MAP:
         if isinstance(col_type, sa_cls):
             return py_type
     return str
 
 
-def _resolve_field_meta(col_type) -> dict | None:
+def _resolve_field_meta(col_type: TypeEngine[Any]) -> dict[str, Any] | None:
     """Return extra metadata for frontend field-type hints."""
     if isinstance(col_type, sa_types.Enum):
         enums = col_type.enums if hasattr(col_type, "enums") else []
@@ -129,7 +132,7 @@ def get_field_metadata(model: type[BaseModel_]) -> list[dict]:
     This gives the frontend everything it needs to render forms and tables.
     """
     mapper = sa_inspect(model)
-    hidden = getattr(model, "__hidden_fields__", set())
+    hidden: set[str] = set(getattr(model, "__hidden_fields__", set()))
     searchable = set(getattr(model, "__searchable_fields__", set()))
     create_fields = getattr(model, "__create_fields__", None)
     update_fields = getattr(model, "__update_fields__", None)

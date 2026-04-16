@@ -49,18 +49,18 @@ def _build_widget_controller():
 
 
 def _build_soft_widget_controller():
-    type(
+    repo_cls = type(
         "SoftWidgetRepo",
         (BaseRepository,),
         {
             "__init__": lambda self: BaseRepository.__init__(self, SoftWidget),
         },
     )
-    svc_cls = type(
+    svc_cls: type[BaseService] = type(
         "SoftWidgetService",
         (BaseService,),
         {
-            "__init__": lambda self: BaseService.__init__(self, svc_cls),
+            "__init__": lambda self: BaseService.__init__(self, repo_cls),
         },
     )
 

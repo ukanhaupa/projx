@@ -5,7 +5,7 @@ import importlib
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy.exc
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -199,15 +199,18 @@ class EntityRegistry:
 class _ReadOnlyController:
     def __init__(self, service_cls: type[BaseService]):
         self.router = APIRouter()
-        self.service = service_cls()
+        self.service = cast("BaseService", cast("Any", service_cls)())
         self.router.get("/")(self.list)
         self.router.get("/{id}")(self.get)
+
+    def _service(self) -> BaseService:
+        return self.service
 
     async def _maybe_expand(self, items: list, expand: str | None):
         expand_fields = ExpandResolver.parse(expand or "")
         if not expand_fields:
             return items
-        return await ExpandResolver.resolve(items, expand_fields, self.service.repository.model)
+        return await ExpandResolver.resolve(items, expand_fields, self._service().repository.model)
 
     async def list(
         self,
@@ -220,7 +223,7 @@ class _ReadOnlyController:
     ):
         try:
             filter_by = {k: v for k, v in request.query_params.items() if k not in BaseController._RESERVED_PARAMS}
-            result, total = await self.service.list_with_count(
+            result, total = await self._service().list_with_count(
                 page=page,
                 page_size=page_size,
                 filter_by=filter_by,
@@ -252,7 +255,7 @@ class _ReadOnlyController:
 
     async def get(self, id: int, expand: str | None = Query(None)):
         try:
-            result = await self.service.get(id=id)
+            result = await self._service().get(id=id)
             if not result:
                 raise HTTPException(status_code=404, detail="Not found")
             if expand:
@@ -314,11 +317,11 @@ class _AutoController(BaseController):
                 scope_filters = await parent._get_scope_filters(request)
                 data_list = []
                 for item in items:
-                    data = item.model_dump(exclude_unset=True)
+                    data = item.model_dump(exclude_unset=True) if hasattr(item, "model_dump") else dict(item)
                     if scope_filters is not None:
                         data.update(scope_filters)
                     data_list.append(data)
-                results = await parent.service.bulk_create(data_list)
+                results = await parent._service().bulk_create(data_list)
                 return {"data": [dict(r) for r in results], "count": len(results)}
             except sqlalchemy.exc.IntegrityError as e:
                 logger.warning(f"Conflict in bulk_create: {e}")
@@ -337,21 +340,21 @@ class _AutoController(BaseController):
                 logger.exception(e)
                 raise HTTPException(status_code=500, detail="Internal server error")
 
-        bulk_create.__annotations__["items"] = list[schema]
+        bulk_create.__annotations__["items"] = list[Any]
         return bulk_create
 
     async def bulk_delete(self, request: Request, ids: list[int] = Body(...)):
         try:
             scope_filters = await self._get_scope_filters(request)
             if scope_filters is not None:
-                accessible = await self.service.list(
+                accessible = await self._service().list(
                     page=1,
                     page_size=len(ids),
                     filter_by={**scope_filters, "id__in": ",".join(str(i) for i in ids)},
                 )
                 ids = [r.id for r in accessible]
             if ids:
-                await self.service.bulk_delete(ids)
+                await self._service().bulk_delete(ids)
             return Response(status_code=204)
         except sqlalchemy.exc.IntegrityError as e:
             logger.warning(f"Conflict in bulk_delete: {e}")

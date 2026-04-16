@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import (
     JSON,
     Column,
@@ -29,7 +31,7 @@ class SchemaTestModel(BaseModel_):
     metadata_json = Column(JSON, nullable=True)
     birth_date = Column(Date, nullable=True)
     event_time = Column(DateTime, nullable=True)
-    status = Column(Enum("active", "inactive", name="status_enum"), nullable=True)
+    status: Any = Column(Enum("active", "inactive", name="status_enum"), nullable=True)
     secret = Column(String(255), nullable=True)
 
 

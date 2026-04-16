@@ -4,6 +4,7 @@ import builtins
 from contextlib import asynccontextmanager
 from datetime import UTC
 from typing import TYPE_CHECKING, Any, TypeVar
+from typing import cast as type_cast
 
 from sqlalchemy import (
     JSON,
@@ -17,10 +18,12 @@ from sqlalchemy import (
     Text,
     and_,
     asc,
-    cast,
     desc,
     func,
     or_,
+)
+from sqlalchemy import (
+    cast as sa_cast,
 )
 from sqlalchemy.future import select
 
@@ -154,7 +157,7 @@ class BaseRepository:
         return v
 
     def _convert_filter_values(self, filter_by: dict[str, Any]) -> dict[str, Any]:
-        converted = {}
+        converted: dict[str, Any] = {}
         for k, v in filter_by.items():
             column = self.model.__table__.columns[k]
             col_type = column.type
@@ -208,11 +211,16 @@ class BaseRepository:
     def _build_search_predicates(self, search_pattern: str) -> list[Any]:
         searchable = self.model.__searchable_fields__
         if searchable:
-            return [
-                cast(self.model.__table__.columns[name], String).ilike(search_pattern)
-                for name in searchable
-                if name in self.model.__table__.columns
-            ]
+            predicates: list[Any] = []
+            for name in searchable:
+                if name not in self.model.__table__.columns:
+                    continue
+                column = self.model.__table__.columns[name]
+                if isinstance(column.type, (String, Text)):
+                    predicates.append(type_cast("Any", column).ilike(search_pattern))
+                else:
+                    predicates.append(sa_cast(column, String).ilike(search_pattern))
+            return predicates
         return [
             column.ilike(search_pattern)
             for column in self.model.__table__.columns
@@ -224,14 +232,14 @@ class BaseRepository:
         async with DatabaseConfig.async_session() as session:
             yield session
 
-    async def create(self, object: ModelT):
+    async def create(self, entity: ModelT) -> ModelT:
         async with self.get_session() as session:
-            session.add(object)
+            session.add(entity)
             await session.commit()
-            await session.refresh(object)
-            return object
+            await session.refresh(entity)
+            return entity
 
-    async def bulk_create(self, objects: list[ModelT]):
+    async def bulk_create(self, objects: list[ModelT]) -> list[ModelT]:
         async with self.get_session() as session:
             session.add_all(objects)
             await session.commit()
@@ -249,6 +257,11 @@ class BaseRepository:
         search_pattern = self._normalize_search_pattern(search)
         return sanitized_filter, advanced_predicates, search_pattern
 
+    def _deleted_at_column(self) -> Any:
+        if not hasattr(self.model, "deleted_at"):
+            raise AttributeError(f"{self.model.__name__} does not define deleted_at")
+        return type_cast("Any", self.model).deleted_at
+
     def _apply_predicates(
         self,
         query: Select[Any],
@@ -256,7 +269,7 @@ class BaseRepository:
         search_pattern: str | None,
     ) -> Select[Any]:
         if self._soft_delete and hasattr(self.model, "deleted_at"):
-            query = query.where(self.model.deleted_at.is_(None))
+            query = query.where(self._deleted_at_column().is_(None))
         if advanced_predicates:
             query = query.where(and_(*advanced_predicates))
         if search_pattern:
@@ -284,7 +297,7 @@ class BaseRepository:
         order_by: list[str] | None = None,
         filter_by: dict[str, Any] | None = None,
         search: str | None = None,
-    ):
+    ) -> list[ModelT]:
         sanitized_filter, advanced_predicates, search_pattern = self._build_base_query(filter_by, search)
         order_by_clean = self._sanitize_order_by(order_by)
         offset: int = (page - 1) * page_size
@@ -303,7 +316,7 @@ class BaseRepository:
         order_by: builtins.list[str] | None = None,
         filter_by: dict[str, Any] | None = None,
         search: str | None = None,
-    ) -> tuple[list, int]:
+    ) -> tuple[builtins.list[ModelT], int]:
         sanitized_filter, advanced_predicates, search_pattern = self._build_base_query(filter_by, search)
         order_by_clean = self._sanitize_order_by(order_by)
         offset: int = (page - 1) * page_size
@@ -319,8 +332,8 @@ class BaseRepository:
             list_result = await session.execute(list_query)
             count_result = await session.execute(count_query)
             return (
-                list(list_result.scalars().unique().all()),
-                count_result.scalar_one() or 0,
+                builtins.list(list_result.scalars().unique().all()),
+                type_cast("int", count_result.scalar_one() or 0),
             )
 
     async def get(self, id: int):
@@ -336,9 +349,9 @@ class BaseRepository:
         async with self.get_session() as session:
             query = select(self.model).where(self.model.id.in_(ids))
             if self._soft_delete and hasattr(self.model, "deleted_at"):
-                query = query.where(self.model.deleted_at.is_(None))
+                query = query.where(self._deleted_at_column().is_(None))
             result = await session.execute(query)
-            return list(result.scalars().unique().all())
+            return builtins.list(result.scalars().unique().all())
 
     async def patch(self, id: int, **kwargs: dict[str, Any]):
         async with self.get_session() as session:
@@ -379,7 +392,7 @@ class BaseRepository:
         async with self.get_session() as session:
             query = select(self.model).where(self.model.id.in_(ids))
             if self._soft_delete:
-                query = query.where(self.model.deleted_at.is_(None))
+                query = query.where(self._deleted_at_column().is_(None))
             result = await session.execute(query)
             instances = list(result.scalars().unique().all())
             if self._soft_delete:
@@ -396,18 +409,18 @@ class BaseRepository:
         self,
         filter_by: dict[str, Any] | None = None,
         search: str | None = None,
-    ):
+    ) -> int:
         sanitized_filter, advanced_predicates, search_pattern = self._build_base_query(filter_by, search)
         async with self.get_session() as session:
             query: Select[Any] = select(func.count()).select_from(self.model).filter_by(**sanitized_filter)
             query = self._apply_predicates(query, advanced_predicates, search_pattern)
             result = await session.execute(query)
-            return result.scalar_one() or 0
+            return type_cast("int", result.scalar_one() or 0)
 
     async def exists(self, id: int) -> bool:
         async with self.get_session() as session:
             query = select(func.count()).select_from(self.model).where(self.model.id == id)
             if self._soft_delete and hasattr(self.model, "deleted_at"):
-                query = query.where(self.model.deleted_at.is_(None))
+                query = query.where(self._deleted_at_column().is_(None))
             result = await session.execute(query)
             return (result.scalar_one() or 0) > 0
