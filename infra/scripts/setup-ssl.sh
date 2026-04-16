@@ -35,6 +35,7 @@ CERTBOT_ARGS=(
   "certonly"
   "--webroot"
   "--webroot-path=/var/www/certbot"
+  "--cert-name" "$DOMAIN"
   "--agree-tos"
   "--non-interactive"
   "-d" "$DOMAIN"
