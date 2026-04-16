@@ -2,6 +2,7 @@ import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import jwt
 import pytest
@@ -28,7 +29,7 @@ if not TEST_DATABASE_URL:
 
 @pytest.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    engine = create_async_engine(cast("str", TEST_DATABASE_URL), echo=False)
 
     database_module._engine = engine
     database_module._session_factory = async_sessionmaker(

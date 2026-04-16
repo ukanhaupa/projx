@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from sqlalchemy import Column, ForeignKey, Integer, String
 
@@ -72,7 +74,7 @@ class TestExpandResolve:
         await test_db.commit()
 
         repo = BaseRepository(Product)
-        items = await repo.list()
+        items: list[Any] = await repo.list()
         result = await ExpandResolver.resolve(items, [], Product)
         assert all(isinstance(r, dict) for r in result)
 
@@ -83,7 +85,7 @@ class TestExpandResolve:
         await test_db.commit()
 
         repo = BaseRepository(Product)
-        items = await repo.list()
+        items: list[Any] = await repo.list()
         result = await ExpandResolver.resolve(items, ["nonexistent"], Product)
         assert len(result) >= 1
         assert "nonexistent" not in result[0]
@@ -100,7 +102,7 @@ class TestExpandResolve:
         await test_db.commit()
 
         repo = BaseRepository(Product)
-        items = await repo.list()
+        items: list[Any] = await repo.list()
         result = await ExpandResolver.resolve(items, ["category"], Product)
 
         assert len(result) >= 1
@@ -115,7 +117,7 @@ class TestExpandResolve:
         await test_db.commit()
 
         repo = BaseRepository(Product)
-        items = await repo.list()
+        items: list[Any] = await repo.list()
         result = await ExpandResolver.resolve(items, ["category"], Product)
 
         expanded = next(r for r in result if r["name"] == "Orphan")

@@ -67,7 +67,7 @@ jobs:
       - run: npm test
 
   fastapi:
-    name: FastAPI (format + lint)
+    name: FastAPI (format + lint + typecheck + test + audit)
     needs: changes
     if: needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
@@ -80,6 +80,7 @@ jobs:
       - run: uv sync --group dev
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
+      - run: uv run mypy
       - name: Enforce no private cross-module imports in src/
         run: |
           if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/; then
@@ -87,6 +88,8 @@ jobs:
             exit 1
           fi
       - run: uv run lint-imports
+      - run: uv run pytest
+      - run: uv run pip-audit
 
   fastify:
     name: Fastify (format + lint + typecheck)

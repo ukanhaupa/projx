@@ -272,7 +272,7 @@ class TestJsonFilter:
 
         repo = BaseRepository(JsonWidget)
         await repo.create(JsonWidget(name="JW", metadata_col={"key": "val"}))
-        results = await repo.list(filter_by={"metadata_col": '{"key": "val"}'})
+        results: list[JsonWidget] = await repo.list(filter_by={"metadata_col": '{"key": "val"}'})
         assert len(results) >= 1  # JSON filter silently ignored, returns all rows
 
 

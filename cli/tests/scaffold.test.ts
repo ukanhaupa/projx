@@ -92,7 +92,7 @@ describe("scaffold", () => {
     );
 
     const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
-    expect(ci).toContain("name: FastAPI (format + lint)");
+    expect(ci).toContain("name: FastAPI (format + lint + typecheck + test + audit)");
     expect(ci).toContain("name: Fastify (format + lint + typecheck)");
     expect(ci).toContain("name: Frontend (format + lint + typecheck)");
     expect(ci).toContain("name: Flutter (format + analyze)");

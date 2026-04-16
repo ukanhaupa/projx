@@ -43,10 +43,12 @@ CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
 
 # ── FastAPI ───────────────────────────────────────────────────────
 if [ -n "$FASTAPI_PY" ]; then
-  echo "Formatting & linting fastapi..."
+  echo "Running quality gates for fastapi..."
   cd fastapi
   echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff format
   echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff check --fix
+  uv run mypy
+  uv run pip-audit
   cd ..
   echo "$FASTAPI_PY" | xargs git add
 fi

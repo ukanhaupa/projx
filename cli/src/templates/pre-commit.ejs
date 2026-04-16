@@ -31,10 +31,12 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 
 <%= pathsUpper.fastapi %>_PY=$(echo "$STAGED_FILES" | grep '^<%= paths.fastapi %>/.*\.py$' || true)
 if [ -n "$<%= pathsUpper.fastapi %>_PY" ]; then
-  echo "Formatting & linting <%= paths.fastapi %>..."
+  echo "Running quality gates for <%= paths.fastapi %>..."
   cd <%= paths.fastapi %>
   echo "$<%= pathsUpper.fastapi %>_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff format
   echo "$<%= pathsUpper.fastapi %>_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff check --fix
+  uv run mypy
+  uv run pip-audit
   cd ..
   echo "$<%= pathsUpper.fastapi %>_PY" | xargs git add
 fi

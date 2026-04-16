@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 import pytest
@@ -82,7 +83,7 @@ class TestJWTVerifier:
     secret = "test-secret-that-is-at-least-32-bytes-long"
 
     def _make_verifier(self, **overrides):
-        defaults = dict(
+        defaults: dict[str, Any] = dict(
             provider="shared_secret",
             algorithms=["HS256"],
             secret=self.secret,
