@@ -27,7 +27,7 @@
     "@fastify/swagger-ui": "^5.2.2",
     "@prisma/client": "^6.4.1",
     "@sinclair/typebox": "^0.34.15",
-    "fastify": "^5.2.1",
+    "fastify": "^5.8.5",
     "fastify-plugin": "^5.0.1",
     "pino-pretty": "^13.0.0"
   },
