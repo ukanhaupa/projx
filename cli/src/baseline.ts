@@ -12,6 +12,7 @@ import {
   copyStaticFiles,
   readComponentMarker,
   readProjxConfig,
+  renderEjsInDir,
   replaceInFile,
   replaceInDir,
   toSnake,
@@ -370,8 +371,10 @@ async function removeSkippedFiles(
 
       if (entry.isDirectory()) {
         await walk(full, base);
-      } else if (entry.name !== ".projx-component" && matchesSkip(rel, skipPatterns)) {
-        if (realDir && !existsSync(join(realDir, rel))) continue;
+      } else if (entry.name !== ".projx-component") {
+        const targetRel = rel.endsWith(".ejs") ? rel.slice(0, -".ejs".length) : rel;
+        if (!matchesSkip(targetRel, skipPatterns) && !matchesSkip(rel, skipPatterns)) continue;
+        if (realDir && !existsSync(join(realDir, targetRel))) continue;
         await unlink(full);
       }
     }
@@ -430,6 +433,8 @@ export async function writeTemplateToDir(
       await cp(srcDir, outDir, { recursive: true, force: true });
     }
     await rm(tmpDir, { recursive: true, force: true });
+
+    await renderEjsInDir(outDir, vars);
 
     await upsertComponentMarker(join(dest, targetDir), component, skipPatterns.length > 0 ? skipPatterns : undefined);
   }

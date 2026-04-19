@@ -1,10 +1,18 @@
+<% if (pm === 'bun') { %>
+FROM oven/bun:1-alpine AS build
+<% } %>
+<% if (pm !== 'bun') { %>
 FROM node:20-alpine AS build
+<% } %>
+<% if (pm === 'pnpm' || pm === 'yarn') { %>
+RUN corepack enable
+<% } %>
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json <%= pm.lockfile %>* ./
 
-RUN npm ci
+RUN <%= pm.ci %>
 
 COPY src/ src/
 COPY index.html tsconfig*.json vite.config.ts ./
@@ -14,7 +22,7 @@ ARG VITE_OIDC_URL
 ARG VITE_OIDC_REALM
 ARG VITE_OIDC_CLIENT_ID
 
-RUN npm run build
+RUN <%= pm.run %> build
 
 FROM nginx:alpine
 

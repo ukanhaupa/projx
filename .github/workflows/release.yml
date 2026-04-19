@@ -53,10 +53,15 @@ jobs:
 
             ${{ steps.changelog.outputs.changes }}
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
 
       - name: Copy root README for npm
         run: cp ../README.md .
@@ -68,11 +73,11 @@ jobs:
         run: |
           git config --global user.name "CI"
           git config --global user.email "ci@projx.dev"
-      - run: npm ci
-      - run: npx eslint 'src/**/*.ts'
-      - run: npx tsc --noEmit
-      - run: npm run build
-      - run: npm test
-      - run: npm publish --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec eslint 'src/**/*.ts'
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm publish --access public --tag ${{ steps.prerelease.outputs.npm_tag }} --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

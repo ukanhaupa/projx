@@ -93,9 +93,11 @@ describe("scaffold", () => {
 
     const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
     expect(ci).toContain("name: FastAPI (format + lint + typecheck + test + audit)");
-    expect(ci).toContain("name: Fastify (format + lint + typecheck)");
-    expect(ci).toContain("name: Frontend (format + lint + typecheck)");
+    expect(ci).toContain("name: Fastify (format + lint + typecheck + audit)");
+    expect(ci).toContain("name: Frontend (format + lint + typecheck + audit)");
     expect(ci).toContain("name: Flutter (format + analyze)");
+    expect(ci).toContain("name: Secret scan");
+    expect(ci).toContain("gitleaks/gitleaks-action@v2");
   });
 
   it("setup.sh uses canonical display names", async () => {
@@ -239,6 +241,8 @@ describe.each(PMS)("scaffold with %s", (pm) => {
     const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
     expect(ci).toContain(cmd.ci);
     expect(ci).toContain(cmd.prismaExec);
+    expect(ci).toContain(cmd.audit);
+    expect(ci).toContain("gitleaks/gitleaks-action@v2");
 
     if (pm === "pnpm") {
       expect(ci).toContain("pnpm/action-setup@v4");
@@ -266,5 +270,56 @@ describe.each(PMS)("scaffold with %s", (pm) => {
     expect(hook).toContain(`${cmd.exec} prettier`);
     expect(hook).toContain(`${cmd.exec} eslint`);
     expect(hook).toContain(`${cmd.exec} tsc`);
+  });
+
+  it("pre-commit hook does not run pip-audit (moved to CI)", async () => {
+    dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
+    await scaffold(
+      { name: `${pm}-app`, components: ["fastapi"], git: true, install: false, packageManager: pm },
+      dest,
+      REPO_DIR,
+    );
+
+    const hook = await readFile(join(dest, ".githooks/pre-commit"), "utf-8");
+    expect(hook).not.toContain("pip-audit");
+
+    const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
+    expect(ci).toContain("pip-audit");
+  });
+
+  it("frontend Dockerfile uses the correct install and run commands", async () => {
+    dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
+    await scaffold(
+      { name: `${pm}-app`, components: ["frontend"], git: true, install: false, packageManager: pm },
+      dest,
+      REPO_DIR,
+    );
+
+    const dockerfile = await readFile(join(dest, "frontend/Dockerfile"), "utf-8");
+    expect(existsSync(join(dest, "frontend/Dockerfile.ejs"))).toBe(false);
+    expect(dockerfile).toContain(cmd.ci);
+    expect(dockerfile).toContain(`${cmd.run} build`);
+    expect(dockerfile).toContain(cmd.lockfile);
+    if (pm === "bun") {
+      expect(dockerfile).toContain("oven/bun");
+    } else {
+      expect(dockerfile).toContain("node:20-alpine");
+    }
+  });
+
+  it("fastify Dockerfile uses the correct install, prisma, and run commands", async () => {
+    dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
+    await scaffold(
+      { name: `${pm}-app`, components: ["fastify"], git: true, install: false, packageManager: pm },
+      dest,
+      REPO_DIR,
+    );
+
+    const dockerfile = await readFile(join(dest, "fastify/Dockerfile"), "utf-8");
+    expect(existsSync(join(dest, "fastify/Dockerfile.ejs"))).toBe(false);
+    expect(dockerfile).toContain(cmd.ci);
+    expect(dockerfile).toContain(`${cmd.prismaExec} generate`);
+    expect(dockerfile).toContain(`${cmd.run} build`);
+    expect(dockerfile).toContain(cmd.lockfile);
   });
 });

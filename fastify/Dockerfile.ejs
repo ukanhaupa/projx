@@ -1,19 +1,34 @@
+<% if (pm === 'bun') { %>
+FROM oven/bun:1-alpine AS base
+<% } %>
+<% if (pm !== 'bun') { %>
 FROM node:20-slim AS base
+<% } %>
+<% if (pm === 'pnpm') { %>
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
+<% } %>
+<% if (pm === 'yarn') { %>
+RUN corepack enable
+<% } %>
 
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json pnpm-lock.yaml* ./
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+COPY package.json <%= pm.lockfile %>* ./
+<% if (pm === 'pnpm') { %>
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store <%= pm.ci %>
+<% } %>
+<% if (pm !== 'pnpm') { %>
+RUN <%= pm.ci %>
+<% } %>
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm prisma generate
-RUN pnpm run build
+RUN <%= pm.prismaExec %> generate
+RUN <%= pm.run %> build
 
 FROM base AS production
 COPY --from=build /app/dist ./dist

@@ -32,18 +32,19 @@ export interface PmCommands {
   lockfile: string;
   prismaExec: string;
   runDev: string;
+  audit: string;
 }
 
 export function pmCommands(pm: PackageManager): PmCommands {
   switch (pm) {
     case "npm":
-      return { name: "npm", install: "npm install", ci: "npm ci", run: "npm run", exec: "npx", dlx: "npx", lockfile: "package-lock.json", prismaExec: "npx prisma", runDev: "npm run dev" };
+      return { name: "npm", install: "npm install", ci: "npm ci", run: "npm run", exec: "npx", dlx: "npx", lockfile: "package-lock.json", prismaExec: "npx prisma", runDev: "npm run dev", audit: "npm audit --omit=dev" };
     case "pnpm":
-      return { name: "pnpm", install: "pnpm install", ci: "pnpm install --frozen-lockfile", run: "pnpm", exec: "pnpm exec", dlx: "pnpm dlx", lockfile: "pnpm-lock.yaml", prismaExec: "pnpm prisma", runDev: "pnpm dev" };
+      return { name: "pnpm", install: "pnpm install", ci: "pnpm install --frozen-lockfile", run: "pnpm", exec: "pnpm exec", dlx: "pnpm dlx", lockfile: "pnpm-lock.yaml", prismaExec: "pnpm prisma", runDev: "pnpm dev", audit: "pnpm audit --prod" };
     case "yarn":
-      return { name: "yarn", install: "yarn", ci: "yarn --frozen-lockfile", run: "yarn", exec: "yarn", dlx: "yarn dlx", lockfile: "yarn.lock", prismaExec: "yarn prisma", runDev: "yarn dev" };
+      return { name: "yarn", install: "yarn", ci: "yarn --frozen-lockfile", run: "yarn", exec: "yarn", dlx: "yarn dlx", lockfile: "yarn.lock", prismaExec: "yarn prisma", runDev: "yarn dev", audit: "yarn npm audit --environment production" };
     case "bun":
-      return { name: "bun", install: "bun install", ci: "bun install --frozen-lockfile", run: "bun run", exec: "bunx", dlx: "bunx", lockfile: "bun.lockb", prismaExec: "bunx prisma", runDev: "bun run dev" };
+      return { name: "bun", install: "bun install", ci: "bun install --frozen-lockfile", run: "bun run", exec: "bunx", dlx: "bunx", lockfile: "bun.lockb", prismaExec: "bunx prisma", runDev: "bun run dev", audit: "bun audit --prod" };
   }
 }
 
@@ -503,6 +504,26 @@ export function render(
   }
 
   return output.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+export async function renderEjsInDir(
+  dir: string,
+  vars: Record<string, unknown>,
+): Promise<void> {
+  if (!existsSync(dir)) return;
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await renderEjsInDir(full, vars);
+    } else if (entry.name.endsWith(".ejs")) {
+      const content = await readFile(full, "utf-8");
+      const rendered = render(content, vars);
+      const out = full.slice(0, -".ejs".length);
+      await writeFile(out, rendered);
+      await rm(full);
+    }
+  }
 }
 
 export function detectProjectName(
