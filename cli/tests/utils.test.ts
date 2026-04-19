@@ -517,6 +517,7 @@ describe("pmCommands", () => {
     expect(cmd.ci).toBe("npm ci");
     expect(cmd.exec).toBe("npx");
     expect(cmd.lockfile).toBe("package-lock.json");
+    expect(cmd.audit).toBe("npm audit --omit=dev");
   });
 
   it("returns correct pnpm commands", () => {
@@ -525,6 +526,7 @@ describe("pmCommands", () => {
     expect(cmd.ci).toBe("pnpm install --frozen-lockfile");
     expect(cmd.run).toBe("pnpm");
     expect(cmd.lockfile).toBe("pnpm-lock.yaml");
+    expect(cmd.audit).toBe("pnpm audit --prod");
   });
 
   it("returns correct yarn commands", () => {
@@ -532,6 +534,7 @@ describe("pmCommands", () => {
     expect(cmd.install).toBe("yarn");
     expect(cmd.ci).toBe("yarn --frozen-lockfile");
     expect(cmd.lockfile).toBe("yarn.lock");
+    expect(cmd.audit).toBe("yarn npm audit --environment production");
   });
 
   it("returns correct bun commands", () => {
@@ -539,6 +542,7 @@ describe("pmCommands", () => {
     expect(cmd.install).toBe("bun install");
     expect(cmd.exec).toBe("bunx");
     expect(cmd.lockfile).toBe("bun.lockb");
+    expect(cmd.audit).toBe("bun audit --prod");
   });
 });
 

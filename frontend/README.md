@@ -4,12 +4,12 @@ React 19 + TypeScript SPA with auto-entity discovery, design token theming, and 
 
 ## Quick Start
 
-Prerequisites: Node.js 20+
+Prerequisites: Node.js 20+, pnpm 10+ (`corepack enable && corepack prepare pnpm@latest --activate`)
 
 ```bash
 cp .env.example .env     # set VITE_API_URL
-npm install
-npm run dev              # http://localhost:3000
+pnpm install
+pnpm dev                 # http://localhost:3000
 ```
 
 ## Project Structure
@@ -225,8 +225,8 @@ The `api.ts` module provides a typed HTTP client with:
 ### Unit Tests (Vitest)
 
 ```bash
-npm test              # run once
-npm run test:watch    # watch mode
+pnpm test              # run once
+pnpm test:watch        # watch mode
 ```
 
 Vitest is configured in `vite.config.ts` with jsdom environment. Coverage thresholds are set to 80% for statements, branches, functions, and lines.
@@ -243,7 +243,7 @@ cd e2e && npx playwright test
 ### Type Checking
 
 ```bash
-npm run typecheck     # tsc --noEmit (not part of build)
+pnpm typecheck         # tsc --noEmit (not part of build)
 ```
 
 Type checking is separated from the build for speed. Run it in CI or pre-commit.
@@ -251,7 +251,7 @@ Type checking is separated from the build for speed. Run it in CI or pre-commit.
 ## Build
 
 ```bash
-npm run build         # ~500ms via Vite + esbuild
+pnpm build             # ~500ms via Vite + esbuild
 ```
 
 Output goes to `dist/`. Vite uses esbuild for TypeScript transpilation (no tsc in the build path), so builds are near-instant regardless of codebase size.

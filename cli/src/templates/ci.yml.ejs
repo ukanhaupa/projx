@@ -61,6 +61,17 @@ jobs:
             <%= paths.infra %>:
               - '<%= paths.infra %>/**'
 <% } %>
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 <% if (components.includes('fastapi')) { %>
 
   <%= paths.fastapi %>:
@@ -84,7 +95,7 @@ jobs:
 <% if (components.includes('fastify')) { %>
 
   <%= paths.fastify %>:
-    name: <%= displayNames.fastify %> (format + lint + typecheck)
+    name: <%= displayNames.fastify %> (format + lint + typecheck + audit)
     needs: changes
     if: needs.changes.outputs.<%= paths.fastify %> == 'true'
     runs-on: ubuntu-latest
@@ -96,7 +107,7 @@ jobs:
 <% if (pm === 'pnpm') { %>
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 <% } %>
 <% if (pm === 'bun') { %>
       - uses: oven-sh/setup-bun@v2
@@ -113,11 +124,12 @@ jobs:
       - run: <%= pm.exec %> prettier --check .
       - run: <%= pm.exec %> eslint .
       - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.audit %>
 <% } %>
 <% if (components.includes('frontend')) { %>
 
   <%= paths.frontend %>:
-    name: <%= displayNames.frontend %> (format + lint + typecheck)
+    name: <%= displayNames.frontend %> (format + lint + typecheck + audit)
     needs: changes
     if: needs.changes.outputs.<%= paths.frontend %> == 'true'
     runs-on: ubuntu-latest
@@ -129,7 +141,7 @@ jobs:
 <% if (pm === 'pnpm') { %>
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 <% } %>
 <% if (pm === 'bun') { %>
       - uses: oven-sh/setup-bun@v2
@@ -145,6 +157,7 @@ jobs:
       - run: <%= pm.exec %> prettier --check .
       - run: <%= pm.exec %> eslint 'src/**/*.{ts,tsx}'
       - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.audit %>
 <% } %>
 <% if (components.includes('mobile')) { %>
 
@@ -169,7 +182,7 @@ jobs:
 <% if (components.includes('e2e')) { %>
 
   <%= paths.e2e %>:
-    name: <%= displayNames.e2e %> (format + lint + typecheck)
+    name: <%= displayNames.e2e %> (format + lint + typecheck + audit)
     needs: changes
     if: needs.changes.outputs.<%= paths.e2e %> == 'true'
     runs-on: ubuntu-latest
@@ -181,7 +194,7 @@ jobs:
 <% if (pm === 'pnpm') { %>
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 <% } %>
 <% if (pm === 'bun') { %>
       - uses: oven-sh/setup-bun@v2
@@ -197,6 +210,7 @@ jobs:
       - run: <%= pm.exec %> prettier --check .
       - run: <%= pm.exec %> eslint '**/*.ts'
       - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.audit %>
 <% } %>
 <% if (components.includes('infra')) { %>
 

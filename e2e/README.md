@@ -36,39 +36,39 @@ e2e/
 
 ```bash
 cd e2e
-npm install
-npx playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 ```
 
 To install all configured browsers (Chromium, Firefox, WebKit):
 
 ```bash
-npm run install-browsers
+pnpm install-browsers
 ```
 
 ## Running Tests
 
 ```bash
 # All frontend tests across all browsers
-cd e2e && npx playwright test
+cd e2e && pnpm exec playwright test
 
 # Chromium only (faster local development)
-cd e2e && npm run test:frontend
+cd e2e && pnpm test:frontend
 
 # Interactive UI mode (great for debugging)
-cd e2e && npm run test:ui
+cd e2e && pnpm test:ui
 
 # Run a specific test file
-cd e2e && npx playwright test auth.spec.ts
+cd e2e && pnpm exec playwright test auth.spec.ts
 ```
 
 ## Quality Gates
 
 ```bash
 cd e2e
-npm run format      # Prettier
-npm run lint        # ESLint
-npm run typecheck   # TypeScript
+pnpm format        # Prettier
+pnpm lint          # ESLint
+pnpm typecheck     # TypeScript
 ```
 
 ## Writing New Tests

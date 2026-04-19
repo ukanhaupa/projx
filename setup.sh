@@ -10,8 +10,11 @@ echo "FastAPI dependencies installed."
 cd fastify && pnpm install --frozen-lockfile && cd ..
 echo "Fastify dependencies installed."
 
-cd frontend && npm ci && cd ..
+cd frontend && pnpm install --frozen-lockfile && cd ..
 echo "Frontend dependencies installed."
+
+cd e2e && pnpm install --frozen-lockfile && cd ..
+echo "E2E dependencies installed."
 
 if command -v flutter &>/dev/null; then
   cd mobile && flutter pub get && cd ..
@@ -20,7 +23,7 @@ else
   echo "Flutter SDK not installed — skipping mobile."
 fi
 
-cd cli && npm ci && cd ..
+cd cli && pnpm install --frozen-lockfile && cd ..
 echo "CLI dependencies installed."
 
 echo ""

@@ -373,8 +373,8 @@ The CLI lives in `cli/`. Templates are the root-level component directories (`fa
 
 ```bash
 cd cli
-npm test        # run tests
-npm run build   # build CLI
+pnpm test       # run tests
+pnpm build      # build CLI
 ```
 
 ## Try it now
