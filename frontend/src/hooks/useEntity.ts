@@ -112,7 +112,15 @@ export function useEntity(config: EntityConfig): UseEntityReturn {
       if (gen === fetchGen.current) {
         setItems(result.data);
         setPagination(result.pagination);
-        setSelectedIds(new Set());
+        setSelectedIds((prev) => {
+          if (prev.size === 0) return prev;
+          const visible = new Set(
+            result.data.map((r) => r.id as string | number),
+          );
+          const pruned = new Set<string | number>();
+          for (const id of prev) if (visible.has(id)) pruned.add(id);
+          return pruned.size === prev.size ? prev : pruned;
+        });
       }
     } catch (e: unknown) {
       if (gen === fetchGen.current)
@@ -132,6 +140,7 @@ export function useEntity(config: EntityConfig): UseEntityReturn {
   ]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData, refreshKey]);
 
