@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # !!! ATTENTION !!!
 # KEEP THIS AT THE TOP TO ENSURE ENVIRONMENT VARIABLES ARE LOADED BEFORE ANY IMPORTS
 # ===========================
-load_dotenv()
+load_dotenv(override=True)
 
 import sys
 from contextlib import asynccontextmanager
