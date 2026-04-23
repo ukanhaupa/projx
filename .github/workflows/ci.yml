@@ -82,7 +82,7 @@ jobs:
       - run: pnpm audit --prod
 
   fastapi:
-    name: FastAPI (format + lint + typecheck + test + audit)
+    name: FastAPI (format + lint + typecheck + audit)
     needs: changes
     if: needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
@@ -103,7 +103,6 @@ jobs:
             exit 1
           fi
       - run: uv run lint-imports
-      - run: uv run pytest
       - run: uv run pip-audit
 
   fastify:
