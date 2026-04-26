@@ -58,7 +58,7 @@ services:
       - SQLALCHEMY_DATABASE_URI=postgresql+asyncpg://dev:dev@db:5432/app
       - CORS_ALLOW_ORIGINS=http://localhost:3000,http://localhost
       - JWT_PROVIDER=shared_secret
-      - JWT_SECRET=dev-secret-that-is-at-least-32-bytes-long
+      - JWT_SECRET=dev-secret # gitleaks:allow
       - JWT_ALGORITHMS=HS256
     volumes:
       - ./<%= inst.path %>/src:/app/src
@@ -116,7 +116,7 @@ services:
       - DATABASE_URL=postgresql://dev:dev@db:5432/app
       - CORS_ALLOW_ORIGINS=http://localhost:5173,http://localhost
       - JWT_PROVIDER=shared_secret
-      - JWT_SECRET=dev-secret-that-is-at-least-32-bytes-long
+      - JWT_SECRET=dev-secret # gitleaks:allow
     volumes:
       - ./<%= inst.path %>/src:/app/src
     depends_on:

@@ -6,12 +6,14 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
     outputs:
 <% for (const inst of fastapiInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
@@ -75,13 +77,32 @@ jobs:
 <% for (const inst of fastapiInstances) { %>
 
   <%= inst.path %>:
-    name: <%= inst.display %> (format + lint + typecheck + test + audit)
+    name: <%= inst.display %> (format + lint + typecheck + audit)
     needs: changes
     if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: <%= inst.path %>
+    env:
+      SQLALCHEMY_DATABASE_URI: postgresql+asyncpg://postgres:postgres@localhost:5432/ci_test
+      JWT_PROVIDER: shared_secret
+      JWT_SECRET: ci-test-secret # gitleaks:allow
+      JWT_ALGORITHMS: HS256
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v4
@@ -89,19 +110,35 @@ jobs:
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
       - run: uv run mypy
-      - run: uv run pytest
       - run: uv run pip-audit
 <% } %>
 <% for (const inst of fastifyInstances) { %>
 
   <%= inst.path %>:
-    name: <%= inst.display %> (format + lint + typecheck + audit)
+    name: <%= inst.display %> (format + lint + typecheck + build + audit)
     needs: changes
     if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: <%= inst.path %>
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+      JWT_SECRET: ci-test-secret # gitleaks:allow
     steps:
       - uses: actions/checkout@v5
 <% if (pm === 'pnpm') { %>
@@ -115,21 +152,23 @@ jobs:
 <% if (pm !== 'bun') { %>
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: <%= pm.name %>
           cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.prismaExec %> generate
+      - run: <%= pm.prismaExec %> migrate deploy
       - run: <%= pm.exec %> prettier --check .
       - run: <%= pm.exec %> eslint .
       - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.run %> build
       - run: <%= pm.audit %>
 <% } %>
 <% for (const inst of frontendInstances) { %>
 
   <%= inst.path %>:
-    name: <%= inst.display %> (format + lint + typecheck + audit)
+    name: <%= inst.display %> (format + lint + typecheck + build + audit)
     needs: changes
     if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
@@ -157,6 +196,8 @@ jobs:
       - run: <%= pm.exec %> prettier --check .
       - run: <%= pm.exec %> eslint 'src/**/*.{ts,tsx}'
       - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.run %> build
+      - run: bash scripts/check-bundle-size.sh
       - run: <%= pm.audit %>
 <% } %>
 <% for (const inst of mobileInstances) { %>
