@@ -33,7 +33,10 @@ function withInstances(vars: GeneratorVars): GeneratorVars {
   const base: ComponentInstance[] =
     vars.instances && vars.instances.length > 0
       ? vars.instances
-      : vars.components.map((type) => ({ type, path: vars.paths[type] ?? type }));
+      : vars.components.map((type) => ({
+          type,
+          path: vars.paths[type] ?? type,
+        }));
   const enriched = base.map((inst) => ({
     ...inst,
     upper: shellSafeUpper(inst.path),

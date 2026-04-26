@@ -452,7 +452,10 @@ export async function writeTemplateToDir(
     type,
     path: componentPaths[type],
   }));
-  const allInstances: ComponentInstance[] = [...primaryInstances, ...extraInstances];
+  const allInstances: ComponentInstance[] = [
+    ...primaryInstances,
+    ...extraInstances,
+  ];
   const toScaffold = instancesToScaffold ?? allInstances;
 
   for (const inst of toScaffold) {
@@ -468,7 +471,6 @@ export async function writeTemplateToDir(
       nameSnake,
     });
   }
-
 
   const hasBackend =
     components.includes("fastapi") || components.includes("fastify");
@@ -514,9 +516,13 @@ export async function writeTemplateToDir(
     );
   }
 
-  if (shouldWrite("setup.sh")) {
-    await writeFile(join(dest, "setup.sh"), await generateSetupSh(vars));
-    await chmod(join(dest, "setup.sh"), 0o755);
+  if (shouldWrite("scripts/setup.sh")) {
+    await mkdir(join(dest, "scripts"), { recursive: true });
+    await writeFile(
+      join(dest, "scripts/setup.sh"),
+      await generateSetupSh(vars),
+    );
+    await chmod(join(dest, "scripts/setup.sh"), 0o755);
   }
 
   await copyStaticFiles(repoDir, dest);
@@ -548,7 +554,17 @@ async function writeOneInstance(
   inst: ComponentInstance,
   opts: WriteOneOpts,
 ): Promise<void> {
-  const { dest, repoDir, vars, componentPaths, realCwd, applyDefaults, baseSkip, projectName, nameSnake } = opts;
+  const {
+    dest,
+    repoDir,
+    vars,
+    componentPaths,
+    realCwd,
+    applyDefaults,
+    baseSkip,
+    projectName,
+    nameSnake,
+  } = opts;
   const { type, path: targetDir } = inst;
 
   const realMarker = await readComponentMarker(join(realCwd, targetDir));
@@ -558,7 +574,9 @@ async function writeOneInstance(
   const defaultSkip = shouldApplyComponentDefault
     ? (DEFAULT_COMPONENT_SKIP_PATTERNS[type] ?? [])
     : [];
-  const skipPatterns = [...new Set([...baseSkip, ...markerSkip, ...defaultSkip])];
+  const skipPatterns = [
+    ...new Set([...baseSkip, ...markerSkip, ...defaultSkip]),
+  ];
 
   const tmpDir = join(dest, "__cptmp__");
   await copyComponent(repoDir, type, tmpDir);
@@ -576,7 +594,10 @@ async function writeOneInstance(
   }
   await rm(tmpDir, { recursive: true, force: true });
 
-  const instancePaths: ComponentPaths = { ...componentPaths, [type]: targetDir };
+  const instancePaths: ComponentPaths = {
+    ...componentPaths,
+    [type]: targetDir,
+  };
   await renderEjsInDir(outDir, { ...vars, paths: instancePaths });
 
   await upsertComponentMarker(
@@ -585,7 +606,13 @@ async function writeOneInstance(
     skipPatterns.length > 0 ? skipPatterns : undefined,
   );
 
-  await substituteNamesForInstance(inst, dest, projectName, nameSnake, vars.nameOverrides);
+  await substituteNamesForInstance(
+    inst,
+    dest,
+    projectName,
+    nameSnake,
+    vars.nameOverrides,
+  );
 }
 
 async function substituteNamesForInstance(
@@ -598,22 +625,50 @@ async function substituteNamesForInstance(
   const { type, path } = inst;
   const isCanonical = path === type;
   if (type === "fastapi") {
-    const target = isCanonical ? (overrides?.fastapi ?? `${name}-fastapi`) : `${name}-${path}`;
-    await replaceInFile(join(dest, `${path}/pyproject.toml`), "projx-fastapi", target);
+    const target = isCanonical
+      ? (overrides?.fastapi ?? `${name}-fastapi`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/pyproject.toml`),
+      "projx-fastapi",
+      target,
+    );
   } else if (type === "fastify") {
-    const target = isCanonical ? (overrides?.fastify ?? `${name}-fastify`) : `${name}-${path}`;
-    await replaceInFile(join(dest, `${path}/package.json`), "projx-fastify", target);
+    const target = isCanonical
+      ? (overrides?.fastify ?? `${name}-fastify`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/package.json`),
+      "projx-fastify",
+      target,
+    );
   } else if (type === "frontend") {
-    const target = isCanonical ? (overrides?.frontend ?? `${name}-frontend`) : `${name}-${path}`;
-    await replaceInFile(join(dest, `${path}/package.json`), "projx-frontend", target);
+    const target = isCanonical
+      ? (overrides?.frontend ?? `${name}-frontend`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/package.json`),
+      "projx-frontend",
+      target,
+    );
   } else if (type === "e2e") {
-    const target = isCanonical ? (overrides?.e2e ?? `${name}-e2e`) : `${name}-${path}`;
-    await replaceInFile(join(dest, `${path}/package.json`), "projx-e2e", target);
+    const target = isCanonical
+      ? (overrides?.e2e ?? `${name}-e2e`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/package.json`),
+      "projx-e2e",
+      target,
+    );
   } else if (type === "mobile") {
     const target = isCanonical
       ? (overrides?.mobile ?? `${nameSnake}_mobile`)
       : toSnake(`${nameSnake}_${path}`);
-    await replaceInFile(join(dest, `${path}/pubspec.yaml`), "projx_mobile", target);
+    await replaceInFile(
+      join(dest, `${path}/pubspec.yaml`),
+      "projx_mobile",
+      target,
+    );
     await replaceInDir(
       join(dest, path),
       "package:projx_mobile/",

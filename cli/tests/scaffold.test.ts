@@ -86,7 +86,7 @@ describe("scaffold", () => {
       REPO_DIR,
     );
 
-    expect(existsSync(join(dest, "setup.sh"))).toBe(true);
+    expect(existsSync(join(dest, "scripts/setup.sh"))).toBe(true);
     expect(existsSync(join(dest, ".githooks/pre-commit"))).toBe(true);
     expect(existsSync(join(dest, ".github/workflows/ci.yml"))).toBe(true);
     expect(existsSync(join(dest, "README.md"))).toBe(true);
@@ -130,7 +130,7 @@ describe("scaffold", () => {
       REPO_DIR,
     );
 
-    const setup = await readFile(join(dest, "setup.sh"), "utf-8");
+    const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
     expect(setup).toContain("FastAPI dependencies installed.");
     expect(setup).toContain("Fastify dependencies installed.");
     expect(setup).toContain("Frontend dependencies installed.");
@@ -216,7 +216,7 @@ describe.each(PMS)("scaffold with %s", (pm) => {
       REPO_DIR,
     );
 
-    const setup = await readFile(join(dest, "setup.sh"), "utf-8");
+    const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
     expect(setup).toContain(cmd.ci);
 
     for (const other of PMS.filter((p) => p !== pm)) {

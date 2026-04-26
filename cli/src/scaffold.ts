@@ -99,7 +99,7 @@ export async function scaffold(
   }
 
   p.outro(
-    `Done! Next steps:\n\n  cd ${name}\n  ./setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
+    `Done! Next steps:\n\n  cd ${name}\n  ./scripts/setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
   );
 }
 
