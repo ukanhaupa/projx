@@ -4,17 +4,20 @@ set -e
 # ── Secret detection ──────────────────────────────────────────────
 STAGED_DIFF="$(git diff --cached --diff-filter=ACMR)"
 
-if echo "$STAGED_DIFF" | grep -qE '(AKIA|ASIA)[A-Z0-9]{16}'; then
-  echo "ERROR: Possible AWS access key detected in staged changes."
+AKIA_HITS="$(echo "$STAGED_DIFF" | grep -E '(AKIA|ASIA)[A-Z0-9]{16}' | grep -vE '(pragma: allowlist secret|gitleaks:allow)' || true)"
+if [ -n "$AKIA_HITS" ]; then
+  echo "ERROR: Possible AWS access key detected in staged changes:"
+  echo "$AKIA_HITS" | head -5
+  echo "Add 'pragma: allowlist secret' on the line to whitelist if intentional."
   exit 1
 fi
 
 if echo "$STAGED_DIFF" | grep -qE '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' 2>/dev/null; then
-  REAL_SECRETS="$(echo "$STAGED_DIFF" | grep -E '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' | grep -vE '(test-secret|dev-secret|example|placeholder|your-|changeme|CHANGE_ME)' || true)"
+  REAL_SECRETS="$(echo "$STAGED_DIFF" | grep -E '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' | grep -vE '(test-secret|dev-secret|example|placeholder|your-|changeme|CHANGE_ME|pragma: allowlist secret|gitleaks:allow)' || true)"
   if [ -n "$REAL_SECRETS" ]; then
     echo "WARNING: Possible secret detected in staged changes:"
     echo "$REAL_SECRETS" | head -5
-    echo "If intentional, commit with: git commit --no-verify"
+    echo "Add 'pragma: allowlist secret' on the line to whitelist, or commit with --no-verify if intentional."
     exit 1
   fi
 fi

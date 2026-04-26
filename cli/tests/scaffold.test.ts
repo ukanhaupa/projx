@@ -111,14 +111,26 @@ describe("scaffold", () => {
     );
 
     const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
+    expect(ci).toContain("name: FastAPI (format + lint + typecheck + audit)");
     expect(ci).toContain(
-      "name: FastAPI (format + lint + typecheck + test + audit)",
+      "name: Fastify (format + lint + typecheck + build + audit)",
     );
-    expect(ci).toContain("name: Fastify (format + lint + typecheck + audit)");
-    expect(ci).toContain("name: Frontend (format + lint + typecheck + audit)");
+    expect(ci).toContain(
+      "name: Frontend (format + lint + typecheck + build + audit)",
+    );
     expect(ci).toContain("name: Flutter (format + analyze)");
     expect(ci).toContain("name: Secret scan");
     expect(ci).toContain("gitleaks/gitleaks-action@v2");
+    expect(ci).toMatch(/^permissions:\n\s+contents: read\n\s+pull-requests: read/m);
+    expect(ci).toContain("image: postgres:16");
+    expect(ci).toContain("DATABASE_URL: postgresql://postgres:postgres@localhost");
+    expect(ci).toContain(
+      "SQLALCHEMY_DATABASE_URI: postgresql+asyncpg://postgres:postgres@localhost",
+    );
+    expect(ci).toContain("prisma migrate deploy");
+    expect(ci).toMatch(/node-version: 22[\s\S]+node-version: 22/);
+    expect(ci).not.toContain("node-version: 20");
+    expect(ci).toContain("bash scripts/check-bundle-size.sh");
   });
 
   it("setup.sh uses canonical display names", async () => {
