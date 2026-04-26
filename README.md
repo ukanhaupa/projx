@@ -371,6 +371,47 @@ The core idea: define a data model, get everything else for free.
 
 **Mobile** — Same metadata endpoint, generates list/detail/form screens. Offline-first with local DB and sync queue.
 
+## Encrypted Service Config
+
+Both backends ship with a `service_configs` table for storing third-party credentials (SMTP, OAuth, S3, etc.) encrypted at rest with AES-256-GCM. The `purpose` column is a free-form string — pick whatever taxonomy fits your project.
+
+```ts
+// Fastify
+import { setServiceConfig, getServiceConfig } from './lib/service-config.js';
+await setServiceConfig(prisma, 'smtp', { host, port, user, password });
+const cfg = await getServiceConfig<{ host: string }>(prisma, 'smtp');
+```
+
+```python
+# FastAPI
+from src.entities.service_config._repository import ServiceConfigRepository
+repo = ServiceConfigRepository(session)
+await repo.set_config('smtp', {'host': ..., 'port': 587})
+cfg = await repo.get_config('smtp')
+```
+
+Encryption key resolves from `CRED_ENCRYPTION_KEY` (32-byte base64). If absent, derived from `JWT_SECRET` for development. Set an explicit key in production. Reads are cached in-memory for 10 minutes; `invalidate(purpose)` clears.
+
+## Rate Limiting
+
+The Fastify backend ships with `@fastify/rate-limit` registered globally. Defaults: **200 requests per minute per user** (or per IP for unauthenticated requests). Tune via `RATE_LIMIT_MAX` and `RATE_LIMIT_WINDOW` in `.env`.
+
+Override per route for sensitive endpoints:
+
+```ts
+fastify.post('/auth/resend-verification', {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: '1 hour',
+      keyGenerator: (req) => (req.body?.email ?? req.ip).toLowerCase(),
+    },
+  },
+}, handler);
+```
+
+For the FastAPI service, edge rate limits are enforced by the frontend nginx (`auth_limit` and `api_limit` zones in [frontend/nginx.conf](frontend/nginx.conf)) — no application-level limiter is wired by default since the service is internal.
+
 ## Development
 
 Contributing to Projx itself:

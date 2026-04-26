@@ -24,6 +24,9 @@ const ConfigSchema = Type.Object({
   JWT_REQUIRE_EXP: Type.Boolean({ default: true }),
   JWT_VERIFY_NBF: Type.Boolean({ default: true }),
   CORS_ALLOW_ORIGINS: Type.String({ default: 'http://localhost:5173' }),
+  CRED_ENCRYPTION_KEY: Type.String({ default: '' }),
+  RATE_LIMIT_MAX: Type.Number({ default: 200 }),
+  RATE_LIMIT_WINDOW: Type.String({ default: '1 minute' }),
 });
 
 export type Config = Static<typeof ConfigSchema>;
@@ -44,6 +47,9 @@ function loadConfig(): Config {
     JWT_REQUIRE_EXP: process.env.JWT_REQUIRE_EXP !== 'false',
     JWT_VERIFY_NBF: process.env.JWT_VERIFY_NBF !== 'false',
     CORS_ALLOW_ORIGINS: process.env.CORS_ALLOW_ORIGINS ?? 'http://localhost:5173',
+    CRED_ENCRYPTION_KEY: process.env.CRED_ENCRYPTION_KEY ?? '',
+    RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX ?? 200),
+    RATE_LIMIT_WINDOW: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
   };
 
   if (!Value.Check(ConfigSchema, raw)) {

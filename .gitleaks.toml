@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "projx allowlist"
+paths = [
+  '''fastapi/\.env\.test''',
+]
