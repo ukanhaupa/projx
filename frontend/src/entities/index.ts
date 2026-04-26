@@ -83,6 +83,7 @@ export async function loadEntities(): Promise<EntityConfig[]> {
       if (controller.signal.aborted) {
         throw new Error(
           'Loading timed out. Please check your connection and try again.',
+          { cause: e },
         );
       }
       throw e;
