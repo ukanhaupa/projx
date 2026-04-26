@@ -14,21 +14,36 @@ import {
   pmCommands,
   toKebab,
 } from "./utils.js";
-import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
+import {
+  applyTemplate,
+  saveBaselineRef,
+  type GeneratorVars,
+} from "./baseline.js";
 
-export async function scaffold(opts: Options, dest: string, localRepo?: string): Promise<void> {
+export async function scaffold(
+  opts: Options,
+  dest: string,
+  localRepo?: string,
+): Promise<void> {
   const name = toKebab(opts.name);
   const pm: PackageManager = opts.packageManager ?? "npm";
   const paths = Object.fromEntries(
     opts.components.map((c) => [c, c]),
   ) as ComponentPaths;
-  const vars: GeneratorVars = { projectName: name, components: opts.components, paths, pm: pmCommands(pm) };
+  const vars: GeneratorVars = {
+    projectName: name,
+    components: opts.components,
+    paths,
+    pm: pmCommands(pm),
+  };
   const isLocal = !!localRepo;
 
   await mkdir(dest, { recursive: true });
 
   const dlSpinner = p.spinner();
-  dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");
+  dlSpinner.start(
+    isLocal ? "Using local templates" : "Downloading latest templates",
+  );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
     dlSpinner.stop("Failed.");
     p.log.error(String(err));
@@ -37,7 +52,9 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
   dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
 
   try {
-    const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+    );
     const version = pkg.version;
 
     p.log.info(`Scaffolding project in ${dest}`);
@@ -48,7 +65,17 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
 
     const spinner = p.spinner();
     spinner.start("Scaffolding project");
-    await applyTemplate(dest, repoDir, opts.components, paths, vars, version, undefined, undefined, true);
+    await applyTemplate(
+      dest,
+      repoDir,
+      opts.components,
+      paths,
+      vars,
+      version,
+      undefined,
+      undefined,
+      true,
+    );
     spinner.stop("Scaffold complete.");
 
     if (opts.install) {
@@ -71,7 +98,9 @@ export async function scaffold(opts: Options, dest: string, localRepo?: string):
     await cleanupRepo(repoDir, isLocal);
   }
 
-  p.outro(`Done! Next steps:\n\n  cd ${name}\n  ./setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`);
+  p.outro(
+    `Done! Next steps:\n\n  cd ${name}\n  ./setup.sh\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
+  );
 }
 
 async function installDeps(
@@ -101,7 +130,9 @@ async function installDeps(
             exec(cmds.install, join(dest, "fastify"));
             spinner.stop("Fastify dependencies installed.");
           } else {
-            p.log.warn(`${pm} not found — run 'cd fastify && ${cmds.install}' manually.`);
+            p.log.warn(
+              `${pm} not found — run 'cd fastify && ${cmds.install}' manually.`,
+            );
           }
           break;
         case "frontend":
@@ -110,7 +141,9 @@ async function installDeps(
             exec(cmds.install, join(dest, "frontend"));
             spinner.stop("Frontend dependencies installed.");
           } else {
-            p.log.warn(`${pm} not found — run 'cd frontend && ${cmds.install}' manually.`);
+            p.log.warn(
+              `${pm} not found — run 'cd frontend && ${cmds.install}' manually.`,
+            );
           }
           break;
         case "e2e":
@@ -119,7 +152,9 @@ async function installDeps(
             exec(cmds.install, join(dest, "e2e"));
             spinner.stop("E2E dependencies installed.");
           } else {
-            p.log.warn(`${pm} not found — run 'cd e2e && ${cmds.install}' manually.`);
+            p.log.warn(
+              `${pm} not found — run 'cd e2e && ${cmds.install}' manually.`,
+            );
           }
           break;
         case "mobile":
@@ -128,7 +163,9 @@ async function installDeps(
             exec("flutter pub get", join(dest, "mobile"));
             spinner.stop("Flutter dependencies installed.");
           } else {
-            p.log.warn("Flutter not found — run 'cd mobile && flutter pub get' manually.");
+            p.log.warn(
+              "Flutter not found — run 'cd mobile && flutter pub get' manually.",
+            );
           }
           break;
         case "infra":

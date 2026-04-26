@@ -35,10 +35,7 @@ function classifyPattern(
   return { scope: "root", relative: pattern };
 }
 
-export async function pin(
-  cwd: string,
-  patterns: string[],
-): Promise<void> {
+export async function pin(cwd: string, patterns: string[]): Promise<void> {
   p.intro("projx pin");
 
   if (!existsSync(join(cwd, ".projx"))) {
@@ -58,7 +55,10 @@ export async function pin(
       continue;
     }
 
-    const { scope, component, relative } = classifyPattern(pattern, componentPaths);
+    const { scope, component, relative } = classifyPattern(
+      pattern,
+      componentPaths,
+    );
 
     if (scope === "component" && component) {
       if (!componentAdds[component]) componentAdds[component] = [];
@@ -87,7 +87,9 @@ export async function pin(
   }
 
   if (rootAdds.length > 0) {
-    const existing: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+    const existing: string[] = Array.isArray(config.skip)
+      ? (config.skip as string[])
+      : [];
     const merged = [...new Set([...existing, ...rootAdds])];
     const added = merged.length - existing.length;
     if (added > 0) {
@@ -101,10 +103,7 @@ export async function pin(
   p.outro("Skip list updated.");
 }
 
-export async function unpin(
-  cwd: string,
-  patterns: string[],
-): Promise<void> {
+export async function unpin(cwd: string, patterns: string[]): Promise<void> {
   p.intro("projx unpin");
 
   if (!existsSync(join(cwd, ".projx"))) {
@@ -119,7 +118,10 @@ export async function unpin(
   const componentRemoves: Record<string, string[]> = {};
 
   for (const pattern of patterns) {
-    const { scope, component, relative } = classifyPattern(pattern, componentPaths);
+    const { scope, component, relative } = classifyPattern(
+      pattern,
+      componentPaths,
+    );
     if (scope === "component" && component) {
       if (!componentRemoves[component]) componentRemoves[component] = [];
       componentRemoves[component].push(relative);
@@ -147,7 +149,9 @@ export async function unpin(
   }
 
   if (rootRemoves.length > 0) {
-    const existing: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+    const existing: string[] = Array.isArray(config.skip)
+      ? (config.skip as string[])
+      : [];
     const filtered = existing.filter((s) => !rootRemoves.includes(s));
     const removed = existing.length - filtered.length;
     if (removed > 0) {
@@ -170,11 +174,14 @@ export async function listPins(cwd: string): Promise<void> {
   }
 
   const config = await readProjxConfig(cwd);
-  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  const { components: discovered, paths: componentPaths } =
+    await discoverComponentsFromMarkers(cwd);
 
   let hasAny = false;
 
-  const rootSkip: string[] = Array.isArray(config.skip) ? (config.skip as string[]) : [];
+  const rootSkip: string[] = Array.isArray(config.skip)
+    ? (config.skip as string[])
+    : [];
   if (rootSkip.length > 0) {
     hasAny = true;
     p.log.info("root:");
@@ -189,7 +196,8 @@ export async function listPins(cwd: string): Promise<void> {
     const marker = await readComponentMarker(join(cwd, dir));
     if (marker?.skip && marker.skip.length > 0) {
       hasAny = true;
-      const label = dir !== component ? `${component} (${dir}/)` : `${component}`;
+      const label =
+        dir !== component ? `${component} (${dir}/)` : `${component}`;
       p.log.info(`${label}:`);
       for (const s of marker.skip) {
         p.log.info(`  ${s}`);

@@ -13,23 +13,23 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-<% if (components.includes('fastapi')) { %>
-      <%= paths.fastapi %>: ${{ steps.filter.outputs.<%= paths.fastapi %> }}
+<% for (const inst of fastapiInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% if (components.includes('fastify')) { %>
-      <%= paths.fastify %>: ${{ steps.filter.outputs.<%= paths.fastify %> }}
+<% for (const inst of fastifyInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% if (components.includes('frontend')) { %>
-      <%= paths.frontend %>: ${{ steps.filter.outputs.<%= paths.frontend %> }}
+<% for (const inst of frontendInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% if (components.includes('mobile')) { %>
-      <%= paths.mobile %>: ${{ steps.filter.outputs.<%= paths.mobile %> }}
+<% for (const inst of mobileInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% if (components.includes('e2e')) { %>
-      <%= paths.e2e %>: ${{ steps.filter.outputs.<%= paths.e2e %> }}
+<% for (const inst of e2eInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% if (components.includes('infra')) { %>
-      <%= paths.infra %>: ${{ steps.filter.outputs.<%= paths.infra %> }}
+<% for (const inst of infraInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
     steps:
       - uses: actions/checkout@v5
@@ -37,29 +37,29 @@ jobs:
         id: filter
         with:
           filters: |
-<% if (components.includes('fastapi')) { %>
-            <%= paths.fastapi %>:
-              - '<%= paths.fastapi %>/**'
+<% for (const inst of fastapiInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
-<% if (components.includes('fastify')) { %>
-            <%= paths.fastify %>:
-              - '<%= paths.fastify %>/**'
+<% for (const inst of fastifyInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
-<% if (components.includes('frontend')) { %>
-            <%= paths.frontend %>:
-              - '<%= paths.frontend %>/**'
+<% for (const inst of frontendInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
-<% if (components.includes('mobile')) { %>
-            <%= paths.mobile %>:
-              - '<%= paths.mobile %>/**'
+<% for (const inst of mobileInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
-<% if (components.includes('e2e')) { %>
-            <%= paths.e2e %>:
-              - '<%= paths.e2e %>/**'
+<% for (const inst of e2eInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
-<% if (components.includes('infra')) { %>
-            <%= paths.infra %>:
-              - '<%= paths.infra %>/**'
+<% for (const inst of infraInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
 <% } %>
 
   secrets:
@@ -72,16 +72,16 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-<% if (components.includes('fastapi')) { %>
+<% for (const inst of fastapiInstances) { %>
 
-  <%= paths.fastapi %>:
-    name: <%= displayNames.fastapi %> (format + lint + typecheck + test + audit)
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + lint + typecheck + test + audit)
     needs: changes
-    if: needs.changes.outputs.<%= paths.fastapi %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.fastapi %>
+        working-directory: <%= inst.path %>
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v4
@@ -92,16 +92,16 @@ jobs:
       - run: uv run pytest
       - run: uv run pip-audit
 <% } %>
-<% if (components.includes('fastify')) { %>
+<% for (const inst of fastifyInstances) { %>
 
-  <%= paths.fastify %>:
-    name: <%= displayNames.fastify %> (format + lint + typecheck + audit)
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.<%= paths.fastify %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.fastify %>
+        working-directory: <%= inst.path %>
     steps:
       - uses: actions/checkout@v5
 <% if (pm === 'pnpm') { %>
@@ -117,7 +117,7 @@ jobs:
         with:
           node-version: 20
           cache: <%= pm.name %>
-          cache-dependency-path: <%= paths.fastify %>/<%= pm.lockfile %>
+          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.prismaExec %> generate
@@ -126,16 +126,16 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.audit %>
 <% } %>
-<% if (components.includes('frontend')) { %>
+<% for (const inst of frontendInstances) { %>
 
-  <%= paths.frontend %>:
-    name: <%= displayNames.frontend %> (format + lint + typecheck + audit)
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.<%= paths.frontend %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.frontend %>
+        working-directory: <%= inst.path %>
     steps:
       - uses: actions/checkout@v5
 <% if (pm === 'pnpm') { %>
@@ -151,7 +151,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= paths.frontend %>/<%= pm.lockfile %>
+          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.exec %> prettier --check .
@@ -159,16 +159,16 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.audit %>
 <% } %>
-<% if (components.includes('mobile')) { %>
+<% for (const inst of mobileInstances) { %>
 
-  <%= paths.mobile %>:
-    name: <%= displayNames.mobile %> (format + analyze)
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + analyze)
     needs: changes
-    if: needs.changes.outputs.<%= paths.mobile %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.mobile %>
+        working-directory: <%= inst.path %>
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
@@ -179,16 +179,16 @@ jobs:
       - run: dart format --set-exit-if-changed .
       - run: dart analyze --fatal-infos
 <% } %>
-<% if (components.includes('e2e')) { %>
+<% for (const inst of e2eInstances) { %>
 
-  <%= paths.e2e %>:
-    name: <%= displayNames.e2e %> (format + lint + typecheck + audit)
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.<%= paths.e2e %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.e2e %>
+        working-directory: <%= inst.path %>
     steps:
       - uses: actions/checkout@v5
 <% if (pm === 'pnpm') { %>
@@ -204,7 +204,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= paths.e2e %>/<%= pm.lockfile %>
+          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.exec %> prettier --check .
@@ -212,16 +212,16 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.audit %>
 <% } %>
-<% if (components.includes('infra')) { %>
+<% for (const inst of infraInstances) { %>
 
-  <%= paths.infra %>:
-    name: <%= displayNames.infra %> (fmt + validate)
+  <%= inst.path %>:
+    name: <%= inst.display %> (fmt + validate)
     needs: changes
-    if: needs.changes.outputs.<%= paths.infra %> == 'true'
+    if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= paths.infra %>/stack
+        working-directory: <%= inst.path %>/stack
     steps:
       - uses: actions/checkout@v5
       - uses: hashicorp/setup-terraform@v3

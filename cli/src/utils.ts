@@ -38,13 +38,57 @@ export interface PmCommands {
 export function pmCommands(pm: PackageManager): PmCommands {
   switch (pm) {
     case "npm":
-      return { name: "npm", install: "npm install", ci: "npm ci", run: "npm run", exec: "npx", dlx: "npx", lockfile: "package-lock.json", prismaExec: "npx prisma", runDev: "npm run dev", audit: "npm audit --omit=dev" };
+      return {
+        name: "npm",
+        install: "npm install",
+        ci: "npm ci",
+        run: "npm run",
+        exec: "npx",
+        dlx: "npx",
+        lockfile: "package-lock.json",
+        prismaExec: "npx prisma",
+        runDev: "npm run dev",
+        audit: "npm audit --omit=dev",
+      };
     case "pnpm":
-      return { name: "pnpm", install: "pnpm install", ci: "pnpm install --frozen-lockfile", run: "pnpm", exec: "pnpm exec", dlx: "pnpm dlx", lockfile: "pnpm-lock.yaml", prismaExec: "pnpm prisma", runDev: "pnpm dev", audit: "pnpm audit --prod" };
+      return {
+        name: "pnpm",
+        install: "pnpm install",
+        ci: "pnpm install --frozen-lockfile",
+        run: "pnpm",
+        exec: "pnpm exec",
+        dlx: "pnpm dlx",
+        lockfile: "pnpm-lock.yaml",
+        prismaExec: "pnpm prisma",
+        runDev: "pnpm dev",
+        audit: "pnpm audit --prod",
+      };
     case "yarn":
-      return { name: "yarn", install: "yarn", ci: "yarn --frozen-lockfile", run: "yarn", exec: "yarn", dlx: "yarn dlx", lockfile: "yarn.lock", prismaExec: "yarn prisma", runDev: "yarn dev", audit: "yarn npm audit --environment production" };
+      return {
+        name: "yarn",
+        install: "yarn",
+        ci: "yarn --frozen-lockfile",
+        run: "yarn",
+        exec: "yarn",
+        dlx: "yarn dlx",
+        lockfile: "yarn.lock",
+        prismaExec: "yarn prisma",
+        runDev: "yarn dev",
+        audit: "yarn npm audit --environment production",
+      };
     case "bun":
-      return { name: "bun", install: "bun install", ci: "bun install --frozen-lockfile", run: "bun run", exec: "bunx", dlx: "bunx", lockfile: "bun.lockb", prismaExec: "bunx prisma", runDev: "bun run dev", audit: "bun audit --prod" };
+      return {
+        name: "bun",
+        install: "bun install",
+        ci: "bun install --frozen-lockfile",
+        run: "bun run",
+        exec: "bunx",
+        dlx: "bunx",
+        lockfile: "bun.lockb",
+        prismaExec: "bunx prisma",
+        runDev: "bun run dev",
+        audit: "bun audit --prod",
+      };
   }
 }
 
@@ -125,18 +169,14 @@ export async function downloadRepo(localPath?: string): Promise<string> {
   await mkdir(dest, { recursive: true });
 
   if (hasCommand("git")) {
-    execSync(
-      `git clone --depth 1 ${REPO_URL}.git "${dest}/repo"`,
-      { stdio: "pipe" },
-    );
+    execSync(`git clone --depth 1 ${REPO_URL}.git "${dest}/repo"`, {
+      stdio: "pipe",
+    });
     return join(dest, "repo");
   }
 
   const tarUrl = `${REPO_URL}/archive/refs/heads/main.tar.gz`;
-  execSync(
-    `curl -sL "${tarUrl}" | tar xz -C "${dest}"`,
-    { stdio: "pipe" },
-  );
+  execSync(`curl -sL "${tarUrl}" | tar xz -C "${dest}"`, { stdio: "pipe" });
 
   const entries = await readdir(dest);
   const extracted = entries.find((e: string) => e.startsWith("projx-"));
@@ -144,14 +184,16 @@ export async function downloadRepo(localPath?: string): Promise<string> {
   return join(dest, extracted);
 }
 
-export async function cleanupRepo(repoDir: string, isLocal: boolean): Promise<void> {
+export async function cleanupRepo(
+  repoDir: string,
+  isLocal: boolean,
+): Promise<void> {
   if (isLocal) return;
   const parent = resolve(repoDir, "..");
   if (parent.startsWith(tmpdir())) {
     await rm(parent, { recursive: true, force: true });
   }
 }
-
 
 export const EXCLUDE = new Set([
   "node_modules",
@@ -224,7 +266,6 @@ export async function copyStaticFiles(
       manifest.push(file);
     }
   }
-
 
   const extensionsJson = join(tpl, ".vscode/extensions.json");
   if (existsSync(extensionsJson)) {
@@ -299,6 +340,11 @@ export async function readFileOrNull(path: string): Promise<string | null> {
 
 export type ComponentPaths = Record<Component, string>;
 
+export interface ComponentInstance {
+  type: Component;
+  path: string;
+}
+
 export interface ComponentMarkerData {
   component: Component;
   skip: string[];
@@ -308,11 +354,17 @@ function parseMarker(raw: string): ComponentMarkerData | null {
   try {
     const data = JSON.parse(raw);
     let component: Component | undefined;
-    if (typeof data.component === "string" && COMPONENTS.includes(data.component as Component)) {
+    if (
+      typeof data.component === "string" &&
+      COMPONENTS.includes(data.component as Component)
+    ) {
       component = data.component as Component;
     } else if (Array.isArray(data.components) && data.components.length > 0) {
       const first = data.components[0];
-      if (typeof first === "string" && COMPONENTS.includes(first as Component)) {
+      if (
+        typeof first === "string" &&
+        COMPONENTS.includes(first as Component)
+      ) {
         component = first as Component;
       }
     }
@@ -326,7 +378,9 @@ function parseMarker(raw: string): ComponentMarkerData | null {
   }
 }
 
-export async function readComponentMarker(dir: string): Promise<ComponentMarkerData | null> {
+export async function readComponentMarker(
+  dir: string,
+): Promise<ComponentMarkerData | null> {
   const raw = await readFileOrNull(join(dir, COMPONENT_MARKER));
   if (!raw) return null;
   return parseMarker(raw);
@@ -356,7 +410,9 @@ export async function upsertComponentMarker(
   });
 }
 
-export async function readProjxConfig(cwd: string): Promise<Record<string, unknown>> {
+export async function readProjxConfig(
+  cwd: string,
+): Promise<Record<string, unknown>> {
   const path = join(cwd, ".projx");
   if (!existsSync(path)) return {};
   try {
@@ -387,14 +443,15 @@ export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   "setup.sh",
 ];
 
-export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<Record<Component, string[]>> = {
+export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
+  Record<Component, string[]>
+> = {
   fastapi: ["pyproject.toml"],
   fastify: ["package.json"],
   frontend: ["package.json"],
   e2e: ["package.json"],
   mobile: ["pubspec.yaml"],
 };
-
 
 export async function discoverComponentPaths(
   cwd: string,
@@ -408,13 +465,17 @@ export async function discoverComponentPaths(
   return paths as ComponentPaths;
 }
 
-export async function discoverComponentsFromMarkers(
-  cwd: string,
-): Promise<{ components: Component[]; paths: ComponentPaths }> {
+export async function discoverComponentsFromMarkers(cwd: string): Promise<{
+  components: Component[];
+  paths: ComponentPaths;
+  instances: ComponentInstance[];
+}> {
   const components: Component[] = [];
   const paths: Partial<ComponentPaths> = {};
+  const instances: ComponentInstance[] = [];
 
-  if (!existsSync(cwd)) return { components, paths: paths as ComponentPaths };
+  if (!existsSync(cwd))
+    return { components, paths: paths as ComponentPaths, instances };
 
   const entries = await readdir(cwd, { withFileTypes: true });
   for (const entry of entries) {
@@ -424,6 +485,7 @@ export async function discoverComponentsFromMarkers(
 
     const marker = await readComponentMarker(join(cwd, entry.name));
     if (!marker) continue;
+    instances.push({ type: marker.component, path: entry.name });
     if (!components.includes(marker.component)) {
       components.push(marker.component);
       paths[marker.component] = entry.name;
@@ -434,39 +496,98 @@ export async function discoverComponentsFromMarkers(
     if (!paths[c]) paths[c] = c;
   }
 
-  return { components, paths: paths as ComponentPaths };
+  return { components, paths: paths as ComponentPaths, instances };
 }
 
 export function render(
   template: string,
   vars: Record<string, unknown>,
 ): string {
+  const lines = template.split("\n");
+  return renderLines(lines, vars).replace(/\n{3,}/g, "\n\n");
+}
+
+function evalExpr(expr: string, vars: Record<string, unknown>): unknown {
   const components = vars.components as string[];
   const projectName = vars.projectName as string;
-  const lines = template.split("\n");
+  const pmName = (vars.pm as { name?: string })?.name ?? "npm";
+  const argNames = ["components", "projectName", "pm"];
+  const argValues: unknown[] = [components, projectName, pmName];
+  for (const [k, v] of Object.entries(vars)) {
+    if (k === "components" || k === "projectName" || k === "pm") continue;
+    if (!/^[a-zA-Z_$][\w$]*$/.test(k)) continue;
+    argNames.push(k);
+    argValues.push(v);
+  }
+  const fn = new Function(...argNames, `return ${expr}`);
+  return fn(...argValues);
+}
+
+function findBlockEnd(lines: string[], startIdx: number): number {
+  let depth = 1;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^<%\s*(if|for)\s*\(.+?\)\s*\{?\s*%>$/.test(line)) depth++;
+    else if (/^<%\s*\}\s*else\s+if\s*\((.+?)\)\s*\{?\s*%>$/.test(line)) {
+      // else-if doesn't change depth
+    } else if (/^<%\s*\}\s*else\s*\{?\s*%>$/.test(line)) {
+      // else doesn't change depth
+    } else if (/^<%\s*\}?\s*%>$/.test(line)) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  throw new Error("Unmatched template block");
+}
+
+function renderLines(
+  lines: string[],
+  vars: Record<string, unknown>,
+): string {
   const output: string[] = [];
   const stack: { active: boolean; matched: boolean }[] = [];
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const forMatch = line.match(
+      /^<%\s*for\s*\(\s*(?:const|let)\s+(\w+)\s+of\s+(.+?)\s*\)\s*\{?\s*%>$/,
+    );
+    if (forMatch) {
+      const varName = forMatch[1];
+      const iterExpr = forMatch[2];
+      const end = findBlockEnd(lines, i);
+      const bodyLines = lines.slice(i + 1, end);
+      if (stack.length === 0 || stack.every((v) => v.active)) {
+        const iterable = evalExpr(iterExpr, vars) as unknown[];
+        if (Array.isArray(iterable)) {
+          for (const item of iterable) {
+            const sub = renderLines(bodyLines, { ...vars, [varName]: item });
+            if (sub) output.push(sub);
+          }
+        }
+      }
+      i = end;
+      continue;
+    }
+
     const ifMatch = line.match(/^<%\s*if\s*\((.+?)\)\s*\{?\s*%>$/);
     if (ifMatch) {
-      const pmName = (vars.pm as { name?: string })?.name ?? "npm";
-      const fn = new Function("components", "projectName", "pm", `return ${ifMatch[1]}`);
-      const result = fn(components, projectName, pmName);
+      const result = Boolean(evalExpr(ifMatch[1], vars));
       stack.push({ active: result, matched: result });
       continue;
     }
 
-    const elseIfMatch = line.match(/^<%\s*\}\s*else\s+if\s*\((.+?)\)\s*\{?\s*%>$/);
+    const elseIfMatch = line.match(
+      /^<%\s*\}\s*else\s+if\s*\((.+?)\)\s*\{?\s*%>$/,
+    );
     if (elseIfMatch) {
       if (stack.length > 0) {
         const top = stack[stack.length - 1];
         if (top.matched) {
           top.active = false;
         } else {
-          const pmN = (vars.pm as { name?: string })?.name ?? "npm";
-          const fn = new Function("components", "projectName", "pm", `return ${elseIfMatch[1]}`);
-          const result = fn(components, projectName, pmN);
+          const result = Boolean(evalExpr(elseIfMatch[1], vars));
           top.active = result;
           if (result) top.matched = true;
         }
@@ -489,21 +610,18 @@ export function render(
 
     if (stack.length > 0 && stack.some((v) => !v.active)) continue;
 
-    const replaced = line.replace(
-      /<%=\s*([\w.]+)\s*%>/g,
-      (_, expr: string) => {
-        const parts = expr.split(".");
-        let val: unknown = vars;
-        for (const p of parts) {
-          val = (val as Record<string, unknown>)?.[p];
-        }
-        return String(val ?? "");
-      },
-    );
+    const replaced = line.replace(/<%=\s*([\w.]+)\s*%>/g, (_, expr: string) => {
+      const parts = expr.split(".");
+      let val: unknown = vars;
+      for (const p of parts) {
+        val = (val as Record<string, unknown>)?.[p];
+      }
+      return String(val ?? "");
+    });
     output.push(replaced);
   }
 
-  return output.join("\n").replace(/\n{3,}/g, "\n\n");
+  return output.join("\n");
 }
 
 export async function renderEjsInDir(

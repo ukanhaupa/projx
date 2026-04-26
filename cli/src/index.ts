@@ -16,7 +16,17 @@ import { sync } from "./sync.js";
 const args = process.argv.slice(2);
 
 interface ParsedArgs {
-  command: "create" | "update" | "add" | "init" | "pin" | "unpin" | "diff" | "doctor" | "gen" | "sync";
+  command:
+    | "create"
+    | "update"
+    | "add"
+    | "init"
+    | "pin"
+    | "unpin"
+    | "diff"
+    | "doctor"
+    | "gen"
+    | "sync";
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -40,22 +50,49 @@ function parseArgs(): ParsedArgs {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === "update" && !name) { command = "update"; continue; }
-    if (arg === "add" && !name) { command = "add"; continue; }
-    if (arg === "init" && !name) { command = "init"; continue; }
-    if (arg === "pin" && !name) { command = "pin"; continue; }
-    if (arg === "unpin" && !name) { command = "unpin"; continue; }
-    if (arg === "diff" && !name) { command = "diff"; continue; }
-    if (arg === "doctor" && !name) { command = "doctor"; continue; }
-    if (arg === "gen" && !name) { command = "gen"; continue; }
-    if (arg === "sync" && !name) { command = "sync"; continue; }
+    if (arg === "update" && !name) {
+      command = "update";
+      continue;
+    }
+    if (arg === "add" && !name) {
+      command = "add";
+      continue;
+    }
+    if (arg === "init" && !name) {
+      command = "init";
+      continue;
+    }
+    if (arg === "pin" && !name) {
+      command = "pin";
+      continue;
+    }
+    if (arg === "unpin" && !name) {
+      command = "unpin";
+      continue;
+    }
+    if (arg === "diff" && !name) {
+      command = "diff";
+      continue;
+    }
+    if (arg === "doctor" && !name) {
+      command = "doctor";
+      continue;
+    }
+    if (arg === "gen" && !name) {
+      command = "gen";
+      continue;
+    }
+    if (arg === "sync" && !name) {
+      command = "sync";
+      continue;
+    }
 
     if (arg === "--components") {
       const val = args[++i];
       if (val) {
-        options.components = val.split(",").filter((c): c is Component =>
-          COMPONENTS.includes(c as Component),
-        );
+        options.components = val
+          .split(",")
+          .filter((c): c is Component => COMPONENTS.includes(c as Component));
       }
       continue;
     }
@@ -65,18 +102,36 @@ function parseArgs(): ParsedArgs {
       continue;
     }
 
-    if (arg === "--no-git") { options.git = false; continue; }
-    if (arg === "--no-install") { options.install = false; continue; }
+    if (arg === "--no-git") {
+      options.git = false;
+      continue;
+    }
+    if (arg === "--no-install") {
+      options.install = false;
+      continue;
+    }
 
     if (arg === "-y" || arg === "--yes") {
       options.components = options.components ?? ["fastify", "frontend", "e2e"];
       continue;
     }
 
-    if (arg === "--list" || arg === "-l") { flags.list = true; continue; }
-    if (arg === "--fix") { flags.fix = true; continue; }
-    if (arg === "--ai") { flags.ai = true; continue; }
-    if (arg === "--backend") { flags.backend = true; continue; }
+    if (arg === "--list" || arg === "-l") {
+      flags.list = true;
+      continue;
+    }
+    if (arg === "--fix") {
+      flags.fix = true;
+      continue;
+    }
+    if (arg === "--ai") {
+      flags.ai = true;
+      continue;
+    }
+    if (arg === "--backend") {
+      flags.backend = true;
+      continue;
+    }
 
     if (arg === "--url") {
       const val = args[++i];
@@ -95,8 +150,19 @@ function parseArgs(): ParsedArgs {
       continue;
     }
 
+    if (arg === "--name") {
+      const val = args[++i];
+      if (val) extraArgs.push(`--name=${val}`);
+      continue;
+    }
+
     if (!arg.startsWith("-")) {
-      if (command === "add" || command === "pin" || command === "unpin" || command === "gen") {
+      if (
+        command === "add" ||
+        command === "pin" ||
+        command === "unpin" ||
+        command === "gen"
+      ) {
         extraArgs.push(arg);
       } else if (!name) {
         name = arg;
@@ -113,6 +179,7 @@ function printHelp(): void {
     projx <name> [options]        Create a new project
     projx init                    Adopt existing project into projx
     projx add <components...>     Add components to existing project
+    projx add <type> --name <dir> Add another instance of <type> at <dir>
     projx update                  Update scaffolding to latest
     projx diff                    Preview what update would change
     projx pin <patterns...>       Skip files on future updates
@@ -135,6 +202,7 @@ function printHelp(): void {
     npx create-projx my-app --components fastapi,frontend,e2e
     npx create-projx my-app -y
     npx create-projx add frontend mobile
+    npx create-projx add fastify --name email-ingestor
     npx create-projx@latest update
     npx create-projx diff
     npx create-projx pin backend/pyproject.toml
@@ -162,10 +230,27 @@ async function main(): Promise<void> {
       COMPONENTS.includes(c as Component),
     );
     if (components.length === 0) {
-      console.error(`Error: specify components to add. Available: ${COMPONENTS.join(", ")}`);
+      console.error(
+        `Error: specify components to add. Available: ${COMPONENTS.join(", ")}`,
+      );
       process.exit(1);
     }
-    await add(process.cwd(), components, localRepo, options.install === false);
+    const customName = extraArgs
+      .find((a) => a.startsWith("--name="))
+      ?.slice("--name=".length);
+    if (customName && components.length > 1) {
+      console.error(
+        "Error: --name can only be used when adding a single component type.",
+      );
+      process.exit(2);
+    }
+    await add(
+      process.cwd(),
+      components,
+      localRepo,
+      options.install === false,
+      customName,
+    );
     return;
   }
 
@@ -180,7 +265,9 @@ async function main(): Promise<void> {
 
   if (command === "unpin") {
     if (extraArgs.length === 0) {
-      console.error("Error: specify patterns to unpin. Usage: projx unpin <patterns...>");
+      console.error(
+        "Error: specify patterns to unpin. Usage: projx unpin <patterns...>",
+      );
       process.exit(1);
     }
     await unpin(process.cwd(), extraArgs);
@@ -207,13 +294,21 @@ async function main(): Promise<void> {
   if (command === "gen") {
     const subcommand = extraArgs[0];
     if (subcommand !== "entity" || !extraArgs[1]) {
-      console.error("Usage: projx gen entity <name> [--fields \"name:string,amount:number\"]");
+      console.error(
+        'Usage: projx gen entity <name> [--fields "name:string,amount:number"]',
+      );
       process.exit(1);
     }
     const entityName = extraArgs[1];
     const fieldsArg = extraArgs.find((a) => a.startsWith("--fields="));
-    const fieldsFlag = fieldsArg ? fieldsArg.split("=").slice(1).join("=") : undefined;
-    const backendFlag = flags.ai ? "fastapi" as const : flags.backend ? "fastify" as const : undefined;
+    const fieldsFlag = fieldsArg
+      ? fieldsArg.split("=").slice(1).join("=")
+      : undefined;
+    const backendFlag = flags.ai
+      ? ("fastapi" as const)
+      : flags.backend
+        ? ("fastify" as const)
+        : undefined;
     await gen(process.cwd(), entityName, fieldsFlag, backendFlag);
     return;
   }

@@ -28,7 +28,12 @@ describe("default-skip — scenario A: fresh scaffold", () => {
   it("fresh scaffold writes default skip patterns to .projx + markers", async () => {
     dest = join(tmpdir(), `projx-A1-${Date.now()}`);
     await scaffold(
-      { name: "fresh-app", components: ["fastapi", "fastify", "frontend"], git: true, install: false },
+      {
+        name: "fresh-app",
+        components: ["fastapi", "fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -64,7 +69,10 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     let ci = await readFile(ciPath, "utf-8");
     ci = ci.replace("name: Fastify", "name: My Custom Backend Job");
     await writeFile(ciPath, ci);
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'customize ci'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'customize ci'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -82,9 +90,15 @@ describe("default-skip — scenario A: fresh scaffold", () => {
 
     const hookPath = join(dest, ".githooks/pre-commit");
     let hook = await readFile(hookPath, "utf-8");
-    hook = hook.replace('echo "Formatting fastify..."', 'echo "Custom backend message"');
+    hook = hook.replace(
+      'echo "Formatting fastify..."',
+      'echo "Custom backend message"',
+    );
     await writeFile(hookPath, hook);
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'customize hook'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'customize hook'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -102,9 +116,15 @@ describe("default-skip — scenario A: fresh scaffold", () => {
 
     const setupPath = join(dest, "setup.sh");
     let setup = await readFile(setupPath, "utf-8");
-    setup = setup.replace("Fastify dependencies installed.", "Backend (custom) installed.");
+    setup = setup.replace(
+      "Fastify dependencies installed.",
+      "Backend (custom) installed.",
+    );
     await writeFile(setupPath, setup);
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'customize setup'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'customize setup'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -135,18 +155,35 @@ describe("default-skip — scenario A: fresh scaffold", () => {
       REPO_DIR,
     );
 
-    const before = parseInt(execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim());
+    const before = parseInt(
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
+    );
     await update(dest, REPO_DIR);
-    const after = parseInt(execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim());
+    const after = parseInt(
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
+    );
 
     expect(after).toBe(before);
-    expect(execSync("git status --porcelain", { cwd: dest, stdio: "pipe" }).toString().trim()).toBe("");
+    expect(
+      execSync("git status --porcelain", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
+    ).toBe("");
   });
 
   it("fresh scaffold + customize docker-compose + update preserves customizations", async () => {
     dest = join(tmpdir(), `projx-A4-${Date.now()}`);
     await scaffold(
-      { name: "fresh-app", components: ["fastify", "frontend"], git: true, install: false },
+      {
+        name: "fresh-app",
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -156,7 +193,10 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     compose = compose.replace("'5173:5173'", "'3000:3000'");
     compose = compose.replace("app-network", "myapp-network");
     await writeFile(composePath, compose);
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'customize compose'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'customize compose'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -177,7 +217,10 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
     pkg.dependencies.nodemailer = "^8.0.0";
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add nodemailer'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'add nodemailer'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -244,13 +287,19 @@ describe("default-skip — scenario D: pinned vs unpinned behavior", () => {
     const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
     pkg.dependencies["custom-dep"] = "^1.0.0";
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'custom dep'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'custom dep'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
     const after = JSON.parse(await readFile(pkgPath, "utf-8"));
     expect(after.dependencies["custom-dep"]).toBe("^1.0.0");
-    const status = execSync("git status --porcelain fastify/package.json", { cwd: dest, stdio: "pipe" }).toString();
+    const status = execSync("git status --porcelain fastify/package.json", {
+      cwd: dest,
+      stdio: "pipe",
+    }).toString();
     expect(status.trim()).toBe("");
   });
 
@@ -279,18 +328,33 @@ describe("default-skip — scenario E: legacy migration", () => {
   it("legacy project (no defaultsApplied) gets defaults on first update", async () => {
     dest = join(tmpdir(), `projx-E1-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    await writeFile(join(dest, ".projx"), JSON.stringify({
-      version: "1.4.0",
-      components: ["fastify"],
-      createdAt: "2026-01-01",
-      packageManager: "npm",
-    }, null, 2) + "\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy projx'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, ".projx"),
+      JSON.stringify(
+        {
+          version: "1.4.0",
+          components: ["fastify"],
+          createdAt: "2026-01-01",
+          packageManager: "npm",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy projx'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -306,18 +370,33 @@ describe("default-skip — scenario E: legacy migration", () => {
   it("legacy migration unions defaults with user's existing skip patterns", async () => {
     dest = join(tmpdir(), `projx-E2-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    await writeFile(join(dest, ".projx"), JSON.stringify({
-      version: "1.4.0",
-      components: ["fastify"],
-      createdAt: "2026-01-01",
-      skip: ["custom-user-file.txt"],
-    }, null, 2) + "\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy with user skip'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, ".projx"),
+      JSON.stringify(
+        {
+          version: "1.4.0",
+          components: ["fastify"],
+          createdAt: "2026-01-01",
+          skip: ["custom-user-file.txt"],
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy with user skip'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -330,13 +409,21 @@ describe("default-skip — scenario E: legacy migration", () => {
   it("after migration, defaults are NOT re-added if user unpins them", async () => {
     dest = join(tmpdir(), `projx-E3-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
     await unpin(dest, ["README.md"]);
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'unpin readme'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'unpin readme'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -356,24 +443,48 @@ describe("default-skip — scenario F: renamed component dirs", () => {
   it("renamed component dir (fastify→backend) still gets default skip on legacy migration", async () => {
     dest = join(tmpdir(), `projx-F1-${Date.now()}`);
     await scaffold(
-      { name: "rename-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "rename-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
+    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, {
+      stdio: "pipe",
+    });
 
-    await writeFile(join(dest, ".projx"), JSON.stringify({
-      version: "1.4.0",
-      components: ["fastify"],
-      createdAt: "2026-01-01",
-    }, null, 2) + "\n");
+    await writeFile(
+      join(dest, ".projx"),
+      JSON.stringify(
+        {
+          version: "1.4.0",
+          components: ["fastify"],
+          createdAt: "2026-01-01",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
 
-    await writeFile(join(dest, "backend/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-    }, null, 2));
+    await writeFile(
+      join(dest, "backend/.projx-component"),
+      JSON.stringify(
+        {
+          components: ["fastify"],
+        },
+        null,
+        2,
+      ),
+    );
 
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename + legacy'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'rename + legacy'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -393,7 +504,12 @@ describe("default-skip — scenario G: pinned-update notification", () => {
   it("findPinnedFilesWithUpdates reports nothing when pinned files match template", async () => {
     dest = join(tmpdir(), `projx-G1-${Date.now()}`);
     await scaffold(
-      { name: "notify-app", components: ["fastify", "frontend"], git: true, install: false },
+      {
+        name: "notify-app",
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -425,7 +541,12 @@ describe("default-skip — scenario G: pinned-update notification", () => {
   it("findPinnedFilesWithUpdates reports a pinned file that diverges from template", async () => {
     dest = join(tmpdir(), `projx-G2-${Date.now()}`);
     await scaffold(
-      { name: "notify-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "notify-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );

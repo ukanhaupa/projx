@@ -3,33 +3,33 @@ set -e
 
 git config core.hooksPath .githooks
 echo "Git hooks configured."
-<% if (components.includes('fastapi')) { %>
+<% for (const inst of fastapiInstances) { %>
 
-cd <%= paths.fastapi %> && uv sync --all-extras && cd ..
-echo "<%= displayNames.fastapi %> dependencies installed."
+cd <%= inst.path %> && uv sync --all-extras && cd ..
+echo "<%= inst.display %> dependencies installed."
 <% } %>
-<% if (components.includes('fastify')) { %>
+<% for (const inst of fastifyInstances) { %>
 
-cd <%= paths.fastify %> && <%= pm.ci %> && cd ..
-echo "<%= displayNames.fastify %> dependencies installed."
+cd <%= inst.path %> && <%= pm.ci %> && cd ..
+echo "<%= inst.display %> dependencies installed."
 <% } %>
-<% if (components.includes('frontend')) { %>
+<% for (const inst of frontendInstances) { %>
 
-cd <%= paths.frontend %> && <%= pm.ci %> && cd ..
-echo "<%= displayNames.frontend %> dependencies installed."
+cd <%= inst.path %> && <%= pm.ci %> && cd ..
+echo "<%= inst.display %> dependencies installed."
 <% } %>
-<% if (components.includes('e2e')) { %>
+<% for (const inst of e2eInstances) { %>
 
-cd <%= paths.e2e %> && <%= pm.ci %> && cd ..
-echo "<%= displayNames.e2e %> dependencies installed."
+cd <%= inst.path %> && <%= pm.ci %> && cd ..
+echo "<%= inst.display %> dependencies installed."
 <% } %>
-<% if (components.includes('mobile')) { %>
+<% for (const inst of mobileInstances) { %>
 
 if command -v flutter &>/dev/null; then
-  cd <%= paths.mobile %> && flutter pub get && cd ..
-  echo "<%= displayNames.mobile %> dependencies installed."
+  cd <%= inst.path %> && flutter pub get && cd ..
+  echo "<%= inst.display %> dependencies installed."
 else
-  echo "<%= displayNames.mobile %> skipped (SDK not installed)."
+  echo "<%= inst.display %> skipped (SDK not installed)."
 fi
 <% } %>
 

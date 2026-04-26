@@ -38,7 +38,9 @@ describe("init workflow", () => {
     const detected = await detectComponents(tmp);
     expect(detected).toHaveLength(3);
 
-    const map = Object.fromEntries(detected.map((d) => [d.component, d.directory]));
+    const map = Object.fromEntries(
+      detected.map((d) => [d.component, d.directory]),
+    );
     expect(map.fastapi).toBe("backend");
     expect(map.frontend).toBe("web");
     expect(map.e2e).toBe("tests");
@@ -54,7 +56,10 @@ describe("init workflow", () => {
     await mkdir(join(tmp, "web"));
     await upsertComponentMarker(join(tmp, "web"), "frontend");
 
-    const paths = await discoverComponentPaths(tmp, ["fastapi", "frontend"] as Component[]);
+    const paths = await discoverComponentPaths(tmp, [
+      "fastapi",
+      "frontend",
+    ] as Component[]);
     expect(paths.fastapi).toBe("backend");
     expect(paths.frontend).toBe("web");
   });

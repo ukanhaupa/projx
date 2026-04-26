@@ -48,7 +48,11 @@ async function checkConfig(cwd: string): Promise<{
     return { results };
   }
 
-  results.push({ name: ".projx exists", status: "pass", message: `v${rootConfig.version ?? "unknown"}` });
+  results.push({
+    name: ".projx exists",
+    status: "pass",
+    message: `v${rootConfig.version ?? "unknown"}`,
+  });
 
   if (!rootConfig.version) {
     results.push({
@@ -78,7 +82,11 @@ async function checkComponents(
     return results;
   }
 
-  results.push({ name: "components", status: "pass", message: `${components.length} discovered from markers` });
+  results.push({
+    name: "components",
+    status: "pass",
+    message: `${components.length} discovered from markers`,
+  });
 
   for (const component of components) {
     const dir = componentPaths[component];
@@ -104,8 +112,13 @@ async function checkComponents(
       continue;
     }
 
-    const label = dir !== component ? `${dir}/ (${component})` : `${component}/`;
-    results.push({ name: `${component} marker`, status: "pass", message: label });
+    const label =
+      dir !== component ? `${dir}/ (${component})` : `${component}/`;
+    results.push({
+      name: `${component} marker`,
+      status: "pass",
+      message: label,
+    });
   }
 
   return results;
@@ -118,20 +131,40 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
     execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" });
     results.push({ name: "git repo", status: "pass", message: "OK" });
   } catch {
-    results.push({ name: "git repo", status: "fail", message: "Not a git repository." });
+    results.push({
+      name: "git repo",
+      status: "fail",
+      message: "Not a git repository.",
+    });
     return results;
   }
 
   // Baseline ref
   try {
-    const ref = execSync(`git rev-parse --verify ${BASELINE_REF}`, { cwd, stdio: "pipe" }).toString().trim();
-    results.push({ name: "baseline ref", status: "pass", message: ref.slice(0, 8) });
+    const ref = execSync(`git rev-parse --verify ${BASELINE_REF}`, {
+      cwd,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
+    results.push({
+      name: "baseline ref",
+      status: "pass",
+      message: ref.slice(0, 8),
+    });
   } catch {
     if (fix) {
       saveBaselineRef(cwd);
       try {
-        execSync(`git rev-parse --verify ${BASELINE_REF}`, { cwd, stdio: "pipe" });
-        results.push({ name: "baseline ref", status: "pass", message: "Created from git history." });
+        execSync(`git rev-parse --verify ${BASELINE_REF}`, {
+          cwd,
+          stdio: "pipe",
+        });
+        results.push({
+          name: "baseline ref",
+          status: "pass",
+          message: "Created from git history.",
+        });
       } catch {
         results.push({
           name: "baseline ref",
@@ -152,12 +185,21 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
 
   // Stale worktrees
   try {
-    const worktrees = execSync("git worktree list --porcelain", { cwd, stdio: "pipe" }).toString();
-    const stale = worktrees.split("\n").filter((l) => l.includes("projx-wt-") || l.includes("projx/tmp-"));
+    const worktrees = execSync("git worktree list --porcelain", {
+      cwd,
+      stdio: "pipe",
+    }).toString();
+    const stale = worktrees
+      .split("\n")
+      .filter((l) => l.includes("projx-wt-") || l.includes("projx/tmp-"));
     if (stale.length > 0) {
       if (fix) {
         execSync("git worktree prune", { cwd, stdio: "pipe" });
-        results.push({ name: "worktrees", status: "pass", message: "Pruned stale worktrees." });
+        results.push({
+          name: "worktrees",
+          status: "pass",
+          message: "Pruned stale worktrees.",
+        });
       } else {
         results.push({
           name: "worktrees",
@@ -176,10 +218,16 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
 
   // Working tree status
   try {
-    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" }).toString().trim();
+    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+      .toString()
+      .trim();
     if (status) {
       const count = status.split("\n").length;
-      results.push({ name: "working tree", status: "warn", message: `${count} uncommitted change(s).` });
+      results.push({
+        name: "working tree",
+        status: "warn",
+        message: `${count} uncommitted change(s).`,
+      });
     } else {
       results.push({ name: "working tree", status: "pass", message: "Clean" });
     }
@@ -198,7 +246,9 @@ async function checkSkipPatterns(
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
 
-  const rootSkip: string[] = Array.isArray(rootConfig.skip) ? (rootConfig.skip as string[]) : [];
+  const rootSkip: string[] = Array.isArray(rootConfig.skip)
+    ? (rootConfig.skip as string[])
+    : [];
   for (const pattern of rootSkip) {
     const matches = await patternMatchesAnything(cwd, pattern);
     if (!matches) {
@@ -228,13 +278,20 @@ async function checkSkipPatterns(
   }
 
   if (results.length === 0 && (rootSkip.length > 0 || components.length > 0)) {
-    results.push({ name: "skip patterns", status: "pass", message: "All patterns match files." });
+    results.push({
+      name: "skip patterns",
+      status: "pass",
+      message: "All patterns match files.",
+    });
   }
 
   return results;
 }
 
-async function patternMatchesAnything(dir: string, pattern: string): Promise<boolean> {
+async function patternMatchesAnything(
+  dir: string,
+  pattern: string,
+): Promise<boolean> {
   if (pattern === "**") return true;
   if (!existsSync(dir)) return false;
 
@@ -274,12 +331,15 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
     process.exit(1);
   }
 
-  const { components, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
-  allResults.push(...await checkComponents(cwd, components, componentPaths));
+  const { components, paths: componentPaths } =
+    await discoverComponentsFromMarkers(cwd);
+  allResults.push(...(await checkComponents(cwd, components, componentPaths)));
 
   allResults.push(...checkGit(cwd, fix));
 
-  allResults.push(...await checkSkipPatterns(cwd, rootConfig, components, componentPaths));
+  allResults.push(
+    ...(await checkSkipPatterns(cwd, rootConfig, components, componentPaths)),
+  );
 
   printReport(allResults);
 
@@ -299,7 +359,12 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
 
 function printReport(results: CheckResult[]): void {
   for (const r of results) {
-    const icon = r.status === "pass" ? "\u2713" : r.status === "warn" ? "\u26A0" : "\u2717";
+    const icon =
+      r.status === "pass"
+        ? "\u2713"
+        : r.status === "warn"
+          ? "\u26A0"
+          : "\u2717";
     const msg = `${icon} ${r.name} \u2014 ${r.message}`;
 
     if (r.status === "pass") p.log.success(msg);

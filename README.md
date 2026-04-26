@@ -158,6 +158,16 @@ npx create-projx add frontend mobile
 
 Copies the new component directories, regenerates shared files (docker-compose, CI, pre-commit hooks) to include them, and installs dependencies.
 
+#### Multiple instances of the same type
+
+Need a second backend service alongside an existing one (e.g. an SMTP listener next to your CRUD API)? Use `--name <dir>`:
+
+```bash
+npx create-projx add fastify --name email-ingestor
+```
+
+Creates `email-ingestor/` with the fastify scaffold and a `.projx-component` marker. Each instance gets its own job in `.github/workflows/ci.yml`, its own section in `.githooks/pre-commit`, and its own install step in `setup.sh`. `update` keeps every instance refreshed on every run.
+
 ### Update Scaffolding
 
 When templates improve, update your project:
@@ -213,6 +223,7 @@ To opt back in to updates for a skipped file, use `npx create-projx unpin <file>
 npx create-projx <name> [options]
 npx create-projx init
 npx create-projx add <components...>
+npx create-projx add <type> --name <dir>
 npx create-projx update
 npx create-projx diff
 npx create-projx pin <patterns...>
@@ -223,6 +234,7 @@ npx create-projx gen entity <name> [--ai | --backend]
 npx create-projx sync [--url <url>]
 
 --components <list>    Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+--name <dir>           Custom directory for `add <type>` (multi-instance)
 --ai                   Target fastapi (AI/ML) for gen entity
 --backend              Target fastify (API backend) for gen entity
 --no-git               Skip git init

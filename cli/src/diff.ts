@@ -74,7 +74,8 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
   }
 
   const raw = await readProjxConfig(cwd);
-  const { components, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  const { components, paths: componentPaths } =
+    await discoverComponentsFromMarkers(cwd);
 
   const componentSkips: Record<string, string[]> = {};
   for (const component of components) {
@@ -84,10 +85,14 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
       componentSkips[component] = marker.skip;
     }
   }
-  const rootSkip: string[] = Array.isArray(raw.skip) ? (raw.skip as string[]) : [];
+  const rootSkip: string[] = Array.isArray(raw.skip)
+    ? (raw.skip as string[])
+    : [];
 
   const dlSpinner = p.spinner();
-  dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");
+  dlSpinner.start(
+    isLocal ? "Using local templates" : "Downloading latest templates",
+  );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
     dlSpinner.stop("Failed.");
     p.log.error(String(err));
@@ -96,24 +101,39 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
   dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
 
   try {
-    const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+    );
     const version = pkg.version;
 
     p.log.info(`Current: v${raw.version ?? "unknown"} → Template: v${version}`);
 
     const name = detectProjectName(cwd, components, componentPaths);
-    const vars: GeneratorVars = { projectName: name, components, paths: componentPaths, pm: pmCommands((raw.packageManager ?? "npm") as "npm") };
+    const vars: GeneratorVars = {
+      projectName: name,
+      components,
+      paths: componentPaths,
+      pm: pmCommands((raw.packageManager ?? "npm") as "npm"),
+    };
 
     const spinner = p.spinner();
     spinner.start("Analyzing changes");
 
     const tmpTemplate = join(tmpdir(), `projx-diff-${Date.now()}`);
     await mkdir(tmpTemplate, { recursive: true });
-    await writeTemplateToDir(tmpTemplate, repoDir, components, componentPaths, vars, version, {
-      componentSkips,
-      rootSkip,
-      realCwd: cwd,
-    });
+    await writeTemplateToDir(
+      tmpTemplate,
+      repoDir,
+      components,
+      componentPaths,
+      vars,
+      version,
+      {
+        componentSkips,
+        rootSkip,
+        realCwd: cwd,
+      },
+    );
 
     const baselineRef = getBaselineRef(cwd);
     const templateFiles = await collectAllFiles(tmpTemplate, tmpTemplate);
@@ -173,12 +193,12 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
 
     // Print results
     const groups: Record<FileStatus, FileAnalysis[]> = {
-      "new": [],
+      new: [],
       "clean-update": [],
       "needs-merge": [],
       "user-only": [],
-      "unchanged": [],
-      "skipped": [],
+      unchanged: [],
+      skipped: [],
     };
 
     for (const a of analyses) {
@@ -191,17 +211,23 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
     }
 
     if (groups["clean-update"].length > 0) {
-      p.log.success(`Clean updates — auto-merged (${groups["clean-update"].length}):`);
+      p.log.success(
+        `Clean updates — auto-merged (${groups["clean-update"].length}):`,
+      );
       for (const a of groups["clean-update"]) p.log.info(`  ~ ${a.file}`);
     }
 
     if (groups["needs-merge"].length > 0) {
-      p.log.warn(`Needs merge — both sides changed (${groups["needs-merge"].length}):`);
+      p.log.warn(
+        `Needs merge — both sides changed (${groups["needs-merge"].length}):`,
+      );
       for (const a of groups["needs-merge"]) p.log.info(`  ! ${a.file}`);
     }
 
     if (groups["user-only"].length > 0) {
-      p.log.info(`User-modified only — no template change (${groups["user-only"].length}):`);
+      p.log.info(
+        `User-modified only — no template change (${groups["user-only"].length}):`,
+      );
       for (const a of groups["user-only"]) p.log.info(`  = ${a.file}`);
     }
 

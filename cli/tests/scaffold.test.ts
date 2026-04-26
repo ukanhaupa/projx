@@ -18,7 +18,12 @@ describe("scaffold", () => {
   it("scaffolds a project with fastify + frontend", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
     await scaffold(
-      { name: "test-app", components: ["fastify", "frontend"], git: true, install: false },
+      {
+        name: "test-app",
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -50,7 +55,12 @@ describe("scaffold", () => {
   it("writes .projx-component markers", async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
     await scaffold(
-      { name: "my-app", components: ["fastify", "frontend"], git: true, install: false },
+      {
+        name: "my-app",
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -86,13 +96,20 @@ describe("scaffold", () => {
   it("ci.yml uses canonical display names (FastAPI, Fastify, Frontend, Flutter)", async () => {
     dest = join(tmpdir(), `projx-display-${Date.now()}`);
     await scaffold(
-      { name: "display-app", components: ["fastapi", "fastify", "frontend", "mobile"], git: true, install: false },
+      {
+        name: "display-app",
+        components: ["fastapi", "fastify", "frontend", "mobile"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
     const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
-    expect(ci).toContain("name: FastAPI (format + lint + typecheck + test + audit)");
+    expect(ci).toContain(
+      "name: FastAPI (format + lint + typecheck + test + audit)",
+    );
     expect(ci).toContain("name: Fastify (format + lint + typecheck + audit)");
     expect(ci).toContain("name: Frontend (format + lint + typecheck + audit)");
     expect(ci).toContain("name: Flutter (format + analyze)");
@@ -103,7 +120,12 @@ describe("scaffold", () => {
   it("setup.sh uses canonical display names", async () => {
     dest = join(tmpdir(), `projx-setup-display-${Date.now()}`);
     await scaffold(
-      { name: "display-app", components: ["fastapi", "fastify", "frontend"], git: true, install: false },
+      {
+        name: "display-app",
+        components: ["fastapi", "fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -122,7 +144,9 @@ describe("scaffold", () => {
       REPO_DIR,
     );
 
-    const pkg = JSON.parse(await readFile(join(dest, "fastify/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(dest, "fastify/package.json"), "utf-8"),
+    );
     expect(pkg.name).toBe("my-app-fastify");
   });
 
@@ -163,7 +187,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("stores packageManager in .projx", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -175,7 +205,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("setup.sh uses correct install command", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -194,7 +230,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("README uses correct commands", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -207,7 +249,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("docker-compose.dev.yml uses correct commands", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -221,7 +269,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("docker-compose.yml uses correct prisma command", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -233,7 +287,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("CI workflow uses correct setup and install", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend", "e2e"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend", "e2e"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -261,7 +321,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("pre-commit hook uses correct exec command", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify", "frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -275,7 +341,13 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("pre-commit hook does not run pip-audit (moved to CI)", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastapi"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastapi"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
@@ -290,12 +362,21 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("frontend Dockerfile uses the correct install and run commands", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["frontend"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
 
-    const dockerfile = await readFile(join(dest, "frontend/Dockerfile"), "utf-8");
+    const dockerfile = await readFile(
+      join(dest, "frontend/Dockerfile"),
+      "utf-8",
+    );
     expect(existsSync(join(dest, "frontend/Dockerfile.ejs"))).toBe(false);
     expect(dockerfile).toContain(cmd.ci);
     expect(dockerfile).toContain(`${cmd.run} build`);
@@ -310,12 +391,21 @@ describe.each(PMS)("scaffold with %s", (pm) => {
   it("fastify Dockerfile uses the correct install, prisma, and run commands", async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
-      { name: `${pm}-app`, components: ["fastify"], git: true, install: false, packageManager: pm },
+      {
+        name: `${pm}-app`,
+        components: ["fastify"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
       dest,
       REPO_DIR,
     );
 
-    const dockerfile = await readFile(join(dest, "fastify/Dockerfile"), "utf-8");
+    const dockerfile = await readFile(
+      join(dest, "fastify/Dockerfile"),
+      "utf-8",
+    );
     expect(existsSync(join(dest, "fastify/Dockerfile.ejs"))).toBe(false);
     expect(dockerfile).toContain(cmd.ci);
     expect(dockerfile).toContain(`${cmd.prismaExec} generate`);

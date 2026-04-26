@@ -17,7 +17,9 @@ export async function detectComponents(
   const entries = await readdir(cwd, { withFileTypes: true });
 
   const dirs = entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDE.has(e.name))
+    .filter(
+      (e) => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDE.has(e.name),
+    )
     .map((e) => e.name);
 
   for (const dir of dirs) {
@@ -106,7 +108,10 @@ async function scanDirectory(
 
 async function readPkg(
   dir: string,
-): Promise<{ dependencies?: Record<string, string>; devDependencies?: Record<string, string> } | null> {
+): Promise<{
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | null> {
   const content = await readFileOrNull(join(dir, "package.json"));
   if (!content) return null;
   try {
