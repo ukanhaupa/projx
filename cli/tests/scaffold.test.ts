@@ -8,6 +8,10 @@ import { type PackageManager, pmCommands } from "../src/utils.js";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("scaffold", () => {
   let dest: string;
 
@@ -217,14 +221,27 @@ describe.each(PMS)("scaffold with %s", (pm) => {
     );
 
     const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
-    expect(setup).toContain(cmd.ci);
+    expect(setup).toMatch(new RegExp(`^  ${escapeRegex(cmd.install)}$`, "m"));
+  });
 
-    for (const other of PMS.filter((p) => p !== pm)) {
-      const otherCmd = pmCommands(other);
-      if (otherCmd.ci !== cmd.ci) {
-        expect(setup).not.toContain(otherCmd.ci);
-      }
-    }
+  it("setup.sh wraps each install block in a subshell so failures abort the script", async () => {
+    dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
+    await scaffold(
+      {
+        name: `${pm}-app`,
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
+    expect(setup).not.toContain("&& cd ..");
+    expect(setup).toMatch(/\(\n\s+cd fastify\n\s+\S+/);
+    expect(setup).toMatch(/\(\n\s+cd frontend\n\s+\S+/);
   });
 
   it("README uses correct commands", async () => {

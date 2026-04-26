@@ -112,8 +112,8 @@ describe("add", () => {
       expect(hook).toContain("Formatting email-ingestor");
 
       const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
-      expect(setup).toContain("cd fastify &&");
-      expect(setup).toContain("cd email-ingestor &&");
+      expect(setup).toMatch(/\(\n\s+cd fastify\n/);
+      expect(setup).toMatch(/\(\n\s+cd email-ingestor\n/);
 
       const compose = await readFile(join(dest, "docker-compose.yml"), "utf-8");
       expect(compose).toContain("fastify:");

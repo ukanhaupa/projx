@@ -5,28 +5,43 @@ git config core.hooksPath .githooks
 echo "Git hooks configured."
 <% for (const inst of fastapiInstances) { %>
 
-cd <%= inst.path %> && uv sync --all-extras && cd ..
+(
+  cd <%= inst.path %>
+  uv sync --all-extras
+)
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of fastifyInstances) { %>
 
-cd <%= inst.path %> && <%= pm.ci %> && cd ..
+(
+  cd <%= inst.path %>
+  <%= pm.install %>
+)
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of frontendInstances) { %>
 
-cd <%= inst.path %> && <%= pm.ci %> && cd ..
+(
+  cd <%= inst.path %>
+  <%= pm.install %>
+)
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of e2eInstances) { %>
 
-cd <%= inst.path %> && <%= pm.ci %> && cd ..
+(
+  cd <%= inst.path %>
+  <%= pm.install %>
+)
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of mobileInstances) { %>
 
 if command -v flutter &>/dev/null; then
-  cd <%= inst.path %> && flutter pub get && cd ..
+  (
+    cd <%= inst.path %>
+    flutter pub get
+  )
   echo "<%= inst.display %> dependencies installed."
 else
   echo "<%= inst.display %> skipped (SDK not installed)."
