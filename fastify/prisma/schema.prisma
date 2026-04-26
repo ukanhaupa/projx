@@ -7,6 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model ServiceConfig {
+  id         String   @id @default(uuid())
+  purpose    String   @unique @db.VarChar(64)
+  config     String   @db.Text
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("service_configs")
+}
+
 model AuditLog {
   id           String   @id @default(uuid())
   table_name   String   @db.VarChar(255)

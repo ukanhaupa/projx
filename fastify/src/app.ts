@@ -1,6 +1,7 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import prismaPlugin from './plugins/prisma.js';
 import errorHandler from './plugins/error-handler.js';
@@ -35,6 +36,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(cors, {
     origin: config.CORS_ALLOW_ORIGINS.split(',').map((o) => o.trim()),
     credentials: true,
+  });
+  await app.register(rateLimit, {
+    max: config.RATE_LIMIT_MAX,
+    timeWindow: config.RATE_LIMIT_WINDOW,
+    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
   });
 
   await app.register(swaggerPlugin);
