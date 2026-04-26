@@ -13,7 +13,15 @@ import {
   writeProjxConfig,
 } from "./utils.js";
 
-const FIELD_TYPES = ["string", "number", "boolean", "date", "datetime", "text", "json"] as const;
+const FIELD_TYPES = [
+  "string",
+  "number",
+  "boolean",
+  "date",
+  "datetime",
+  "text",
+  "json",
+] as const;
 type FieldType = (typeof FIELD_TYPES)[number];
 
 interface EntityField {
@@ -41,7 +49,14 @@ function toPascal(s: string): string {
 }
 
 function pluralize(s: string): string {
-  if (s.endsWith("s") || s.endsWith("x") || s.endsWith("z") || s.endsWith("sh") || s.endsWith("ch")) return s + "es";
+  if (
+    s.endsWith("s") ||
+    s.endsWith("x") ||
+    s.endsWith("z") ||
+    s.endsWith("sh") ||
+    s.endsWith("ch")
+  )
+    return s + "es";
   if (s.endsWith("y") && !/[aeiou]y$/i.test(s)) return s.slice(0, -1) + "ies";
   return s + "s";
 }
@@ -119,7 +134,9 @@ async function promptEntityConfig(name: string): Promise<EntityConfig> {
   }
 
   // Searchable fields
-  const stringFields = fields.filter((f) => f.type === "string" || f.type === "text");
+  const stringFields = fields.filter(
+    (f) => f.type === "string" || f.type === "text",
+  );
   let searchableFields: string[] = [];
 
   if (stringFields.length > 0) {
@@ -160,13 +177,20 @@ function parseFieldsFlag(raw: string): EntityField[] {
 
 function sqlalchemyType(type: FieldType): string {
   switch (type) {
-    case "string": return "String(255)";
-    case "number": return "Integer";
-    case "boolean": return "Boolean";
-    case "date": return "Date";
-    case "datetime": return "DateTime";
-    case "text": return "Text";
-    case "json": return "JSON";
+    case "string":
+      return "String(255)";
+    case "number":
+      return "Integer";
+    case "boolean":
+      return "Boolean";
+    case "date":
+      return "Date";
+    case "datetime":
+      return "DateTime";
+    case "text":
+      return "Text";
+    case "json":
+      return "JSON";
   }
 }
 
@@ -176,13 +200,27 @@ function generateFastAPIModel(config: EntityConfig): string {
 
   for (const f of config.fields) {
     switch (f.type) {
-      case "string": imports.add("String"); break;
-      case "number": imports.add("Integer"); break;
-      case "boolean": imports.add("Boolean"); break;
-      case "date": imports.add("Date"); break;
-      case "datetime": imports.add("DateTime"); break;
-      case "text": imports.add("Text"); break;
-      case "json": imports.add("JSON"); break;
+      case "string":
+        imports.add("String");
+        break;
+      case "number":
+        imports.add("Integer");
+        break;
+      case "boolean":
+        imports.add("Boolean");
+        break;
+      case "date":
+        imports.add("Date");
+        break;
+      case "datetime":
+        imports.add("DateTime");
+        break;
+      case "text":
+        imports.add("Text");
+        break;
+      case "json":
+        imports.add("JSON");
+        break;
     }
   }
 
@@ -221,7 +259,9 @@ function generateFastAPIModel(config: EntityConfig): string {
 
   for (const field of config.fields) {
     const nullable = field.required ? "nullable=False" : "nullable=True";
-    lines.push(`    ${field.name} = Column(${sqlalchemyType(field.type)}, ${nullable})`);
+    lines.push(
+      `    ${field.name} = Column(${sqlalchemyType(field.type)}, ${nullable})`,
+    );
   }
 
   lines.push("");
@@ -233,13 +273,20 @@ function generateFastAPIModel(config: EntityConfig): string {
 function typeboxType(type: FieldType, required: boolean): string {
   const inner = (() => {
     switch (type) {
-      case "string": return "Type.String()";
-      case "number": return "Type.Number()";
-      case "boolean": return "Type.Boolean()";
-      case "date": return "Type.String({ format: 'date' })";
-      case "datetime": return "Type.String({ format: 'date-time' })";
-      case "text": return "Type.String()";
-      case "json": return "Type.Any()";
+      case "string":
+        return "Type.String()";
+      case "number":
+        return "Type.Number()";
+      case "boolean":
+        return "Type.Boolean()";
+      case "date":
+        return "Type.String({ format: 'date' })";
+      case "datetime":
+        return "Type.String({ format: 'date-time' })";
+      case "text":
+        return "Type.String()";
+      case "json":
+        return "Type.Any()";
     }
   })();
 
@@ -249,38 +296,59 @@ function typeboxType(type: FieldType, required: boolean): string {
 
 function typeboxOptional(type: FieldType): string {
   switch (type) {
-    case "string": return "Type.Optional(Type.String())";
-    case "number": return "Type.Optional(Type.Number())";
-    case "boolean": return "Type.Optional(Type.Boolean())";
-    case "date": return "Type.Optional(Type.String({ format: 'date' }))";
-    case "datetime": return "Type.Optional(Type.String({ format: 'date-time' }))";
-    case "text": return "Type.Optional(Type.String())";
-    case "json": return "Type.Optional(Type.Any())";
+    case "string":
+      return "Type.Optional(Type.String())";
+    case "number":
+      return "Type.Optional(Type.Number())";
+    case "boolean":
+      return "Type.Optional(Type.Boolean())";
+    case "date":
+      return "Type.Optional(Type.String({ format: 'date' }))";
+    case "datetime":
+      return "Type.Optional(Type.String({ format: 'date-time' }))";
+    case "text":
+      return "Type.Optional(Type.String())";
+    case "json":
+      return "Type.Optional(Type.Any())";
   }
 }
 
 function fieldMetaType(type: FieldType): { type: string; fieldType: string } {
   switch (type) {
-    case "string": return { type: "str", fieldType: "text" };
-    case "number": return { type: "int", fieldType: "number" };
-    case "boolean": return { type: "bool", fieldType: "boolean" };
-    case "date": return { type: "date", fieldType: "date" };
-    case "datetime": return { type: "datetime", fieldType: "datetime" };
-    case "text": return { type: "str", fieldType: "textarea" };
-    case "json": return { type: "dict", fieldType: "textarea" };
+    case "string":
+      return { type: "str", fieldType: "text" };
+    case "number":
+      return { type: "int", fieldType: "number" };
+    case "boolean":
+      return { type: "bool", fieldType: "boolean" };
+    case "date":
+      return { type: "date", fieldType: "date" };
+    case "datetime":
+      return { type: "datetime", fieldType: "datetime" };
+    case "text":
+      return { type: "str", fieldType: "textarea" };
+    case "json":
+      return { type: "dict", fieldType: "textarea" };
   }
 }
 
 function prismaType(type: FieldType, required: boolean): string {
   const nullable = required ? "" : "?";
   switch (type) {
-    case "string": return `String${nullable}   @db.VarChar(255)`;
-    case "number": return `Int${nullable}`;
-    case "boolean": return `Boolean${nullable}  @default(false)`;
-    case "date": return `DateTime${nullable}`;
-    case "datetime": return `DateTime${nullable}`;
-    case "text": return `String${nullable}`;
-    case "json": return `Json${nullable}`;
+    case "string":
+      return `String${nullable}   @db.VarChar(255)`;
+    case "number":
+      return `Int${nullable}`;
+    case "boolean":
+      return `Boolean${nullable}  @default(false)`;
+    case "date":
+      return `DateTime${nullable}`;
+    case "datetime":
+      return `DateTime${nullable}`;
+    case "text":
+      return `String${nullable}`;
+    case "json":
+      return `Json${nullable}`;
   }
 }
 
@@ -299,7 +367,10 @@ function generateFastifySchemas(config: EntityConfig): string {
   }
   lines.push(`  created_at: Type.String({ format: 'date-time' }),`);
   lines.push(`  updated_at: Type.String({ format: 'date-time' }),`);
-  if (config.softDelete) lines.push(`  deleted_at: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),`);
+  if (config.softDelete)
+    lines.push(
+      `  deleted_at: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),`,
+    );
   lines.push(`});`);
   lines.push("");
   lines.push(`export type ${className} = Static<typeof ${className}Schema>;`);
@@ -316,7 +387,9 @@ function generateFastifySchemas(config: EntityConfig): string {
   }
   lines.push(`});`);
   lines.push("");
-  lines.push(`export type Create${className} = Static<typeof Create${className}Schema>;`);
+  lines.push(
+    `export type Create${className} = Static<typeof Create${className}Schema>;`,
+  );
   lines.push("");
 
   // Update schema
@@ -326,7 +399,9 @@ function generateFastifySchemas(config: EntityConfig): string {
   }
   lines.push(`});`);
   lines.push("");
-  lines.push(`export type Update${className} = Static<typeof Update${className}Schema>;`);
+  lines.push(
+    `export type Update${className} = Static<typeof Update${className}Schema>;`,
+  );
   lines.push("");
 
   return lines.join("\n");
@@ -334,33 +409,53 @@ function generateFastifySchemas(config: EntityConfig): string {
 
 function generateFastifyIndex(config: EntityConfig): string {
   const className = toPascal(config.name);
-  const camelConfig = className.charAt(0).toLowerCase() + className.slice(1) + "Config";
-  const allColumns = ["id", ...config.fields.map((f) => f.name), "created_at", "updated_at"];
+  const camelConfig =
+    className.charAt(0).toLowerCase() + className.slice(1) + "Config";
+  const allColumns = [
+    "id",
+    ...config.fields.map((f) => f.name),
+    "created_at",
+    "updated_at",
+  ];
   if (config.softDelete) allColumns.push("deleted_at");
 
   const lines: string[] = [];
 
-  lines.push(`import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';`);
-  lines.push(`import { ${className}Schema, Create${className}Schema, Update${className}Schema } from './schemas.js';`);
+  lines.push(
+    `import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';`,
+  );
+  lines.push(
+    `import { ${className}Schema, Create${className}Schema, Update${className}Schema } from './schemas.js';`,
+  );
   lines.push("");
 
   // FieldMeta array
   lines.push(`const fields: FieldMeta[] = [`);
 
   // id field
-  lines.push(`  { key: 'id', label: 'Id', type: 'str', nullable: false, is_auto: true, is_primary_key: true, filterable: true, has_foreign_key: false, field_type: 'text' },`);
+  lines.push(
+    `  { key: 'id', label: 'Id', type: 'str', nullable: false, is_auto: true, is_primary_key: true, filterable: true, has_foreign_key: false, field_type: 'text' },`,
+  );
 
   for (const f of config.fields) {
     const meta = fieldMetaType(f.type);
-    lines.push(`  { key: '${f.name}', label: '${toTitle(f.name)}', type: '${meta.type}', nullable: ${!f.required}, is_auto: false, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: '${meta.fieldType}' },`);
+    lines.push(
+      `  { key: '${f.name}', label: '${toTitle(f.name)}', type: '${meta.type}', nullable: ${!f.required}, is_auto: false, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: '${meta.fieldType}' },`,
+    );
   }
 
   // auto fields
-  lines.push(`  { key: 'created_at', label: 'Created At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`);
-  lines.push(`  { key: 'updated_at', label: 'Updated At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`);
+  lines.push(
+    `  { key: 'created_at', label: 'Created At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
+  );
+  lines.push(
+    `  { key: 'updated_at', label: 'Updated At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
+  );
 
   if (config.softDelete) {
-    lines.push(`  { key: 'deleted_at', label: 'Deleted At', type: 'datetime', nullable: true, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`);
+    lines.push(
+      `  { key: 'deleted_at', label: 'Deleted At', type: 'datetime', nullable: true, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
+    );
   }
 
   lines.push(`];`);
@@ -380,7 +475,9 @@ function generateFastifyIndex(config: EntityConfig): string {
   lines.push(`  columnNames: [${allColumns.map((c) => `'${c}'`).join(", ")}],`);
 
   if (config.searchableFields.length > 0) {
-    lines.push(`  searchableFields: [${config.searchableFields.map((f) => `'${f}'`).join(", ")}],`);
+    lines.push(
+      `  searchableFields: [${config.searchableFields.map((f) => `'${f}'`).join(", ")}],`,
+    );
   } else {
     lines.push(`  searchableFields: [],`);
   }
@@ -433,10 +530,17 @@ function generatePrismaModel(config: EntityConfig): string {
 function tsType(type: FieldType, required: boolean): string {
   const base = (() => {
     switch (type) {
-      case "string": case "text": case "date": case "datetime": return "string";
-      case "number": return "number";
-      case "boolean": return "boolean";
-      case "json": return "Record<string, unknown>";
+      case "string":
+      case "text":
+      case "date":
+      case "datetime":
+        return "string";
+      case "number":
+        return "number";
+      case "boolean":
+        return "boolean";
+      case "json":
+        return "Record<string, unknown>";
     }
   })();
   return required ? base : `${base} | null`;
@@ -483,11 +587,18 @@ function generateFrontendInterface(config: EntityConfig): string {
 function dartType(type: FieldType, required: boolean): string {
   const base = (() => {
     switch (type) {
-      case "string": case "text": return "String";
-      case "number": return "int";
-      case "boolean": return "bool";
-      case "date": case "datetime": return "DateTime";
-      case "json": return "Map<String, dynamic>";
+      case "string":
+      case "text":
+        return "String";
+      case "number":
+        return "int";
+      case "boolean":
+        return "bool";
+      case "date":
+      case "datetime":
+        return "DateTime";
+      case "json":
+        return "Map<String, dynamic>";
     }
   })();
   return required ? base : `${base}?`;
@@ -497,31 +608,48 @@ function toCamel(s: string): string {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-function dartFromJson(fieldName: string, type: FieldType, required: boolean): string {
+function dartFromJson(
+  fieldName: string,
+  type: FieldType,
+  required: boolean,
+): string {
   const key = `json['${fieldName}']`;
   const isDate = type === "date" || type === "datetime";
 
   if (isDate && required) return `DateTime.parse(${key} as String)`;
-  if (isDate && !required) return `${key} != null ? DateTime.parse(${key} as String) : null`;
+  if (isDate && !required)
+    return `${key} != null ? DateTime.parse(${key} as String) : null`;
   if (type === "json" && !required) return `${key} as Map<String, dynamic>?`;
   if (type === "json") return `${key} as Map<String, dynamic>`;
 
   const dartT = (() => {
     switch (type) {
-      case "string": case "text": return "String";
-      case "number": return "int";
-      case "boolean": return "bool";
-      default: return "String";
+      case "string":
+      case "text":
+        return "String";
+      case "number":
+        return "int";
+      case "boolean":
+        return "bool";
+      default:
+        return "String";
     }
   })();
 
   return required ? `${key} as ${dartT}` : `${key} as ${dartT}?`;
 }
 
-function dartToJson(fieldName: string, camelName: string, type: FieldType, required: boolean): string {
+function dartToJson(
+  fieldName: string,
+  camelName: string,
+  type: FieldType,
+  required: boolean,
+): string {
   const isDate = type === "date" || type === "datetime";
-  if (isDate && required) return `'${fieldName}': ${camelName}.toIso8601String()`;
-  if (isDate && !required) return `'${fieldName}': ${camelName}?.toIso8601String()`;
+  if (isDate && required)
+    return `'${fieldName}': ${camelName}.toIso8601String()`;
+  if (isDate && !required)
+    return `'${fieldName}': ${camelName}?.toIso8601String()`;
   return `'${fieldName}': ${camelName}`;
 }
 
@@ -537,7 +665,13 @@ function generateDartModel(config: EntityConfig): string {
   }
 
   const allFields: DartField[] = [
-    { snake: "id", camel: "id", type: "String", required: true, fieldType: "string" },
+    {
+      snake: "id",
+      camel: "id",
+      type: "String",
+      required: true,
+      fieldType: "string",
+    },
     ...config.fields.map((f) => ({
       snake: f.name,
       camel: toCamel(f.name),
@@ -548,12 +682,30 @@ function generateDartModel(config: EntityConfig): string {
   ];
 
   if (config.softDelete) {
-    allFields.push({ snake: "deleted_at", camel: "deletedAt", type: "DateTime?", required: false, fieldType: "datetime" });
+    allFields.push({
+      snake: "deleted_at",
+      camel: "deletedAt",
+      type: "DateTime?",
+      required: false,
+      fieldType: "datetime",
+    });
   }
 
   allFields.push(
-    { snake: "created_at", camel: "createdAt", type: "DateTime", required: true, fieldType: "datetime" },
-    { snake: "updated_at", camel: "updatedAt", type: "DateTime", required: true, fieldType: "datetime" },
+    {
+      snake: "created_at",
+      camel: "createdAt",
+      type: "DateTime",
+      required: true,
+      fieldType: "datetime",
+    },
+    {
+      snake: "updated_at",
+      camel: "updatedAt",
+      type: "DateTime",
+      required: true,
+      fieldType: "datetime",
+    },
   );
 
   const lines: string[] = [];
@@ -582,7 +734,9 @@ function generateDartModel(config: EntityConfig): string {
   lines.push(`  factory ${className}.fromJson(Map<String, dynamic> json) {`);
   lines.push(`    return ${className}(`);
   for (const f of allFields) {
-    lines.push(`      ${f.camel}: ${dartFromJson(f.snake, f.fieldType, f.required)},`);
+    lines.push(
+      `      ${f.camel}: ${dartFromJson(f.snake, f.fieldType, f.required)},`,
+    );
   }
   lines.push(`    );`);
   lines.push(`  }`);
@@ -592,7 +746,9 @@ function generateDartModel(config: EntityConfig): string {
   lines.push(`  Map<String, dynamic> toJson() {`);
   lines.push(`    return {`);
   for (const f of allFields) {
-    lines.push(`      ${dartToJson(f.snake, f.camel, f.fieldType, f.required)},`);
+    lines.push(
+      `      ${dartToJson(f.snake, f.camel, f.fieldType, f.required)},`,
+    );
   }
   lines.push(`    };`);
   lines.push(`  }`);
@@ -621,11 +777,18 @@ function generateDartModel(config: EntityConfig): string {
 
 type SampleVariant = "create" | "update" | "alt";
 
-function pyHttpLiteral(type: FieldType, variant: SampleVariant = "create"): string {
+function pyHttpLiteral(
+  type: FieldType,
+  variant: SampleVariant = "create",
+): string {
   switch (type) {
     case "string":
     case "text":
-      return variant === "create" ? '"sample text"' : variant === "update" ? '"updated text"' : '"alt text"';
+      return variant === "create"
+        ? '"sample text"'
+        : variant === "update"
+          ? '"updated text"'
+          : '"alt text"';
     case "number":
       return variant === "create" ? "42" : variant === "update" ? "100" : "7";
     case "boolean":
@@ -633,17 +796,26 @@ function pyHttpLiteral(type: FieldType, variant: SampleVariant = "create"): stri
     case "date":
       return variant === "alt" ? '"2026-02-01"' : '"2026-01-01"';
     case "datetime":
-      return variant === "alt" ? '"2026-02-01T00:00:00"' : '"2026-01-01T00:00:00"';
+      return variant === "alt"
+        ? '"2026-02-01T00:00:00"'
+        : '"2026-01-01T00:00:00"';
     case "json":
       return "{}";
   }
 }
 
-function pyOrmLiteral(type: FieldType, variant: SampleVariant = "create"): string {
+function pyOrmLiteral(
+  type: FieldType,
+  variant: SampleVariant = "create",
+): string {
   switch (type) {
     case "string":
     case "text":
-      return variant === "create" ? '"sample text"' : variant === "update" ? '"updated text"' : '"alt text"';
+      return variant === "create"
+        ? '"sample text"'
+        : variant === "update"
+          ? '"updated text"'
+          : '"alt text"';
     case "number":
       return variant === "create" ? "42" : variant === "update" ? "100" : "7";
     case "boolean":
@@ -651,7 +823,9 @@ function pyOrmLiteral(type: FieldType, variant: SampleVariant = "create"): strin
     case "date":
       return variant === "alt" ? "date(2026, 2, 1)" : "date(2026, 1, 1)";
     case "datetime":
-      return variant === "alt" ? "datetime(2026, 2, 1, 0, 0, 0)" : "datetime(2026, 1, 1, 0, 0, 0)";
+      return variant === "alt"
+        ? "datetime(2026, 2, 1, 0, 0, 0)"
+        : "datetime(2026, 1, 1, 0, 0, 0)";
     case "json":
       return "{}";
   }
@@ -661,7 +835,11 @@ function tsLiteral(type: FieldType, variant: SampleVariant = "create"): string {
   switch (type) {
     case "string":
     case "text":
-      return variant === "create" ? "'sample text'" : variant === "update" ? "'updated text'" : "'alt text'";
+      return variant === "create"
+        ? "'sample text'"
+        : variant === "update"
+          ? "'updated text'"
+          : "'alt text'";
     case "number":
       return variant === "create" ? "42" : variant === "update" ? "100" : "7";
     case "boolean":
@@ -669,7 +847,9 @@ function tsLiteral(type: FieldType, variant: SampleVariant = "create"): string {
     case "date":
       return variant === "alt" ? "'2026-02-01'" : "'2026-01-01'";
     case "datetime":
-      return variant === "alt" ? "'2026-02-01T00:00:00.000Z'" : "'2026-01-01T00:00:00.000Z'";
+      return variant === "alt"
+        ? "'2026-02-01T00:00:00.000Z'"
+        : "'2026-01-01T00:00:00.000Z'";
     case "json":
       return "{}";
   }
@@ -721,13 +901,17 @@ function generateFastapiTest(config: EntityConfig): string {
 
   // update_payload — pick first field
   const updateField = config.fields[0];
-  lines.push(`    update_payload = {"${updateField.name}": ${pyHttpLiteral(updateField.type, "update")}}`);
+  lines.push(
+    `    update_payload = {"${updateField.name}": ${pyHttpLiteral(updateField.type, "update")}}`,
+  );
   lines.push(`    invalid_payload: dict = {}`);
 
   // filter_field/values
   lines.push(`    filter_field = "${filterField.name}"`);
   lines.push(`    filter_value = ${pyHttpLiteral(filterField.type, "create")}`);
-  lines.push(`    other_filter_value = ${pyHttpLiteral(filterField.type, "alt")}`);
+  lines.push(
+    `    other_filter_value = ${pyHttpLiteral(filterField.type, "alt")}`,
+  );
   lines.push("");
 
   // make_model
@@ -751,7 +935,9 @@ function generateFastifyTest(config: EntityConfig): string {
 
   const lines: string[] = [];
 
-  lines.push(`import { describeCrudEntity } from '../helpers/crud-test-base.js';`);
+  lines.push(
+    `import { describeCrudEntity } from '../helpers/crud-test-base.js';`,
+  );
   lines.push("");
   lines.push(`describeCrudEntity({`);
   lines.push(`  entityName: '${className}',`);
@@ -763,7 +949,9 @@ function generateFastifyTest(config: EntityConfig): string {
   }
   lines.push(`  },`);
   lines.push(`  updatePayload: {`);
-  lines.push(`    ${updateField.name}: ${tsLiteral(updateField.type, "update")},`);
+  lines.push(
+    `    ${updateField.name}: ${tsLiteral(updateField.type, "update")},`,
+  );
   lines.push(`  },`);
   lines.push(`});`);
   lines.push("");
@@ -786,7 +974,10 @@ async function resolvePrimaryBackend(
   if (hasFastify && !hasFastapi) return "fastify";
 
   const config = await readProjxConfig(cwd);
-  if (config.primaryBackend === "fastapi" || config.primaryBackend === "fastify") {
+  if (
+    config.primaryBackend === "fastapi" ||
+    config.primaryBackend === "fastify"
+  ) {
     return config.primaryBackend;
   }
 
@@ -823,10 +1014,12 @@ export async function gen(
   }
 
   const projxData = await readProjxConfig(cwd);
-  const pmName: PackageManager = (projxData.packageManager as PackageManager) ?? "npm";
+  const pmName: PackageManager =
+    (projxData.packageManager as PackageManager) ?? "npm";
   const pm = pmCommands(pmName);
 
-  const { components: discovered, paths: componentPaths } = await discoverComponentsFromMarkers(cwd);
+  const { components: discovered, paths: componentPaths } =
+    await discoverComponentsFromMarkers(cwd);
 
   const hasFastapi = discovered.includes("fastapi");
   const hasFastify = discovered.includes("fastify");
@@ -838,7 +1031,12 @@ export async function gen(
     process.exit(1);
   }
 
-  const targetBackend = await resolvePrimaryBackend(cwd, hasFastapi, hasFastify, backendFlag);
+  const targetBackend = await resolvePrimaryBackend(
+    cwd,
+    hasFastapi,
+    hasFastify,
+    backendFlag,
+  );
   const genFastapi = targetBackend === "fastapi" && hasFastapi;
   const genFastify = targetBackend === "fastify" && hasFastify;
 
@@ -858,7 +1056,9 @@ export async function gen(
       softDelete: false,
       bulkOperations: true,
       fields,
-      searchableFields: fields.filter((f) => f.type === "string" || f.type === "text").map((f) => f.name),
+      searchableFields: fields
+        .filter((f) => f.type === "string" || f.type === "text")
+        .map((f) => f.name),
     };
   } else {
     config = await promptEntityConfig(entityName);
@@ -871,11 +1071,19 @@ export async function gen(
     const entityDir = join(cwd, dir, "src/entities", toSnake(config.name));
 
     if (existsSync(entityDir)) {
-      p.log.warn(`${dir}/src/entities/${toSnake(config.name)}/ already exists. Skipping FastAPI.`);
+      p.log.warn(
+        `${dir}/src/entities/${toSnake(config.name)}/ already exists. Skipping FastAPI.`,
+      );
     } else {
       await mkdir(entityDir, { recursive: true });
-      await writeFile(join(entityDir, "_model.py"), generateFastAPIModel(config));
-      await writeFile(join(entityDir, "__init__.py"), "from ._model import *\n");
+      await writeFile(
+        join(entityDir, "_model.py"),
+        generateFastAPIModel(config),
+      );
+      await writeFile(
+        join(entityDir, "__init__.py"),
+        "from ._model import *\n",
+      );
       generated.push(`${dir}/src/entities/${toSnake(config.name)}/_model.py`);
       generated.push(`${dir}/src/entities/${toSnake(config.name)}/__init__.py`);
 
@@ -893,11 +1101,19 @@ export async function gen(
     const moduleDir = join(cwd, dir, "src/modules", toKebab(config.name));
 
     if (existsSync(moduleDir)) {
-      p.log.warn(`${dir}/src/modules/${toKebab(config.name)}/ already exists. Skipping Fastify.`);
+      p.log.warn(
+        `${dir}/src/modules/${toKebab(config.name)}/ already exists. Skipping Fastify.`,
+      );
     } else {
       await mkdir(moduleDir, { recursive: true });
-      await writeFile(join(moduleDir, "schemas.ts"), generateFastifySchemas(config));
-      await writeFile(join(moduleDir, "index.ts"), generateFastifyIndex(config));
+      await writeFile(
+        join(moduleDir, "schemas.ts"),
+        generateFastifySchemas(config),
+      );
+      await writeFile(
+        join(moduleDir, "index.ts"),
+        generateFastifyIndex(config),
+      );
       generated.push(`${dir}/src/modules/${toKebab(config.name)}/schemas.ts`);
       generated.push(`${dir}/src/modules/${toKebab(config.name)}/index.ts`);
 
@@ -925,13 +1141,19 @@ export async function gen(
         const modelName = `model ${toPascal(config.name)}`;
         if (!prismaContent.includes(modelName)) {
           const prismaModel = generatePrismaModel(config);
-          await writeFile(prismaPath, prismaContent.trimEnd() + "\n\n" + prismaModel + "\n");
+          await writeFile(
+            prismaPath,
+            prismaContent.trimEnd() + "\n\n" + prismaModel + "\n",
+          );
           generated.push(`${dir}/prisma/schema.prisma (model added)`);
         }
       }
 
       const testsModulesDir = join(cwd, dir, "tests/modules");
-      const fastifyTestFile = join(testsModulesDir, `${toKebab(config.name)}.test.ts`);
+      const fastifyTestFile = join(
+        testsModulesDir,
+        `${toKebab(config.name)}.test.ts`,
+      );
       if (existsSync(testsModulesDir) && !existsSync(fastifyTestFile)) {
         await writeFile(fastifyTestFile, generateFastifyTest(config));
         generated.push(`${dir}/tests/modules/${toKebab(config.name)}.test.ts`);
@@ -946,7 +1168,9 @@ export async function gen(
     const filePath = join(typesDir, fileName);
 
     if (existsSync(filePath)) {
-      p.log.warn(`${dir}/src/types/${fileName} already exists. Skipping frontend types.`);
+      p.log.warn(
+        `${dir}/src/types/${fileName} already exists. Skipping frontend types.`,
+      );
     } else {
       await mkdir(typesDir, { recursive: true });
       await writeFile(filePath, generateFrontendInterface(config));
@@ -957,7 +1181,10 @@ export async function gen(
       if (existsSync(barrelPath)) {
         const content = await readFile(barrelPath, "utf-8");
         if (!content.includes(exportLine)) {
-          await writeFile(barrelPath, content.trimEnd() + "\n" + exportLine + "\n");
+          await writeFile(
+            barrelPath,
+            content.trimEnd() + "\n" + exportLine + "\n",
+          );
         }
       } else {
         await writeFile(barrelPath, exportLine + "\n");
@@ -972,7 +1199,9 @@ export async function gen(
     const modelPath = join(entityDir, "model.dart");
 
     if (existsSync(modelPath)) {
-      p.log.warn(`${dir}/lib/entities/${toSnake(config.name)}/model.dart already exists. Skipping mobile model.`);
+      p.log.warn(
+        `${dir}/lib/entities/${toSnake(config.name)}/model.dart already exists. Skipping mobile model.`,
+      );
     } else {
       await mkdir(entityDir, { recursive: true });
       await writeFile(modelPath, generateDartModel(config));
@@ -996,21 +1225,29 @@ export async function gen(
   if (genFastapi) {
     p.log.info("");
     p.log.info("FastAPI next steps:");
-    p.log.info(`  alembic revision --autogenerate -m "add ${config.tableName}"`);
+    p.log.info(
+      `  alembic revision --autogenerate -m "add ${config.tableName}"`,
+    );
     p.log.info("  alembic upgrade head");
   }
 
   if (genFastify) {
     p.log.info("");
     p.log.info("Fastify next steps:");
-    p.log.info(`  ${pm.prismaExec} migrate dev --name add_${toSnake(config.name)}`);
+    p.log.info(
+      `  ${pm.prismaExec} migrate dev --name add_${toSnake(config.name)}`,
+    );
   }
 
   if (hasFrontend) {
     p.log.info("");
     p.log.info("Frontend usage:");
-    p.log.info(`  import type { ${className} } from '../types/${toKebab(config.name)}';`);
-    p.log.info(`  const { data } = await api.list<${className}>('${config.apiPrefix}');`);
+    p.log.info(
+      `  import type { ${className} } from '../types/${toKebab(config.name)}';`,
+    );
+    p.log.info(
+      `  const { data } = await api.list<${className}>('${config.apiPrefix}');`,
+    );
   }
 
   if (hasMobile) {

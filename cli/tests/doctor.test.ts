@@ -30,7 +30,12 @@ describe("doctor", () => {
   it("passes with multiple components", async () => {
     dest = join(tmpdir(), `projx-doc-multi-${Date.now()}`);
     await scaffold(
-      { name: "doc-app", components: ["fastify", "e2e"], git: true, install: false },
+      {
+        name: "doc-app",
+        components: ["fastify", "e2e"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -48,8 +53,13 @@ describe("doctor", () => {
 
     // Delete baseline ref
     try {
-      execSync("git update-ref -d refs/projx/baseline", { cwd: dest, stdio: "pipe" });
-    } catch { /* */ }
+      execSync("git update-ref -d refs/projx/baseline", {
+        cwd: dest,
+        stdio: "pipe",
+      });
+    } catch {
+      /* */
+    }
 
     // Should not throw (warn only)
     await doctor(dest);
@@ -64,14 +74,23 @@ describe("doctor", () => {
     );
 
     try {
-      execSync("git update-ref -d refs/projx/baseline", { cwd: dest, stdio: "pipe" });
-    } catch { /* */ }
+      execSync("git update-ref -d refs/projx/baseline", {
+        cwd: dest,
+        stdio: "pipe",
+      });
+    } catch {
+      /* */
+    }
 
     await doctor(dest, true);
 
     // Baseline ref should now exist
-    const ref = execSync("git rev-parse --verify refs/projx/baseline", { cwd: dest, stdio: "pipe" })
-      .toString().trim();
+    const ref = execSync("git rev-parse --verify refs/projx/baseline", {
+      cwd: dest,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
     expect(ref).toBeTruthy();
   });
 

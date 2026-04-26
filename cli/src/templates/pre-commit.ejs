@@ -27,95 +27,95 @@ if [ -n "$STAGED_ENV_FILES" ]; then
 fi
 
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
-<% if (components.includes('fastapi')) { %>
+<% for (const inst of fastapiInstances) { %>
 
-<%= pathsUpper.fastapi %>_PY=$(echo "$STAGED_FILES" | grep '^<%= paths.fastapi %>/.*\.py$' || true)
-if [ -n "$<%= pathsUpper.fastapi %>_PY" ]; then
-  echo "Running quality gates for <%= paths.fastapi %>..."
-  cd <%= paths.fastapi %>
-  echo "$<%= pathsUpper.fastapi %>_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff format
-  echo "$<%= pathsUpper.fastapi %>_PY" | sed 's|^<%= paths.fastapi %>/||' | xargs uv run ruff check --fix
+<%= inst.upper %>_PY=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.py$' || true)
+if [ -n "$<%= inst.upper %>_PY" ]; then
+  echo "Running quality gates for <%= inst.path %>..."
+  cd <%= inst.path %>
+  echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff format
+  echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff check --fix
   uv run mypy
   cd ..
-  echo "$<%= pathsUpper.fastapi %>_PY" | xargs git add
+  echo "$<%= inst.upper %>_PY" | xargs git add
 fi
 <% } %>
-<% if (components.includes('fastify')) { %>
+<% for (const inst of fastifyInstances) { %>
 
-<%= pathsUpper.fastify %>_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.fastify %>/.*\.ts$' || true)
-<%= pathsUpper.fastify %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.fastify %>/' || true)
-if [ -n "$<%= pathsUpper.fastify %>_ALL" ]; then
-  echo "Formatting <%= paths.fastify %>..."
-  cd <%= paths.fastify %>
-  echo "$<%= pathsUpper.fastify %>_ALL" | sed 's|^<%= paths.fastify %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= pathsUpper.fastify %>_TS" ]; then
-    echo "$<%= pathsUpper.fastify %>_TS" | sed 's|^<%= paths.fastify %>/||' | xargs <%= pm.exec %> eslint --fix
+<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
+<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
+if [ -n "$<%= inst.upper %>_ALL" ]; then
+  echo "Formatting <%= inst.path %>..."
+  cd <%= inst.path %>
+  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
+  if [ -n "$<%= inst.upper %>_TS" ]; then
+    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
     <%= pm.exec %> tsc --noEmit
   fi
   cd ..
-  echo "$<%= pathsUpper.fastify %>_ALL" | xargs git add
+  echo "$<%= inst.upper %>_ALL" | xargs git add
 fi
 <% } %>
-<% if (components.includes('frontend')) { %>
+<% for (const inst of frontendInstances) { %>
 
-<%= pathsUpper.frontend %>_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.frontend %>/.*\.tsx\?$' || true)
-<%= pathsUpper.frontend %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.frontend %>/' || true)
-if [ -n "$<%= pathsUpper.frontend %>_ALL" ]; then
-  echo "Formatting <%= paths.frontend %>..."
-  cd <%= paths.frontend %>
-  echo "$<%= pathsUpper.frontend %>_ALL" | sed 's|^<%= paths.frontend %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= pathsUpper.frontend %>_TS" ]; then
-    echo "$<%= pathsUpper.frontend %>_TS" | sed 's|^<%= paths.frontend %>/||' | xargs <%= pm.exec %> eslint --fix
+<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tsx\?$' || true)
+<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
+if [ -n "$<%= inst.upper %>_ALL" ]; then
+  echo "Formatting <%= inst.path %>..."
+  cd <%= inst.path %>
+  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
+  if [ -n "$<%= inst.upper %>_TS" ]; then
+    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
     <%= pm.exec %> tsc --noEmit
   fi
   cd ..
-  echo "$<%= pathsUpper.frontend %>_ALL" | xargs git add
+  echo "$<%= inst.upper %>_ALL" | xargs git add
 fi
 <% } %>
-<% if (components.includes('e2e')) { %>
+<% for (const inst of e2eInstances) { %>
 
-<%= pathsUpper.e2e %>_TS=$(echo "$STAGED_FILES" | grep '^<%= paths.e2e %>/.*\.ts$' || true)
-<%= pathsUpper.e2e %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= paths.e2e %>/' || true)
-if [ -n "$<%= pathsUpper.e2e %>_ALL" ]; then
-  echo "Formatting <%= paths.e2e %>..."
-  cd <%= paths.e2e %>
-  echo "$<%= pathsUpper.e2e %>_ALL" | sed 's|^<%= paths.e2e %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= pathsUpper.e2e %>_TS" ]; then
-    echo "$<%= pathsUpper.e2e %>_TS" | sed 's|^<%= paths.e2e %>/||' | xargs <%= pm.exec %> eslint --fix
+<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
+<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
+if [ -n "$<%= inst.upper %>_ALL" ]; then
+  echo "Formatting <%= inst.path %>..."
+  cd <%= inst.path %>
+  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
+  if [ -n "$<%= inst.upper %>_TS" ]; then
+    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
     <%= pm.exec %> tsc --noEmit
   fi
   cd ..
-  echo "$<%= pathsUpper.e2e %>_ALL" | xargs git add
+  echo "$<%= inst.upper %>_ALL" | xargs git add
 fi
 <% } %>
-<% if (components.includes('mobile')) { %>
+<% for (const inst of mobileInstances) { %>
 
-<%= pathsUpper.mobile %>_DART=$(echo "$STAGED_FILES" | grep '^<%= paths.mobile %>/.*\.dart$' || true)
-if [ -n "$<%= pathsUpper.mobile %>_DART" ]; then
+<%= inst.upper %>_DART=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.dart$' || true)
+if [ -n "$<%= inst.upper %>_DART" ]; then
   if command -v dart &> /dev/null; then
-    echo "Formatting <%= paths.mobile %>..."
-    cd <%= paths.mobile %>
-    echo "$<%= pathsUpper.mobile %>_DART" | sed 's|^<%= paths.mobile %>/||' | xargs dart format
+    echo "Formatting <%= inst.path %>..."
+    cd <%= inst.path %>
+    echo "$<%= inst.upper %>_DART" | sed 's|^<%= inst.path %>/||' | xargs dart format
     if command -v flutter &> /dev/null; then
       dart analyze --fatal-infos
     fi
     cd ..
-    echo "$<%= pathsUpper.mobile %>_DART" | xargs git add
+    echo "$<%= inst.upper %>_DART" | xargs git add
   else
     echo "Skipping mobile lint (dart not installed)"
   fi
 fi
 <% } %>
-<% if (components.includes('infra')) { %>
+<% for (const inst of infraInstances) { %>
 
-<%= pathsUpper.infra %>_TF=$(echo "$STAGED_FILES" | grep '^<%= paths.infra %>/.*\.tf$' || true)
-if [ -n "$<%= pathsUpper.infra %>_TF" ]; then
+<%= inst.upper %>_TF=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tf$' || true)
+if [ -n "$<%= inst.upper %>_TF" ]; then
   if command -v terraform &> /dev/null; then
-    echo "Formatting <%= paths.infra %>..."
-    cd <%= paths.infra %>/stack
-    echo "$<%= pathsUpper.infra %>_TF" | sed 's|^<%= paths.infra %>/stack/||' | xargs terraform fmt
+    echo "Formatting <%= inst.path %>..."
+    cd <%= inst.path %>/stack
+    echo "$<%= inst.upper %>_TF" | sed 's|^<%= inst.path %>/stack/||' | xargs terraform fmt
     cd ../..
-    echo "$<%= pathsUpper.infra %>_TF" | xargs git add
+    echo "$<%= inst.upper %>_TF" | xargs git add
   else
     echo "Skipping infra lint (terraform not installed)"
   fi

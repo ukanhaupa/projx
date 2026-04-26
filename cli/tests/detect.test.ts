@@ -84,7 +84,10 @@ describe("detectComponents", () => {
 
   it("detects infra from .tf files", async () => {
     await mkdir(join(tmp, "terraform"));
-    await writeFile(join(tmp, "terraform/main.tf"), 'resource "aws_instance" {}');
+    await writeFile(
+      join(tmp, "terraform/main.tf"),
+      'resource "aws_instance" {}',
+    );
 
     const results = await detectComponents(tmp);
     expect(results).toHaveLength(1);

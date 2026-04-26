@@ -1,5 +1,11 @@
 import * as p from "@clack/prompts";
-import { COMPONENTS, type Component, type Options, type PackageManager, PACKAGE_MANAGERS } from "./utils.js";
+import {
+  COMPONENTS,
+  type Component,
+  type Options,
+  type PackageManager,
+  PACKAGE_MANAGERS,
+} from "./utils.js";
 
 export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: "FastAPI", hint: "Python — SQLAlchemy, Alembic, uvicorn" },
@@ -46,7 +52,9 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
     p.log.warn("No components selected. Creating an empty project.");
   }
 
-  const hasJs = components.some((c) => ["fastify", "frontend", "e2e"].includes(c));
+  const hasJs = components.some((c) =>
+    ["fastify", "frontend", "e2e"].includes(c),
+  );
   let packageManager: PackageManager = "npm";
 
   if (hasJs) {

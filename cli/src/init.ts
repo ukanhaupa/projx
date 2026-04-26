@@ -17,22 +17,27 @@ import {
 } from "./utils.js";
 import { LABELS } from "./prompts.js";
 import { detectComponents, type DetectedComponent } from "./detect.js";
-import { applyTemplate, saveBaselineRef, type GeneratorVars } from "./baseline.js";
+import {
+  applyTemplate,
+  saveBaselineRef,
+  type GeneratorVars,
+} from "./baseline.js";
 
-export async function init(
-  cwd: string,
-  localRepo?: string,
-): Promise<void> {
+export async function init(cwd: string, localRepo?: string): Promise<void> {
   p.intro("projx init");
   const isLocal = !!localRepo;
 
   if (existsSync(join(cwd, ".projx"))) {
-    p.log.error("This project is already initialized. Use 'npx create-projx update' or 'npx create-projx add' instead.");
+    p.log.error(
+      "This project is already initialized. Use 'npx create-projx update' or 'npx create-projx add' instead.",
+    );
     process.exit(1);
   }
 
   if (!isGitRepo(cwd)) {
-    p.log.error("projx init requires a git repo. Run 'git init && git add -A && git commit -m \"initial\"' first.");
+    p.log.error(
+      "projx init requires a git repo. Run 'git init && git add -A && git commit -m \"initial\"' first.",
+    );
     process.exit(1);
   }
 
@@ -68,7 +73,9 @@ export async function init(
     confirmed.map((c) => [c.component, c.directory]),
   ) as ComponentPaths;
 
-  const hasJs = components.some((c) => ["fastify", "frontend", "e2e"].includes(c));
+  const hasJs = components.some((c) =>
+    ["fastify", "frontend", "e2e"].includes(c),
+  );
   let pm: PackageManager = "npm";
 
   if (hasJs) {
@@ -88,10 +95,17 @@ export async function init(
   }
 
   const projectName = toKebab(cwd.split("/").pop()!);
-  const vars: GeneratorVars = { projectName, components, paths, pm: pmCommands(pm) };
+  const vars: GeneratorVars = {
+    projectName,
+    components,
+    paths,
+    pm: pmCommands(pm),
+  };
 
   const dlSpinner = p.spinner();
-  dlSpinner.start(isLocal ? "Using local templates" : "Downloading latest templates");
+  dlSpinner.start(
+    isLocal ? "Using local templates" : "Downloading latest templates",
+  );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
     dlSpinner.stop("Failed.");
     p.log.error(String(err));
@@ -100,12 +114,24 @@ export async function init(
   dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
 
   try {
-    const pkg = JSON.parse(await readFile(join(repoDir, "cli/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+    );
     const version = pkg.version;
 
     const applySpinner = p.spinner();
     applySpinner.start("Applying template");
-    const result = await applyTemplate(cwd, repoDir, components, paths, vars, version, undefined, undefined, true);
+    const result = await applyTemplate(
+      cwd,
+      repoDir,
+      components,
+      paths,
+      vars,
+      version,
+      undefined,
+      undefined,
+      true,
+    );
     applySpinner.stop("Template applied.");
 
     if (existsSync(join(cwd, ".githooks"))) {
@@ -121,19 +147,27 @@ export async function init(
     }
 
     if (result.status === "conflicts") {
-      p.log.warn("Some template files differ from your code. Changes written directly.");
+      p.log.warn(
+        "Some template files differ from your code. Changes written directly.",
+      );
       p.log.info("Review changes:");
       p.log.info("  git diff");
       p.log.info("");
       p.log.info("Keep a change:  git add <file>");
       p.log.info("Discard a change:  git checkout -- <file>");
-      p.log.info("Commit when ready:  git add . && git commit -m \"projx: init\"");
+      p.log.info(
+        'Commit when ready:  git add . && git commit -m "projx: init"',
+      );
       p.log.info("");
       p.log.info("To skip files on future updates, add to .projx-component:");
       p.log.info('  { "skip": ["src/**", "tests/**"] }');
-      p.outro("Template applied. Review with git diff.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx");
+      p.outro(
+        "Template applied. Review with git diff.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx",
+      );
     } else {
-      p.outro("Project initialized.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx");
+      p.outro(
+        "Project initialized.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx",
+      );
     }
   } finally {
     await cleanupRepo(repoDir, isLocal);
@@ -208,7 +242,9 @@ function isGitRepo(cwd: string): boolean {
 
 function hasUncommittedChanges(cwd: string): boolean {
   try {
-    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" }).toString().trim();
+    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+      .toString()
+      .trim();
     return status.length > 0;
   } catch {
     return false;

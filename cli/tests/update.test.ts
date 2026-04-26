@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { scaffold } from "../src/scaffold.js";
+import { add } from "../src/add.js";
 import { update, learnSkips } from "../src/update.js";
 import type { ComponentPaths } from "../src/utils.js";
+import { existsSync } from "node:fs";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
 
@@ -24,12 +26,21 @@ describe("update", () => {
       REPO_DIR,
     );
 
-    await writeFile(join(dest, "fastify/src/custom-controller.ts"), "// my controller\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, "fastify/src/custom-controller.ts"),
+      "// my controller\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'add custom'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
-    const content = await readFile(join(dest, "fastify/src/custom-controller.ts"), "utf-8");
+    const content = await readFile(
+      join(dest, "fastify/src/custom-controller.ts"),
+      "utf-8",
+    );
     expect(content).toContain("my controller");
   });
 
@@ -42,16 +53,24 @@ describe("update", () => {
     );
 
     const commitsBefore = parseInt(
-      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim()
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
     );
 
     await update(dest, REPO_DIR);
 
     const commitsAfter = parseInt(
-      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim()
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
     );
     expect(commitsAfter).toBe(commitsBefore);
-    expect(execSync("git status --porcelain", { cwd: dest, stdio: "pipe" }).toString().trim()).toBe("");
+    expect(
+      execSync("git status --porcelain", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
+    ).toBe("");
   });
 
   it("produces single merge commit", async () => {
@@ -63,13 +82,17 @@ describe("update", () => {
     );
 
     const commitsBefore = parseInt(
-      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim()
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
     );
 
     await update(dest, REPO_DIR);
 
     const commitsAfter = parseInt(
-      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" }).toString().trim()
+      execSync("git rev-list --count HEAD", { cwd: dest, stdio: "pipe" })
+        .toString()
+        .trim(),
     );
 
     expect(commitsAfter - commitsBefore).toBeLessThanOrEqual(2);
@@ -78,7 +101,12 @@ describe("update", () => {
   it("learnSkips adds component files to component marker skip list", async () => {
     dest = join(tmpdir(), `projx-learn-${Date.now()}`);
     await scaffold(
-      { name: "my-app", components: ["fastify", "frontend"], git: true, install: false },
+      {
+        name: "my-app",
+        components: ["fastify", "frontend"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -94,7 +122,11 @@ describe("update", () => {
 
     await learnSkips(
       dest,
-      ["fastify/src/server.ts", "fastify/src/plugins/auth.ts", "frontend/src/App.tsx"],
+      [
+        "fastify/src/server.ts",
+        "fastify/src/plugins/auth.ts",
+        "frontend/src/App.tsx",
+      ],
       paths,
     );
 
@@ -162,6 +194,31 @@ describe("update", () => {
     expect(updated.skip).toContain("src/existing.ts");
     expect(updated.skip).toContain("src/new-file.ts");
   });
+
+  it("preserves secondary instances of the same component type through update", async () => {
+    dest = join(tmpdir(), `projx-update-multi-${Date.now()}`);
+    await scaffold(
+      { name: "my-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await add(dest, ["fastify"], REPO_DIR, true, "email-ingestor");
+
+    await update(dest, REPO_DIR);
+
+    expect(existsSync(join(dest, "fastify/.projx-component"))).toBe(true);
+    expect(existsSync(join(dest, "email-ingestor/.projx-component"))).toBe(
+      true,
+    );
+    expect(existsSync(join(dest, "email-ingestor/package.json"))).toBe(true);
+    expect(existsSync(join(dest, "fastify/package.json"))).toBe(true);
+
+    const marker = JSON.parse(
+      await readFile(join(dest, "email-ingestor/.projx-component"), "utf-8"),
+    );
+    expect(marker.component).toBe("fastify");
+  });
 });
 
 describe("update — schema migration on legacy projects", () => {
@@ -174,18 +231,33 @@ describe("update — schema migration on legacy projects", () => {
   it("migrates .projx with legacy components array", async () => {
     dest = join(tmpdir(), `projx-mig-projx-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    await writeFile(join(dest, ".projx"), JSON.stringify({
-      version: "1.4.0",
-      components: ["fastify"],
-      createdAt: "2026-01-01",
-      packageManager: "npm",
-    }, null, 2) + "\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy projx'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, ".projx"),
+      JSON.stringify(
+        {
+          version: "1.4.0",
+          components: ["fastify"],
+          createdAt: "2026-01-01",
+          packageManager: "npm",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy projx'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -202,21 +274,38 @@ describe("update — schema migration on legacy projects", () => {
   it("migrates .projx-component with legacy plural and origin", async () => {
     dest = join(tmpdir(), `projx-mig-marker-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    await writeFile(join(dest, "fastify/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-      origin: "scaffold",
-      skip: ["src/custom.ts"],
-    }, null, 2) + "\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy marker'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, "fastify/.projx-component"),
+      JSON.stringify(
+        {
+          components: ["fastify"],
+          origin: "scaffold",
+          skip: ["src/custom.ts"],
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'legacy marker'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
-    const marker = JSON.parse(await readFile(join(dest, "fastify/.projx-component"), "utf-8"));
+    const marker = JSON.parse(
+      await readFile(join(dest, "fastify/.projx-component"), "utf-8"),
+    );
     expect(marker.component).toBe("fastify");
     expect(marker.skip).toEqual(["src/custom.ts"]);
     expect(marker.components).toBeUndefined();
@@ -226,33 +315,59 @@ describe("update — schema migration on legacy projects", () => {
   it("update with renamed component dir + legacy schema", async () => {
     dest = join(tmpdir(), `projx-rename-legacy-${Date.now()}`);
     await scaffold(
-      { name: "legacy-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "legacy-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
 
-    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
-    await writeFile(join(dest, "backend/.projx-component"), JSON.stringify({
-      components: ["fastify"],
-      origin: "scaffold",
-    }, null, 2));
-    await writeFile(join(dest, ".projx"), JSON.stringify({
-      version: "1.4.0",
-      components: ["fastify"],
-      createdAt: "2026-01-01",
-    }, null, 2) + "\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename + legacy'", { cwd: dest, stdio: "pipe" });
+    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, {
+      stdio: "pipe",
+    });
+    await writeFile(
+      join(dest, "backend/.projx-component"),
+      JSON.stringify(
+        {
+          components: ["fastify"],
+          origin: "scaffold",
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(
+      join(dest, ".projx"),
+      JSON.stringify(
+        {
+          version: "1.4.0",
+          components: ["fastify"],
+          createdAt: "2026-01-01",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'rename + legacy'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
-    const marker = JSON.parse(await readFile(join(dest, "backend/.projx-component"), "utf-8"));
+    const marker = JSON.parse(
+      await readFile(join(dest, "backend/.projx-component"), "utf-8"),
+    );
     expect(marker.component).toBe("fastify");
     const config = JSON.parse(await readFile(join(dest, ".projx"), "utf-8"));
     expect(config.components).toBeUndefined();
   });
 });
 
-describe("update — pre-commit pathsUpper rendering", () => {
+describe("update — pre-commit / ci.yml rename rendering", () => {
   let dest: string;
 
   afterEach(async () => {
@@ -262,7 +377,12 @@ describe("update — pre-commit pathsUpper rendering", () => {
   it("generates AI_PY/BACKEND_TS bash vars when dirs are renamed (after unpinning pre-commit)", async () => {
     dest = join(tmpdir(), `projx-pathsupper-${Date.now()}`);
     await scaffold(
-      { name: "rename-app", components: ["fastapi", "fastify"], git: true, install: false },
+      {
+        name: "rename-app",
+        components: ["fastapi", "fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -270,13 +390,23 @@ describe("update — pre-commit pathsUpper rendering", () => {
     const { unpin } = await import("../src/pin.js");
     await unpin(dest, [".githooks/pre-commit"]);
 
-    execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, { stdio: "pipe" });
-    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename'", { cwd: dest, stdio: "pipe" });
+    execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, {
+      stdio: "pipe",
+    });
+    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, {
+      stdio: "pipe",
+    });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'rename'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
-    const preCommit = await readFile(join(dest, ".githooks/pre-commit"), "utf-8");
+    const preCommit = await readFile(
+      join(dest, ".githooks/pre-commit"),
+      "utf-8",
+    );
     expect(preCommit).toContain("AI_PY=");
     expect(preCommit).toContain("BACKEND_TS=");
     expect(preCommit).toContain("BACKEND_ALL=");
@@ -287,7 +417,12 @@ describe("update — pre-commit pathsUpper rendering", () => {
   it("ci.yml uses path-derived job keys when renamed (after unpinning ci.yml)", async () => {
     dest = join(tmpdir(), `projx-ci-rename-${Date.now()}`);
     await scaffold(
-      { name: "rename-app", components: ["fastapi", "fastify"], git: true, install: false },
+      {
+        name: "rename-app",
+        components: ["fastapi", "fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );
@@ -295,9 +430,16 @@ describe("update — pre-commit pathsUpper rendering", () => {
     const { unpin } = await import("../src/pin.js");
     await unpin(dest, [".github/workflows/ci.yml"]);
 
-    execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, { stdio: "pipe" });
-    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, { stdio: "pipe" });
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'rename'", { cwd: dest, stdio: "pipe" });
+    execSync(`mv "${join(dest, "fastapi")}" "${join(dest, "ai")}"`, {
+      stdio: "pipe",
+    });
+    execSync(`mv "${join(dest, "fastify")}" "${join(dest, "backend")}"`, {
+      stdio: "pipe",
+    });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'rename'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
@@ -320,11 +462,20 @@ describe("findFilesWithConflictMarkers", () => {
     dest = join(tmpdir(), `projx-conflicts-${Date.now()}`);
     await mkdir(dest, { recursive: true });
     execSync("git init -q", { cwd: dest, stdio: "pipe" });
-    execSync("git config user.email test@test.com", { cwd: dest, stdio: "pipe" });
+    execSync("git config user.email test@test.com", {
+      cwd: dest,
+      stdio: "pipe",
+    });
     execSync("git config user.name Test", { cwd: dest, stdio: "pipe" });
     await writeFile(join(dest, "clean.txt"), "ok\n");
-    await writeFile(join(dest, "conflicted.txt"), "<<<<<<< your changes\nfoo\n=======\nbar\n>>>>>>> new projx template\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -qm 'init'", { cwd: dest, stdio: "pipe" });
+    await writeFile(
+      join(dest, "conflicted.txt"),
+      "<<<<<<< your changes\nfoo\n=======\nbar\n>>>>>>> new projx template\n",
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -qm 'init'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     const { findFilesWithConflictMarkers } = await import("../src/update.js");
     const found = findFilesWithConflictMarkers(dest);
@@ -336,10 +487,16 @@ describe("findFilesWithConflictMarkers", () => {
     dest = join(tmpdir(), `projx-no-conflicts-${Date.now()}`);
     await mkdir(dest, { recursive: true });
     execSync("git init -q", { cwd: dest, stdio: "pipe" });
-    execSync("git config user.email test@test.com", { cwd: dest, stdio: "pipe" });
+    execSync("git config user.email test@test.com", {
+      cwd: dest,
+      stdio: "pipe",
+    });
     execSync("git config user.name Test", { cwd: dest, stdio: "pipe" });
     await writeFile(join(dest, "clean.txt"), "ok\n");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -qm 'init'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -qm 'init'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     const { findFilesWithConflictMarkers } = await import("../src/update.js");
     const found = findFilesWithConflictMarkers(dest);
@@ -349,7 +506,10 @@ describe("findFilesWithConflictMarkers", () => {
   it("returns empty array in non-git directory", async () => {
     dest = join(tmpdir(), `projx-non-git-${Date.now()}`);
     await mkdir(dest, { recursive: true });
-    await writeFile(join(dest, "conflicted.txt"), "<<<<<<< your changes\nfoo\n=======\nbar\n>>>>>>> new projx template\n");
+    await writeFile(
+      join(dest, "conflicted.txt"),
+      "<<<<<<< your changes\nfoo\n=======\nbar\n>>>>>>> new projx template\n",
+    );
 
     const { findFilesWithConflictMarkers } = await import("../src/update.js");
     const found = findFilesWithConflictMarkers(dest);
@@ -367,14 +527,23 @@ describe("update — packageManager auto-sync", () => {
   it("syncs .projx.packageManager from lockfile when mismatched", async () => {
     dest = join(tmpdir(), `projx-pm-sync-${Date.now()}`);
     await scaffold(
-      { name: "pm-app", components: ["fastify"], git: true, install: false, packageManager: "npm" },
+      {
+        name: "pm-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+        packageManager: "npm",
+      },
       dest,
       REPO_DIR,
     );
 
     await rm(join(dest, "fastify/package-lock.json"), { force: true });
     await writeFile(join(dest, "fastify/pnpm-lock.yaml"), "");
-    execSync("git add -A && git -c core.hooksPath=/dev/null commit -m 'switch to pnpm'", { cwd: dest, stdio: "pipe" });
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'switch to pnpm'",
+      { cwd: dest, stdio: "pipe" },
+    );
 
     await update(dest, REPO_DIR);
 
