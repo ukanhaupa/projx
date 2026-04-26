@@ -39,7 +39,7 @@ Ask an LLM to "scaffold a full-stack app" and you get 50 files of plausible-look
 ```bash
 npx create-projx my-app       # interactive — pick exactly what you need
 cd my-app
-./setup.sh                    # installs everything you picked
+./scripts/setup.sh            # installs everything you picked
 ```
 
 Pick any combination of components — they're all optional:
@@ -116,7 +116,7 @@ npx create-projx my-app -y
 
 ## Package Manager Support
 
-Projx supports **npm**, **pnpm**, **yarn**, and **bun**. During `create`, you're prompted to pick one. The choice is stored in `.projx` and used everywhere — setup.sh, Docker, CI, pre-commit hooks, and README.
+Projx supports **npm**, **pnpm**, **yarn**, and **bun**. During `create`, you're prompted to pick one. The choice is stored in `.projx` and used everywhere — `scripts/setup.sh`, Docker, CI, pre-commit hooks, and README.
 
 ```json
 { "packageManager": "pnpm" }
@@ -166,7 +166,7 @@ Need a second backend service alongside an existing one (e.g. an SMTP listener n
 npx create-projx add fastify --name email-ingestor
 ```
 
-Creates `email-ingestor/` with the fastify scaffold and a `.projx-component` marker. Each instance gets its own job in `.github/workflows/ci.yml`, its own section in `.githooks/pre-commit`, and its own install step in `setup.sh`. `update` keeps every instance refreshed on every run.
+Creates `email-ingestor/` with the fastify scaffold and a `.projx-component` marker. Each instance gets its own job in `.github/workflows/ci.yml`, its own section in `.githooks/pre-commit`, and its own install step in `scripts/setup.sh`. `update` keeps every instance refreshed on every run.
 
 ### Update Scaffolding
 
@@ -191,7 +191,7 @@ Common user-owned files are **default-skipped** automatically — template updat
 
 | Scope | Default skips |
 |-------|---------------|
-| Root (`.projx`) | `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `setup.sh` |
+| Root (`.projx`) | `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `scripts/setup.sh`, `scripts/setup-docker.sh`, `scripts/setup-ssl.sh` |
 | fastapi | `pyproject.toml` |
 | fastify / frontend / e2e | `package.json` |
 | mobile | `pubspec.yaml` |
@@ -336,7 +336,7 @@ backend/.projx-component  →  { "components": ["fastapi"] }
 web/.projx-component      →  { "components": ["frontend"] }
 ```
 
-CI, setup.sh, pre-commit hooks, and docker-compose are all regenerated with your custom directory names.
+CI, `scripts/setup.sh`, pre-commit hooks, and docker-compose are all regenerated with your custom directory names.
 
 ## What a Scaffolded Project Looks Like
 
@@ -353,7 +353,7 @@ my-app/
 ├── .github/workflows/      # CI per component (runs only on changes)
 ├── .githooks/pre-commit    # Format + lint on commit
 ├── .vscode/                # Editor settings + recommended extensions
-├── setup.sh                # Install all deps
+├── scripts/                # setup.sh, setup-docker.sh, setup-ssl.sh
 └── .projx                  # Components list + version
 ```
 
@@ -378,7 +378,7 @@ Contributing to Projx itself:
 ```bash
 git clone https://github.com/ukanhaupa/projx.git
 cd projx
-./setup.sh
+./scripts/setup.sh
 ```
 
 The CLI lives in `cli/`. Templates are the root-level component directories (`fastapi/`, `frontend/`, etc.).

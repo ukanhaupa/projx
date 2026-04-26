@@ -98,7 +98,10 @@ describe("add", () => {
 
       await add(dest, ["fastify"], REPO_DIR, true, "email-ingestor");
 
-      const ci = await readFile(join(dest, ".github/workflows/ci.yml"), "utf-8");
+      const ci = await readFile(
+        join(dest, ".github/workflows/ci.yml"),
+        "utf-8",
+      );
       expect(ci).toContain("fastify:");
       expect(ci).toContain("email-ingestor:");
       expect(ci).toContain("'fastify/**'");
@@ -108,9 +111,22 @@ describe("add", () => {
       expect(hook).toContain("Formatting fastify");
       expect(hook).toContain("Formatting email-ingestor");
 
-      const setup = await readFile(join(dest, "setup.sh"), "utf-8");
+      const setup = await readFile(join(dest, "scripts/setup.sh"), "utf-8");
       expect(setup).toContain("cd fastify &&");
       expect(setup).toContain("cd email-ingestor &&");
+
+      const compose = await readFile(join(dest, "docker-compose.yml"), "utf-8");
+      expect(compose).toContain("fastify:");
+      expect(compose).toContain("fastify-migrate:");
+      expect(compose).toContain("email-ingestor:");
+      expect(compose).toContain("email-ingestor-migrate:");
+
+      const composeDev = await readFile(
+        join(dest, "docker-compose.dev.yml"),
+        "utf-8",
+      );
+      expect(composeDev).toContain("fastify:");
+      expect(composeDev).toContain("email-ingestor:");
     });
 
     it("does not modify existing component dirs (preserves user customizations)", async () => {

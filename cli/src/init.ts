@@ -4,16 +4,17 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import {
-  COMPONENTS,
   type Component,
   type ComponentPaths,
   type PackageManager,
+  DEFAULT_ROOT_SKIP_PATTERNS,
   PACKAGE_MANAGERS,
   cleanupRepo,
   detectPackageManager,
   downloadRepo,
   pmCommands,
   toKebab,
+  writeProjxConfig,
 } from "./utils.js";
 import { LABELS } from "./prompts.js";
 import { detectComponents, type DetectedComponent } from "./detect.js";
@@ -55,13 +56,15 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
       : "No components detected.",
   );
 
-  let confirmed: { component: Component; directory: string }[];
-
-  if (detected.length > 0) {
-    confirmed = await confirmDetections(detected);
-  } else {
-    confirmed = await manualSelect(cwd);
+  if (detected.length === 0) {
+    await writeBareProjx(cwd, localRepo, isLocal, detectPackageManager(cwd));
+    p.outro(
+      "Initialized empty .projx. Add components with 'npx create-projx add <component>'.",
+    );
+    return;
   }
+
+  const confirmed = await confirmDetections(detected);
 
   if (confirmed.length === 0) {
     p.log.warn("No components selected. Nothing to do.");
@@ -174,6 +177,43 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   }
 }
 
+async function writeBareProjx(
+  cwd: string,
+  localRepo: string | undefined,
+  isLocal: boolean,
+  pm: PackageManager | null,
+): Promise<void> {
+  const dlSpinner = p.spinner();
+  dlSpinner.start(
+    isLocal ? "Using local templates" : "Downloading latest templates",
+  );
+  const repoDir = await downloadRepo(localRepo).catch((err) => {
+    dlSpinner.stop("Failed.");
+    p.log.error(String(err));
+    process.exit(1);
+  });
+  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+
+  try {
+    const pkg = JSON.parse(
+      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+    );
+    const today = new Date().toISOString().split("T")[0];
+    const config: Record<string, unknown> = {
+      version: pkg.version,
+      createdAt: today,
+      updatedAt: today,
+      skip: [...DEFAULT_ROOT_SKIP_PATTERNS],
+      defaultsApplied: true,
+    };
+    if (pm) config.packageManager = pm;
+    await writeProjxConfig(cwd, config);
+    saveBaselineRef(cwd);
+  } finally {
+    await cleanupRepo(repoDir, isLocal);
+  }
+}
+
 async function confirmDetections(
   detected: DetectedComponent[],
 ): Promise<{ component: Component; directory: string }[]> {
@@ -192,43 +232,6 @@ async function confirmDetections(
   }
 
   return confirmed;
-}
-
-async function manualSelect(
-  cwd: string,
-): Promise<{ component: Component; directory: string }[]> {
-  const selected = (await p.multiselect({
-    message: "No components detected. Select manually:",
-    options: COMPONENTS.map((c) => ({
-      value: c,
-      label: LABELS[c].label,
-      hint: LABELS[c].hint,
-    })),
-    required: false,
-  })) as Component[];
-
-  if (p.isCancel(selected)) process.exit(0);
-
-  const result: { component: Component; directory: string }[] = [];
-
-  for (const component of selected) {
-    const dir = (await p.text({
-      message: `Directory for ${LABELS[component].label}?`,
-      placeholder: component,
-      defaultValue: component,
-    })) as string;
-
-    if (p.isCancel(dir)) process.exit(0);
-
-    if (!existsSync(join(cwd, dir))) {
-      p.log.warn(`${dir}/ does not exist — skipping.`);
-      continue;
-    }
-
-    result.push({ component, directory: dir });
-  }
-
-  return result;
 }
 
 function isGitRepo(cwd: string): boolean {

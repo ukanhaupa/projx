@@ -45,7 +45,9 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     expect(config.skip).toContain("README.md");
     expect(config.skip).toContain(".githooks/pre-commit");
     expect(config.skip).toContain(".github/workflows/ci.yml");
-    expect(config.skip).toContain("setup.sh");
+    expect(config.skip).toContain("scripts/setup.sh");
+    expect(config.skip).toContain("scripts/setup-docker.sh");
+    expect(config.skip).toContain("scripts/setup-ssl.sh");
 
     const fastapiMarker = await readComponentMarker(join(dest, "fastapi"));
     expect(fastapiMarker?.skip).toContain("pyproject.toml");
@@ -114,7 +116,7 @@ describe("default-skip — scenario A: fresh scaffold", () => {
       REPO_DIR,
     );
 
-    const setupPath = join(dest, "setup.sh");
+    const setupPath = join(dest, "scripts/setup.sh");
     let setup = await readFile(setupPath, "utf-8");
     setup = setup.replace(
       "Fastify dependencies installed.",
