@@ -1,6 +1,14 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -274,10 +282,19 @@ export async function copyStaticFiles(
     manifest.push(".vscode/extensions.json");
   }
 
-  const scripts = join(tpl, "scripts");
-  if (existsSync(scripts)) {
-    await cp(scripts, join(dest, "scripts"), { recursive: true });
-    manifest.push("scripts/setup-ssl.sh");
+  const staticScripts = ["setup-docker.sh", "setup-ssl.sh"];
+  const scriptsSrc = join(tpl, "scripts");
+  if (existsSync(scriptsSrc)) {
+    await mkdir(join(dest, "scripts"), { recursive: true });
+    for (const file of staticScripts) {
+      const src = join(scriptsSrc, file);
+      const dst = join(dest, "scripts", file);
+      if (existsSync(src) && !existsSync(dst)) {
+        await cp(src, dst);
+        await chmod(dst, 0o755);
+        manifest.push(`scripts/${file}`);
+      }
+    }
   }
 
   return manifest;
@@ -440,7 +457,9 @@ export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   "README.md",
   ".githooks/pre-commit",
   ".github/workflows/ci.yml",
-  "setup.sh",
+  "scripts/setup.sh",
+  "scripts/setup-docker.sh",
+  "scripts/setup-ssl.sh",
 ];
 
 export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
@@ -540,10 +559,7 @@ function findBlockEnd(lines: string[], startIdx: number): number {
   throw new Error("Unmatched template block");
 }
 
-function renderLines(
-  lines: string[],
-  vars: Record<string, unknown>,
-): string {
+function renderLines(lines: string[], vars: Record<string, unknown>): string {
   const output: string[] = [];
   const stack: { active: boolean; matched: boolean }[] = [];
 
@@ -610,12 +626,17 @@ function renderLines(
 
     if (stack.length > 0 && stack.some((v) => !v.active)) continue;
 
-    const replaced = line.replace(/<%=\s*([\w.]+)\s*%>/g, (_, expr: string) => {
-      const parts = expr.split(".");
-      let val: unknown = vars;
-      for (const p of parts) {
-        val = (val as Record<string, unknown>)?.[p];
+    const replaced = line.replace(/<%=\s*(.+?)\s*%>/g, (_, expr: string) => {
+      const trimmed = expr.trim();
+      if (/^[\w.]+$/.test(trimmed)) {
+        const parts = trimmed.split(".");
+        let val: unknown = vars;
+        for (const p of parts) {
+          val = (val as Record<string, unknown>)?.[p];
+        }
+        return String(val ?? "");
       }
+      const val = evalExpr(trimmed, vars);
       return String(val ?? "");
     });
     output.push(replaced);

@@ -106,9 +106,7 @@ async function scanDirectory(
   return results;
 }
 
-async function readPkg(
-  dir: string,
-): Promise<{
+async function readPkg(dir: string): Promise<{
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 } | null> {

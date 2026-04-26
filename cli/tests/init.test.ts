@@ -1,10 +1,15 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { init } from "../src/init.js";
 import { detectComponents } from "../src/detect.js";
 import { discoverComponentPaths, upsertComponentMarker } from "../src/utils.js";
 import type { Component } from "../src/utils.js";
+
+const REPO_DIR = join(import.meta.dirname, "../..");
 
 describe("init workflow", () => {
   let tmp: string;
@@ -91,5 +96,27 @@ describe("init workflow", () => {
     const paths = await discoverComponentPaths(tmp, components);
     expect(paths.fastify).toBe("backend");
     expect(paths.frontend).toBe("frontend");
+  });
+
+  it("init in an empty git repo writes a bare .projx without prompting", async () => {
+    tmp = join(tmpdir(), `projx-init-bare-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+    execSync("git init --quiet", { cwd: tmp });
+    execSync(
+      "git -c user.email=a@a -c user.name=a commit --allow-empty -m init --quiet",
+      { cwd: tmp },
+    );
+
+    await init(tmp, REPO_DIR);
+
+    expect(existsSync(join(tmp, ".projx"))).toBe(true);
+    const cfg = JSON.parse(await readFile(join(tmp, ".projx"), "utf-8"));
+    expect(cfg.defaultsApplied).toBe(true);
+    expect(cfg.skip).toContain("scripts/setup.sh");
+    expect(cfg.version).toMatch(/^\d+\.\d+\.\d+/);
+
+    expect(existsSync(join(tmp, "docker-compose.yml"))).toBe(false);
+    expect(existsSync(join(tmp, "scripts/setup.sh"))).toBe(false);
+    expect(existsSync(join(tmp, "fastify"))).toBe(false);
   });
 });
