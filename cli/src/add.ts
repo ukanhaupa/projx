@@ -209,7 +209,9 @@ async function addInstance(
     const INSTANCE_AWARE_ROOT = new Set([
       ".github/workflows/ci.yml",
       ".githooks/pre-commit",
-      "setup.sh",
+      "scripts/setup.sh",
+      "docker-compose.yml",
+      "docker-compose.dev.yml",
     ]);
     const rawSkip: string[] = Array.isArray(config.skip)
       ? (config.skip as string[])

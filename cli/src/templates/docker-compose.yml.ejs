@@ -1,21 +1,21 @@
 services:
-<% if (components.includes('fastapi')) { %>
-  <%= paths.fastapi %>-migrate:
-    build: ./<%= paths.fastapi %>
+<% for (const inst of fastapiInstances) { %>
+  <%= inst.path %>-migrate:
+    build: ./<%= inst.path %>
     command: ["uv", "run", "migrate.py"]
     env_file:
-      - ./<%= paths.fastapi %>/.env
+      - ./<%= inst.path %>/.env
     networks:
       - app-network
-  <%= paths.fastapi %>:
-    build: ./<%= paths.fastapi %>
+  <%= inst.path %>:
+    build: ./<%= inst.path %>
     expose:
       - "7860"
     env_file:
-      - ./<%= paths.fastapi %>/.env
+      - ./<%= inst.path %>/.env
     restart: unless-stopped
     depends_on:
-      <%= paths.fastapi %>-migrate:
+      <%= inst.path %>-migrate:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -32,23 +32,23 @@ services:
     networks:
       - app-network
 <% } %>
-<% if (components.includes('fastify')) { %>
-  <%= paths.fastify %>-migrate:
-    build: ./<%= paths.fastify %>
+<% for (const inst of fastifyInstances) { %>
+  <%= inst.path %>-migrate:
+    build: ./<%= inst.path %>
     command: ["sh", "-c", "<%= pm.prismaExec %> migrate deploy"]
     env_file:
-      - ./<%= paths.fastify %>/.env
+      - ./<%= inst.path %>/.env
     networks:
       - app-network
-  <%= paths.fastify %>:
-    build: ./<%= paths.fastify %>
+  <%= inst.path %>:
+    build: ./<%= inst.path %>
     expose:
       - "3000"
     env_file:
-      - ./<%= paths.fastify %>/.env
+      - ./<%= inst.path %>/.env
     restart: unless-stopped
     depends_on:
-      <%= paths.fastify %>-migrate:
+      <%= inst.path %>-migrate:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
@@ -59,10 +59,10 @@ services:
     networks:
       - app-network
 <% } %>
-<% if (components.includes('frontend')) { %>
-  frontend:
+<% for (const inst of frontendInstances) { %>
+  <%= inst.path %>:
     build:
-      context: ./<%= paths.frontend %>
+      context: ./<%= inst.path %>
       args:
         VITE_API_URL: ""
     ports:
@@ -71,13 +71,13 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-<% if (components.includes('fastify')) { %>
+<% if (fastifyInstances.length > 0) { %>
     depends_on:
-      <%= paths.fastify %>:
+      <%= fastifyInstances[0].path %>:
         condition: service_healthy
-<% } else if (components.includes('fastapi')) { %>
+<% } else if (fastapiInstances.length > 0) { %>
     depends_on:
-      <%= paths.fastapi %>:
+      <%= fastapiInstances[0].path %>:
         condition: service_healthy
 <% } %>
     restart: unless-stopped
@@ -89,6 +89,8 @@ services:
       start_period: 10s
     networks:
       - app-network
+<% } %>
+<% if (frontendInstances.length > 0) { %>
   certbot:
     image: certbot/certbot:latest
     volumes:
@@ -97,14 +99,14 @@ services:
     entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"
     restart: unless-stopped
     depends_on:
-      frontend:
+      <%= frontendInstances[0].path %>:
         condition: service_healthy
     profiles:
       - ssl
     networks:
       - app-network
 <% } %>
-<% if (components.includes('frontend')) { %>
+<% if (frontendInstances.length > 0) { %>
 volumes:
   letsencrypt:
   certbot-www:
