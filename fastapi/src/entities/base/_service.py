@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 from typing import Any, TypeVar, cast
 
+from ._model import NotFoundError
 from ._repository import BaseRepository
 
 RepositoryT = TypeVar("RepositoryT", bound="BaseRepository")
@@ -55,7 +56,10 @@ class BaseService:
         )
 
     async def get(self, id: int):
-        return await self.repository.get(id=id)
+        result = await self.repository.get(id=id)
+        if result is None:
+            raise NotFoundError(self.repository.model.__name__, id)
+        return result
 
     async def get_by_ids(self, ids: builtins.list[int]) -> builtins.list[Any]:
         return await self.repository.get_by_ids(ids)

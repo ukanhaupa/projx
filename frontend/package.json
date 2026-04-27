@@ -9,7 +9,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:watch": "vitest",
     "format": "prettier --write 'src/**/*.{ts,tsx,css,json}'",
     "format:check": "prettier --check 'src/**/*.{ts,tsx,css,json}'",

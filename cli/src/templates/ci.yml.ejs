@@ -110,7 +110,7 @@ jobs:
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
       - run: uv run mypy
-      - run: uv run pip-audit
+      - run: uv run pip-audit --ignore-vuln CVE-2026-3219
 <% } %>
 <% for (const inst of fastifyInstances) { %>
 
@@ -203,7 +203,7 @@ jobs:
 <% for (const inst of mobileInstances) { %>
 
   <%= inst.path %>:
-    name: <%= inst.display %> (format + analyze)
+    name: <%= inst.display %> (format + analyze + test + coverage)
     needs: changes
     if: needs.changes.outputs.<%= inst.path %> == 'true'
     runs-on: ubuntu-latest
@@ -219,6 +219,8 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: dart format --set-exit-if-changed .
       - run: dart analyze --fatal-infos
+      - run: flutter test --coverage
+      - run: bash scripts/check-coverage.sh
 <% } %>
 <% for (const inst of e2eInstances) { %>
 

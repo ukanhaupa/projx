@@ -4,7 +4,7 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.utils._crypto import decrypt_config, encrypt_config
+from src.utils import decrypt_config, encrypt_config
 
 from ._model import ServiceConfig
 

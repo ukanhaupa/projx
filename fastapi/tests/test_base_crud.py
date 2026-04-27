@@ -385,9 +385,12 @@ class TestService:
 
     @pytest.mark.asyncio
     async def test_delete(self, test_db, widget_service):
+        from src.entities.base import NotFoundError
+
         created = await widget_service.create({"name": "Bye"})
         await widget_service.delete(created.id)
-        assert await widget_service.get(created.id) is None
+        with pytest.raises(NotFoundError):
+            await widget_service.get(created.id)
 
     @pytest.mark.asyncio
     async def test_count(self, test_db, widget_service):
@@ -407,6 +410,8 @@ class TestService:
 
     @pytest.mark.asyncio
     async def test_bulk_delete(self, test_db, widget_service):
+        from src.entities.base import NotFoundError
+
         results = await widget_service.bulk_create(
             [
                 {"name": "BD1"},
@@ -416,4 +421,5 @@ class TestService:
         ids = [r.id for r in results]
         await widget_service.bulk_delete(ids)
         for wid in ids:
-            assert await widget_service.get(wid) is None
+            with pytest.raises(NotFoundError):
+                await widget_service.get(wid)

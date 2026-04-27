@@ -141,5 +141,40 @@ void main() {
       );
       expect(ErrorHandler.fromDioException(error), isA<RateLimitException>());
     });
+
+    test('propagates request_id from response body to 4xx exceptions', () {
+      for (final entry in {
+        404: NotFoundException,
+        409: ConflictException,
+        422: ValidationException,
+        401: UnauthorizedException,
+      }.entries) {
+        final error = DioException(
+          requestOptions: RequestOptions(path: '/test'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/test'),
+            statusCode: entry.key,
+            data: {'detail': 'x', 'request_id': 'rid-${entry.key}'},
+          ),
+        );
+        final exception = ErrorHandler.fromDioException(error);
+        expect(exception.runtimeType, entry.value);
+        expect(exception.requestId, 'rid-${entry.key}');
+      }
+    });
+
+    test('falls back to x-request-id header when body lacks request_id', () {
+      final error = DioException(
+        requestOptions: RequestOptions(path: '/test'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/test'),
+          statusCode: 500,
+          headers: Headers.fromMap({
+            'x-request-id': ['header-rid'],
+          }),
+        ),
+      );
+      expect(ErrorHandler.fromDioException(error).requestId, 'header-rid');
+    });
   });
 }

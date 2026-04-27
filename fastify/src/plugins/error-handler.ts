@@ -8,9 +8,8 @@ export default fp(async (fastify) => {
     (error: FastifyError | Error, request: FastifyRequest, reply: FastifyReply) => {
       if ('validation' in error && (error as FastifyError).validation) {
         return reply.status(400).send({
-          statusCode: 400,
-          error: 'Bad Request',
-          message: error.message,
+          detail: error.message,
+          request_id: request.id,
         });
       }
 

@@ -39,6 +39,11 @@ if [ -n "$<%= inst.upper %>_PY" ]; then
   echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff format
   echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff check --fix
   uv run mypy
+  if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/; then
+    echo "ERROR: src/ files cannot import from another module's _-prefixed file. Import from the package."
+    exit 1
+  fi
+  uv run lint-imports
   cd ..
   echo "$<%= inst.upper %>_PY" | xargs git add
 fi

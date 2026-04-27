@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -120,3 +120,58 @@ describe("init workflow", () => {
     expect(existsSync(join(tmp, "fastify"))).toBe(false);
   });
 });
+
+describe("init — guard rails", () => {
+  let tmp: string;
+  const origExit = process.exit;
+
+  afterEach(async () => {
+    if (tmp) await rm(tmp, { recursive: true, force: true });
+    process.exit = origExit;
+  });
+
+  it("exits when .projx already exists", async () => {
+    tmp = join(tmpdir(), `projx-init-already-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+    execSync("git init --quiet", { cwd: tmp });
+    await writeFile(join(tmp, ".projx"), "{}");
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("EXIT");
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow("EXIT");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("exits outside a git repo", async () => {
+    tmp = join(tmpdir(), `projx-init-no-git-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("EXIT");
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow("EXIT");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("exits when working tree has uncommitted changes", async () => {
+    tmp = join(tmpdir(), `projx-init-dirty-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+    execSync("git init --quiet", { cwd: tmp });
+    execSync(
+      "git -c user.email=a@a -c user.name=a commit --allow-empty -m init --quiet",
+      { cwd: tmp },
+    );
+    await writeFile(join(tmp, "stray.txt"), "uncommitted\n");
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("EXIT");
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow("EXIT");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+

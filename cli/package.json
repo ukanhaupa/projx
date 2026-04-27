@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node18 --clean",
     "dev": "tsup src/index.ts --format esm --target node18 --watch",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
@@ -56,6 +56,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.2",
+    "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^10.2.0",
     "tsup": "^8",
     "typescript": "^5",

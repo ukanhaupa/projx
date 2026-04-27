@@ -35,10 +35,8 @@ class AppConfig {
     );
   }
 
-  String get oidcAuthEndpoint =>
-      '$oidcRealmUrl/protocol/openid-connect/auth';
-  String get oidcTokenEndpoint =>
-      '$oidcRealmUrl/protocol/openid-connect/token';
+  String get oidcAuthEndpoint => '$oidcRealmUrl/protocol/openid-connect/auth';
+  String get oidcTokenEndpoint => '$oidcRealmUrl/protocol/openid-connect/token';
   String get oidcLogoutEndpoint =>
       '$oidcRealmUrl/protocol/openid-connect/logout';
   String get oidcDiscoveryUrl =>

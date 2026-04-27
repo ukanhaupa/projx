@@ -47,6 +47,20 @@ describe('Error Handler Plugin', () => {
       throw new Error('something broke');
     });
 
+    app.post(
+      '/validation',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['name'],
+            properties: { name: { type: 'string' } },
+          },
+        },
+      },
+      async () => ({ ok: true }),
+    );
+
     await app.ready();
   });
 
@@ -95,5 +109,16 @@ describe('Error Handler Plugin', () => {
     expect(res.statusCode).toBe(500);
     expect(res.json().detail).toBe('Internal server error');
     expect(res.json().request_id).toBeDefined();
+  });
+
+  it('schema validation → 400 with detail/request_id shape', async () => {
+    const res = await app.inject({ method: 'POST', url: '/validation', payload: {} });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.detail).toBeDefined();
+    expect(body.request_id).toBeDefined();
+    expect(body.statusCode).toBeUndefined();
+    expect(body.error).toBeUndefined();
+    expect(body.message).toBeUndefined();
   });
 });

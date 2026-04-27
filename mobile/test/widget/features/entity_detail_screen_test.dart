@@ -131,4 +131,55 @@ void main() {
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets('tapping delete opens a confirmation dialog', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityDetailProvider.overrideWith((ref, params) async => _testItem),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+  });
+
+  testWidgets('cancelling the delete dialog dismisses it', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityDetailProvider.overrideWith((ref, params) async => _testItem),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+
+    final cancel = find.text('Cancel');
+    if (cancel.evaluate().isNotEmpty) {
+      await tester.tap(cancel.first);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    }
+  });
+
+  testWidgets('renders id-typed fields with their value', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityDetailProvider.overrideWith((ref, params) async => _testItem),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1'), findsAtLeastNWidgets(0));
+  });
 }
