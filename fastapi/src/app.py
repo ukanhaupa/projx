@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # !!! ATTENTION !!!
 # KEEP THIS AT THE TOP TO ENSURE ENVIRONMENT VARIABLES ARE LOADED BEFORE ANY IMPORTS
 # ===========================
-load_dotenv(override=True)
+load_dotenv()
 
 import sys
 from contextlib import asynccontextmanager
@@ -18,6 +18,7 @@ from fastapi.openapi.utils import get_openapi
 from loguru import logger
 from sqlalchemy import text
 from src.entities import api_router
+from src.exception_handlers import register_exception_handlers
 from src.middlewares import (
     AuthenticationMiddleware,
     AuthorizationMiddleware,
@@ -93,6 +94,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+register_exception_handlers(app)
 
 
 @app.get("/api/health", tags=["Health Check"])

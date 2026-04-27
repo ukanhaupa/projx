@@ -1,6 +1,5 @@
 from typing import Any, Generic, TypeVar, cast
 
-import sqlalchemy.exc
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from loguru import logger
 from starlette.responses import Response
@@ -9,7 +8,7 @@ from starlette.status import HTTP_201_CREATED
 from src.middlewares import compute_scope_filters
 
 from ._expand import ExpandResolver
-from ._model import BusinessRuleError, NotFoundError
+from ._model import NotFoundError
 from ._service import BaseService
 
 ServiceT = TypeVar("ServiceT", bound=BaseService)
@@ -51,32 +50,11 @@ class BaseController(Generic[ServiceT]):
 
     async def create(self, request: Request, data: dict = Body(...)):
         logger.debug(f"{self._service().repository.model.__name__}: Create called")
-        try:
-            service = self._service()
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                data.update(scope_filters)
-            result = await service.create(data)
-            return result
-        except sqlalchemy.exc.IntegrityError as e:
-            logger.warning(f"Conflict in create: {e}")
-            raise HTTPException(
-                status_code=409,
-                detail="Resource already exists or violates a constraint",
-            )
-        except NotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in create: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException as e:
-            logger.warning(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        service = self._service()
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            data.update(scope_filters)
+        return await service.create(data)
 
     async def list(
         self,
@@ -88,149 +66,73 @@ class BaseController(Generic[ServiceT]):
         expand: str | None = Query(None),
     ):
         logger.debug(f"{self._service().repository.model.__name__}: List with page: {page}, page_size: {page_size}")
-        try:
-            service = self._service()
-            filter_by = self._extract_filter_by(request)
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                filter_by.update(scope_filters)
-            result, total_records = await service.list_with_count(
-                page=page,
-                page_size=page_size,
-                filter_by=filter_by,
-                order_by=order_by,
-                search=search,
-            )
-            data = await self._maybe_expand(result, expand)
-            return {
-                "data": data,
-                "pagination": {
-                    "current_page": page,
-                    "page_size": page_size,
-                    "total_pages": (total_records + page_size - 1) // page_size if total_records > 0 else 0,
-                    "total_records": total_records,
-                },
-            }
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in list: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException as e:
-            logger.warning(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        service = self._service()
+        filter_by = self._extract_filter_by(request)
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            filter_by.update(scope_filters)
+        result, total_records = await service.list_with_count(
+            page=page,
+            page_size=page_size,
+            filter_by=filter_by,
+            order_by=order_by,
+            search=search,
+        )
+        data = await self._maybe_expand(result, expand)
+        return {
+            "data": data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total_records + page_size - 1) // page_size if total_records > 0 else 0,
+                "total_records": total_records,
+            },
+        }
 
     async def get(self, id: int, request: Request, expand: str | None = Query(None)):
         logger.debug(f"{self._service().repository.model.__name__}: Get id: {id}")
-        try:
-            service = self._service()
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                filter_by = {"id": id}
-                filter_by.update(scope_filters)
-                results = await service.list(page=1, page_size=1, filter_by=filter_by)
-                result = results[0] if results else None
-            else:
-                result = await service.get(id=id)
-            if not result:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"{service.repository.model.__name__} not found",
-                )
-            if expand:
-                data = await self._maybe_expand([result], expand)
-                return data[0]
-            return result
-        except NotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in get: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException as e:
-            logger.warning(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        service = self._service()
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            filter_by = {"id": id}
+            filter_by.update(scope_filters)
+            results = await service.list(page=1, page_size=1, filter_by=filter_by)
+            if not results:
+                raise NotFoundError(service.repository.model.__name__, id)
+            result = results[0]
+        else:
+            result = await service.get(id=id)
+        if expand:
+            data = await self._maybe_expand([result], expand)
+            return data[0]
+        return result
 
     async def patch(self, id: int, request: Request, data: dict = Body(...)):
         logger.debug(f"{self._service().repository.model.__name__}: Patch id: {id}")
-        try:
-            service = self._service()
-            if not data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Request body cannot be empty",
-                )
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                filter_by = {"id": id}
-                filter_by.update(scope_filters)
-                results = await service.list(page=1, page_size=1, filter_by=filter_by)
-                if not results:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"{service.repository.model.__name__} not found",
-                    )
-            result = await service.patch(id=id, data=data)
-            return result
-        except sqlalchemy.exc.IntegrityError as e:
-            logger.warning(f"Conflict in patch: {e}")
+        service = self._service()
+        if not data:
             raise HTTPException(
-                status_code=409,
-                detail="Update violates a constraint",
+                status_code=400,
+                detail="Request body cannot be empty",
             )
-        except NotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in patch: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException as e:
-            logger.warning(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            filter_by = {"id": id}
+            filter_by.update(scope_filters)
+            results = await service.list(page=1, page_size=1, filter_by=filter_by)
+            if not results:
+                raise NotFoundError(service.repository.model.__name__, id)
+        return await service.patch(id=id, data=data)
 
     async def delete(self, id: int, request: Request):
         logger.debug(f"{self._service().repository.model.__name__}: Delete id: {id}")
-        try:
-            service = self._service()
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                filter_by = {"id": id}
-                filter_by.update(scope_filters)
-                results = await service.list(page=1, page_size=1, filter_by=filter_by)
-                if not results:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"{service.repository.model.__name__} not found",
-                    )
-            await service.delete(id=id)
-            return Response(status_code=204)
-        except sqlalchemy.exc.IntegrityError as e:
-            logger.warning(f"Conflict in delete: {e}")
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot delete: resource is referenced by other records",
-            )
-        except NotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in delete: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException as e:
-            logger.warning(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        service = self._service()
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            filter_by = {"id": id}
+            filter_by.update(scope_filters)
+            results = await service.list(page=1, page_size=1, filter_by=filter_by)
+            if not results:
+                raise NotFoundError(service.repository.model.__name__, id)
+        await service.delete(id=id)
+        return Response(status_code=204)

@@ -58,6 +58,14 @@ class ApiClient {
 
   ApiClient({required Dio dio}) : _dio = dio;
 
+  Future<T> _call<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } on DioException catch (e) {
+      throw ErrorHandler.fromDioException(e);
+    }
+  }
+
   Future<PaginatedResult<Map<String, dynamic>>> list(
     String entitySlug, {
     int page = 1,
@@ -66,8 +74,8 @@ class ApiClient {
     String? orderBy,
     Map<String, String>? filters,
     List<String>? expand,
-  }) async {
-    try {
+  }) {
+    return _call(() async {
       final queryParams = QueryParams.build(
         page: page,
         pageSize: pageSize,
@@ -83,17 +91,15 @@ class ApiClient {
       return PaginatedResult<Map<String, dynamic>>.fromJson(
         response.data as Map<String, dynamic>,
       );
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
   Future<Map<String, dynamic>> getById(
     String entitySlug,
     String id, {
     List<String>? expand,
-  }) async {
-    try {
+  }) {
+    return _call(() async {
       final queryParams = <String, dynamic>{};
       if (expand != null && expand.isNotEmpty) {
         queryParams['expand'] = expand.join(',');
@@ -103,80 +109,64 @@ class ApiClient {
         queryParameters: queryParams,
       );
       return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
   Future<Map<String, dynamic>> create(
     String entitySlug,
     Map<String, dynamic> data,
-  ) async {
-    try {
+  ) {
+    return _call(() async {
       final response = await _dio.post(
         ApiPaths.entityBase(entitySlug),
         data: data,
       );
       return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
   Future<Map<String, dynamic>> update(
     String entitySlug,
     String id,
     Map<String, dynamic> data,
-  ) async {
-    try {
+  ) {
+    return _call(() async {
       final response = await _dio.patch(
         ApiPaths.entityById(entitySlug, id),
         data: data,
       );
       return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
-  Future<void> delete(String entitySlug, String id) async {
-    try {
-      await _dio.delete(ApiPaths.entityById(entitySlug, id));
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+  Future<void> delete(String entitySlug, String id) {
+    return _call(() => _dio.delete(ApiPaths.entityById(entitySlug, id)));
   }
 
   Future<List<Map<String, dynamic>>> bulkCreate(
     String entitySlug,
     List<Map<String, dynamic>> items,
-  ) async {
-    try {
+  ) {
+    return _call(() async {
       final response = await _dio.post(
         ApiPaths.entityBulk(entitySlug),
         data: items,
       );
       return (response.data as List).cast<Map<String, dynamic>>();
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
-  Future<void> bulkDelete(String entitySlug, List<String> ids) async {
-    try {
-      await _dio.delete(ApiPaths.entityBulk(entitySlug), data: {'ids': ids});
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+  Future<void> bulkDelete(String entitySlug, List<String> ids) {
+    return _call(
+      () => _dio.delete(ApiPaths.entityBulk(entitySlug), data: {'ids': ids}),
+    );
   }
 
-  Future<List<Map<String, dynamic>>> fetchMeta() async {
-    try {
+  Future<List<Map<String, dynamic>>> fetchMeta() {
+    return _call(() async {
       final response = await _dio.get(ApiPaths.meta);
       return (response.data as List).cast<Map<String, dynamic>>();
-    } on DioException catch (e) {
-      throw ErrorHandler.fromDioException(e);
-    }
+    });
   }
 
   Future<bool> healthCheck() async {

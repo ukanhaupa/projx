@@ -1,10 +1,11 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { scaffold } from "../src/scaffold.js";
 import { add } from "../src/add.js";
+import * as utilsModule from "../src/utils.js";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
 
@@ -207,5 +208,88 @@ describe("add", () => {
         add(dest, ["fastify"], REPO_DIR, true, "fastify"),
       ).rejects.toThrow(/already exists/i);
     });
+  });
+});
+
+describe("add — installDeps paths (mocked)", () => {
+  let dest: string;
+  let execSpy: ReturnType<typeof vi.spyOn>;
+  let hasCommandSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    execSpy = vi.spyOn(utilsModule, "exec").mockImplementation(() => "");
+    hasCommandSpy = vi.spyOn(utilsModule, "hasCommand");
+  });
+
+  afterEach(async () => {
+    if (dest) await rm(dest, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("runs install commands for the new instance when package manager is on PATH", async () => {
+    dest = join(tmpdir(), `projx-add-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: "ai", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ["frontend"], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes("npm install"))).toBe(true);
+  });
+
+  it("falls back to warn message when package manager is missing during add", async () => {
+    dest = join(tmpdir(), `projx-add-no-pm-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: "no-pm", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ["fastapi"], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes("uv sync"))).toBe(false);
+    expect(existsSync(join(dest, "fastapi"))).toBe(true);
+  });
+
+  it("skips installs when skipInstall=true", async () => {
+    dest = join(tmpdir(), `projx-add-skip-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: "skip-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ["e2e"], REPO_DIR, true);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.every((c) => !c.includes("npm install") || !c.includes("e2e"))).toBe(true);
+  });
+
+  it("copies .env.example to .env for the new instance", async () => {
+    dest = join(tmpdir(), `projx-add-env-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: "env", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await add(dest, ["frontend"], REPO_DIR, true);
+
+    expect(existsSync(join(dest, "frontend/.env.example"))).toBe(true);
+    expect(existsSync(join(dest, "frontend/.env"))).toBe(true);
   });
 });

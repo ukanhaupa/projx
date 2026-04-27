@@ -36,7 +36,8 @@ class ErrorHandler {
     final statusCode = error.response?.statusCode;
     final data = error.response?.data;
     final detail = data is Map ? data['detail'] as String? : null;
-    final requestId = data is Map ? data['request_id'] as String? : null;
+    final requestId = (data is Map ? data['request_id'] as String? : null) ??
+        error.response?.headers.value('x-request-id');
     final fieldErrors = data is Map && data['field_errors'] is Map
         ? (data['field_errors'] as Map).map(
             (k, v) => MapEntry(k.toString(), v.toString()),
@@ -47,18 +48,28 @@ class ErrorHandler {
       400 => ValidationException(
           message: detail ?? 'Invalid request',
           fieldErrors: fieldErrors,
+          requestId: requestId,
         ),
-      401 => const UnauthorizedException(),
+      401 => UnauthorizedException(requestId: requestId),
       403 => ForbiddenException(
           message: detail ?? 'You don\'t have permission to do this.',
+          requestId: requestId,
         ),
-      404 => NotFoundException(message: detail ?? 'Item not found'),
-      409 => ConflictException(message: detail ?? 'This item already exists'),
+      404 => NotFoundException(
+          message: detail ?? 'Item not found',
+          requestId: requestId,
+        ),
+      409 => ConflictException(
+          message: detail ?? 'This item already exists',
+          requestId: requestId,
+        ),
       422 => ValidationException(
           message: detail ?? 'Validation failed',
           fieldErrors: fieldErrors,
+          requestId: requestId,
         ),
       429 => RateLimitException(
+          requestId: requestId,
           retryAfter: _parseRetryAfter(error.response?.headers),
         ),
       _ when statusCode != null && statusCode >= 500 =>
@@ -68,7 +79,10 @@ class ErrorHandler {
           : error.type == DioExceptionType.connectionTimeout ||
                   error.type == DioExceptionType.receiveTimeout
               ? const TimeoutException()
-              : ServerException(message: detail ?? 'Something went wrong'),
+              : ServerException(
+                  message: detail ?? 'Something went wrong',
+                  requestId: requestId,
+                ),
     };
   }
 

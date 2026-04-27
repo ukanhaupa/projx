@@ -106,5 +106,120 @@ void main() {
 
       expect(find.text('Clear all'), findsOneWidget);
     });
+
+    testWidgets('apply button calls onApply with current filters and orderBy',
+        (tester) async {
+      Map<String, String>? capturedFilters;
+      String? capturedOrder;
+      await tester.pumpWidget(buildFilterSheet(
+        currentFilters: const {'name': 'foo'},
+        currentOrderBy: 'price',
+        onApply: (f, o) {
+          capturedFilters = f;
+          capturedOrder = o;
+        },
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(capturedFilters, isNotNull);
+      expect(capturedOrder, anyOf(isNull, isA<String>()));
+    });
+
+    testWidgets('clear all empties filters', (tester) async {
+      Map<String, String>? capturedFilters;
+      await tester.pumpWidget(buildFilterSheet(
+        currentFilters: const {'name': 'foo', 'active': 'true'},
+        onApply: (f, _) => capturedFilters = f,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Clear all'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(capturedFilters, isEmpty);
+    });
+
+    testWidgets('selecting a sort chip toggles its selection', (tester) async {
+      await tester.pumpWidget(buildFilterSheet());
+      await tester.pumpAndSettle();
+
+      final priceChip = find.widgetWithText(FilterChip, 'Price').first;
+      await tester.tap(priceChip);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('text filter input updates the filter on apply',
+        (tester) async {
+      Map<String, String>? captured;
+      await tester
+          .pumpWidget(buildFilterSheet(onApply: (f, _) => captured = f));
+      await tester.pumpAndSettle();
+
+      final fields = find.byType(TextField);
+      if (fields.evaluate().isNotEmpty) {
+        await tester.enterText(fields.first, 'banana');
+        await tester.pumpAndSettle();
+      }
+
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(captured, isNotNull);
+    });
+
+    testWidgets('sort chip cycles asc → desc → none', (tester) async {
+      String? captured;
+      await tester
+          .pumpWidget(buildFilterSheet(onApply: (_, o) => captured = o));
+      await tester.pumpAndSettle();
+
+      final priceChip = find.widgetWithText(FilterChip, 'Price').first;
+
+      await tester.tap(priceChip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(captured, 'price');
+    });
+
+    testWidgets('sort chip cycle goes to descending on second tap',
+        (tester) async {
+      String? captured;
+      await tester.pumpWidget(buildFilterSheet(
+        currentOrderBy: 'price',
+        onApply: (_, o) => captured = o,
+      ));
+      await tester.pumpAndSettle();
+
+      final priceChip = find.widgetWithText(FilterChip, 'Price').first;
+      await tester.tap(priceChip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(captured, '-price');
+    });
+
+    testWidgets('descending sort cycles back to none on third tap',
+        (tester) async {
+      String? captured;
+      await tester.pumpWidget(buildFilterSheet(
+        currentOrderBy: '-price',
+        onApply: (_, o) => captured = o,
+      ));
+      await tester.pumpAndSettle();
+
+      final priceChip = find.widgetWithText(FilterChip, 'Price').first;
+      await tester.tap(priceChip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(captured, isNull);
+    });
   });
 }

@@ -24,6 +24,7 @@ class UnauthorizedException extends AppException {
   const UnauthorizedException({
     super.message = 'Session expired. Please log in again.',
     super.statusCode = 401,
+    super.requestId,
   });
 }
 
@@ -31,6 +32,7 @@ class ForbiddenException extends AppException {
   const ForbiddenException({
     super.message = 'You don\'t have permission to do this.',
     super.statusCode = 403,
+    super.requestId,
   });
 }
 
@@ -38,6 +40,7 @@ class NotFoundException extends AppException {
   const NotFoundException({
     super.message = 'Item not found',
     super.statusCode = 404,
+    super.requestId,
   });
 }
 
@@ -45,6 +48,7 @@ class ConflictException extends AppException {
   const ConflictException({
     super.message = 'This item already exists',
     super.statusCode = 409,
+    super.requestId,
   });
 }
 
@@ -53,6 +57,7 @@ class ValidationException extends AppException {
     super.message = 'Validation failed',
     super.statusCode = 422,
     super.fieldErrors,
+    super.requestId,
   });
 }
 
@@ -62,6 +67,7 @@ class RateLimitException extends AppException {
   const RateLimitException({
     super.message = 'Too many requests. Please wait a moment.',
     super.statusCode = 429,
+    super.requestId,
     this.retryAfter,
   });
 }

@@ -179,4 +179,71 @@ void main() {
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets('renders search bar at the top', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityListProvider.overrideWith((ref, params) async => _testResult),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('search bar typing updates filter (no crash)', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityListProvider.overrideWith((ref, params) async => _testResult),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final searchField = find.byType(TextField).first;
+    await tester.enterText(searchField, 'wid');
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets('pull-to-refresh shows RefreshIndicator', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityListProvider.overrideWith((ref, params) async => _testResult),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+  });
+
+  testWidgets('multi-page result enables next-page load', (tester) async {
+    final paginated = PaginatedResult<Map<String, dynamic>>(
+      data: List.generate(
+        20,
+        (i) => {'id': i, 'name': 'item-$i', 'price': 1.0, 'active': true},
+      ),
+      pagination: const PaginationInfo(
+        currentPage: 1,
+        pageSize: 20,
+        totalPages: 3,
+        totalRecords: 50,
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildSubject(
+        overrides: [
+          entityListProvider.overrideWith((ref, params) async => paginated),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('item-0'), findsOneWidget);
+  });
 }

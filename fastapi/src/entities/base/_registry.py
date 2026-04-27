@@ -7,8 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-import sqlalchemy.exc
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Query, Request
 from loguru import logger
 from starlette.responses import Response
 from starlette.status import HTTP_201_CREATED
@@ -16,7 +15,7 @@ from starlette.status import HTTP_201_CREATED
 from ._auto_schema import create_create_schema, create_update_schema, get_field_metadata
 from ._controller import BaseController
 from ._expand import ExpandResolver
-from ._model import Base, BaseModel_, BusinessRuleError
+from ._model import Base, BaseModel_
 from ._repository import BaseRepository
 from ._service import BaseService
 
@@ -221,52 +220,33 @@ class _ReadOnlyController:
         search: str | None = Query(None),
         expand: str | None = Query(None),
     ):
-        try:
-            filter_by = {k: v for k, v in request.query_params.items() if k not in BaseController._RESERVED_PARAMS}
-            result, total = await self._service().list_with_count(
-                page=page,
-                page_size=page_size,
-                filter_by=filter_by,
-                order_by=order_by,
-                search=search,
-            )
-            data = await self._maybe_expand(result, expand)
-            if not expand:
-                data = [dict(item) if not isinstance(item, dict) else item for item in data]
-            return {
-                "data": data,
-                "pagination": {
-                    "current_page": page,
-                    "page_size": page_size,
-                    "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
-                    "total_records": total,
-                },
-            }
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in readonly list: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        filter_by = {k: v for k, v in request.query_params.items() if k not in BaseController._RESERVED_PARAMS}
+        result, total = await self._service().list_with_count(
+            page=page,
+            page_size=page_size,
+            filter_by=filter_by,
+            order_by=order_by,
+            search=search,
+        )
+        data = await self._maybe_expand(result, expand)
+        if not expand:
+            data = [dict(item) if not isinstance(item, dict) else item for item in data]
+        return {
+            "data": data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+                "total_records": total,
+            },
+        }
 
     async def get(self, id: int, expand: str | None = Query(None)):
-        try:
-            result = await self._service().get(id=id)
-            if not result:
-                raise HTTPException(status_code=404, detail="Not found")
-            if expand:
-                data = await self._maybe_expand([result], expand)
-                return data[0]
-            return dict(result)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+        result = await self._service().get(id=id)
+        if expand:
+            data = await self._maybe_expand([result], expand)
+            return data[0]
+        return dict(result)
 
 
 class _AutoController(BaseController):
@@ -313,62 +293,28 @@ class _AutoController(BaseController):
         parent = self
 
         async def bulk_create(request: Request, items: Any = Body(...)):
-            try:
-                scope_filters = await parent._get_scope_filters(request)
-                data_list = []
-                for item in items:
-                    data = item.model_dump(exclude_unset=True) if hasattr(item, "model_dump") else dict(item)
-                    if scope_filters is not None:
-                        data.update(scope_filters)
-                    data_list.append(data)
-                results = await parent._service().bulk_create(data_list)
-                return {"data": [dict(r) for r in results], "count": len(results)}
-            except sqlalchemy.exc.IntegrityError as e:
-                logger.warning(f"Conflict in bulk_create: {e}")
-                raise HTTPException(
-                    status_code=409,
-                    detail="One or more resources already exist or violate a constraint",
-                )
-            except BusinessRuleError as e:
-                raise HTTPException(status_code=422, detail=e.detail)
-            except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-                logger.warning(f"Bad request in bulk_create: {e}")
-                raise HTTPException(status_code=400, detail="Invalid request data")
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.exception(e)
-                raise HTTPException(status_code=500, detail="Internal server error")
+            scope_filters = await parent._get_scope_filters(request)
+            data_list = []
+            for item in items:
+                data = item.model_dump(exclude_unset=True) if hasattr(item, "model_dump") else dict(item)
+                if scope_filters is not None:
+                    data.update(scope_filters)
+                data_list.append(data)
+            results = await parent._service().bulk_create(data_list)
+            return {"data": [dict(r) for r in results], "count": len(results)}
 
         bulk_create.__annotations__["items"] = list[Any]
         return bulk_create
 
     async def bulk_delete(self, request: Request, ids: list[int] = Body(...)):
-        try:
-            scope_filters = await self._get_scope_filters(request)
-            if scope_filters is not None:
-                accessible = await self._service().list(
-                    page=1,
-                    page_size=len(ids),
-                    filter_by={**scope_filters, "id__in": ",".join(str(i) for i in ids)},
-                )
-                ids = [r.id for r in accessible]
-            if ids:
-                await self._service().bulk_delete(ids)
-            return Response(status_code=204)
-        except sqlalchemy.exc.IntegrityError as e:
-            logger.warning(f"Conflict in bulk_delete: {e}")
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot delete: one or more resources are referenced by other records",
+        scope_filters = await self._get_scope_filters(request)
+        if scope_filters is not None:
+            accessible = await self._service().list(
+                page=1,
+                page_size=len(ids),
+                filter_by={**scope_filters, "id__in": ",".join(str(i) for i in ids)},
             )
-        except BusinessRuleError as e:
-            raise HTTPException(status_code=422, detail=e.detail)
-        except (sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
-            logger.warning(f"Bad request in bulk_delete: {e}")
-            raise HTTPException(status_code=400, detail="Invalid request data")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception(e)
-            raise HTTPException(status_code=500, detail="Internal server error")
+            ids = [r.id for r in accessible]
+        if ids:
+            await self._service().bulk_delete(ids)
+        return Response(status_code=204)

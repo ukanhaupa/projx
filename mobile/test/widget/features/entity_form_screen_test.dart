@@ -120,4 +120,47 @@ void main() {
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets('shows "Edit" title for edit mode', (tester) async {
+    await tester.pumpWidget(
+      buildEditSubject(
+        overrides: [
+          entityDetailProvider.overrideWith(
+            (ref, params) async =>
+                {'id': 1, 'name': 'Existing', 'price': 5.0, 'active': true},
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Edit'), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('pre-fills form fields from existing data', (tester) async {
+    await tester.pumpWidget(
+      buildEditSubject(
+        overrides: [
+          entityDetailProvider.overrideWith(
+            (ref, params) async =>
+                {'id': 1, 'name': 'WidgetX', 'price': 12.5, 'active': true},
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('WidgetX'), findsOneWidget);
+    expect(find.text('12.5'), findsOneWidget);
+  });
+
+  testWidgets('save button is tappable in create mode', (tester) async {
+    await tester.pumpWidget(buildCreateSubject());
+    await tester.pumpAndSettle();
+
+    final save = find.text('Save');
+    expect(save, findsOneWidget);
+    await tester.tap(save);
+    await tester.pump();
+  });
 }

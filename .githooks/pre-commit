@@ -39,7 +39,8 @@ E2E_TS=$(echo "$STAGED_FILES" | grep '^e2e/.*\.ts$' || true)
 E2E_ALL=$(echo "$STAGED_FILES" | grep '^e2e/' || true)
 MOBILE_DART=$(echo "$STAGED_FILES" | grep '^mobile/.*\.dart$' || true)
 INFRA_TF=$(echo "$STAGED_FILES" | grep '^infra/.*\.tf$' || true)
-CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
+CLI_SRC_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
+CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/.*\.ts$' || true)
 
 # ── FastAPI ───────────────────────────────────────────────────────
 if [ -n "$FASTAPI_PY" ]; then
@@ -48,6 +49,11 @@ if [ -n "$FASTAPI_PY" ]; then
   echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff format
   echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff check --fix
   uv run mypy
+  if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/; then
+    echo "ERROR: src/ files cannot import from another module's _-prefixed file. Import from the package."
+    exit 1
+  fi
+  uv run lint-imports
   cd ..
   echo "$FASTAPI_PY" | xargs git add
 fi
@@ -126,7 +132,9 @@ if [ -n "$CLI_TS" ]; then
   cd cli
   echo "$CLI_TS" | sed 's|^cli/||' | xargs npx eslint --fix
   npx tsc --noEmit
-  npx tsup src/index.ts --format esm --target node18 --clean
+  if [ -n "$CLI_SRC_TS" ]; then
+    npx tsup src/index.ts --format esm --target node18 --clean
+  fi
   cd ..
   echo "$CLI_TS" | xargs git add
 fi

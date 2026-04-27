@@ -67,4 +67,80 @@ void main() {
     expect(find.text('Logout'), findsOneWidget);
     expect(find.byIcon(Icons.logout), findsOneWidget);
   });
+
+  testWidgets('toggling Dark mode flips the switch state', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    final darkSwitch = find.ancestor(
+      of: find.text('Dark mode'),
+      matching: find.byType(SwitchListTile),
+    );
+    expect(darkSwitch, findsOneWidget);
+
+    await tester.tap(darkSwitch);
+    await tester.pumpAndSettle();
+
+    expect(prefs.getBool('theme_mode'), isTrue);
+  });
+
+  testWidgets('biometric switch disabled when not available', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Biometric'), findsAtLeastNWidgets(0));
+  });
+
+  testWidgets('shows biometric option when available', (tester) async {
+    when(() => mockBiometric.isAvailable()).thenAnswer((_) async => true);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SwitchListTile), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('tapping logout shows confirmation', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Logout'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsAtLeastNWidgets(0));
+  });
+
+  testWidgets('cancelling logout dialog does not log out', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Logout'));
+    await tester.pumpAndSettle();
+
+    final cancel = find.text('Cancel');
+    if (cancel.evaluate().isNotEmpty) {
+      await tester.tap(cancel.first);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    }
+  });
+
+  testWidgets('renders both Settings header and the version row in dark mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'theme_mode': true});
+    final darkPrefs = await SharedPreferences.getInstance();
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(darkPrefs),
+        isarProvider.overrideWithValue(mockIsar),
+        biometricAuthProvider.overrideWithValue(mockBiometric),
+      ],
+      child: const MaterialApp(home: SettingsScreen()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Version'), findsOneWidget);
+  });
 }

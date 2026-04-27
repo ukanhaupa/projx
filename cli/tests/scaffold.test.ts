@@ -1,9 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { scaffold } from "../src/scaffold.js";
+import * as utilsModule from "../src/utils.js";
 import { type PackageManager, pmCommands } from "../src/utils.js";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
@@ -118,7 +119,7 @@ describe("scaffold", () => {
     expect(ci).toContain(
       "name: Frontend (format + lint + typecheck + build + audit)",
     );
-    expect(ci).toContain("name: Flutter (format + analyze)");
+    expect(ci).toContain("name: Flutter (format + analyze + test + coverage)");
     expect(ci).toContain("name: Secret scan");
     expect(ci).toContain("gitleaks/gitleaks-action@v2");
     expect(ci).toMatch(/^permissions:\n\s+contents: read\n\s+pull-requests: read/m);
@@ -187,6 +188,111 @@ describe("scaffold", () => {
     );
 
     expect(existsSync(join(dest, "docker-compose.yml"))).toBe(false);
+  });
+
+  it("creates project without git when opts.git is false", async () => {
+    dest = join(tmpdir(), `projx-scaffold-no-git-${Date.now()}`);
+    await scaffold(
+      { name: "no-git", components: ["fastify"], git: false, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    expect(existsSync(join(dest, "fastify"))).toBe(true);
+    expect(existsSync(join(dest, ".git"))).toBe(false);
+  });
+
+  it("copies .env.example to .env after scaffolding", async () => {
+    dest = join(tmpdir(), `projx-scaffold-env-${Date.now()}`);
+    await scaffold(
+      { name: "env-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    expect(existsSync(join(dest, "fastify/.env.example"))).toBe(true);
+    expect(existsSync(join(dest, "fastify/.env"))).toBe(true);
+  });
+});
+
+describe("scaffold install paths (mocked)", () => {
+  let dest: string;
+  let execSpy: ReturnType<typeof vi.spyOn>;
+  let hasCommandSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    execSpy = vi.spyOn(utilsModule, "exec").mockImplementation(() => "");
+    hasCommandSpy = vi.spyOn(utilsModule, "hasCommand");
+  });
+
+  afterEach(async () => {
+    if (dest) await rm(dest, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("runs install commands for each js component when tool is on PATH", async () => {
+    dest = join(tmpdir(), `projx-scaffold-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      {
+        name: "install-app",
+        components: ["fastify", "frontend", "e2e", "fastapi", "mobile"],
+        git: false,
+        install: true,
+        packageManager: "npm",
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes("uv sync"))).toBe(true);
+    expect(calls.filter((c) => c.includes("npm install")).length).toBeGreaterThanOrEqual(3);
+    expect(calls.some((c) => c.includes("flutter pub get"))).toBe(true);
+  });
+
+  it("falls back to warn message when package manager is missing", async () => {
+    dest = join(tmpdir(), `projx-scaffold-missing-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      {
+        name: "no-tool",
+        components: ["fastify", "frontend", "fastapi", "mobile"],
+        git: false,
+        install: true,
+        packageManager: "pnpm",
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes("pnpm install"))).toBe(false);
+    expect(calls.some((c) => c.includes("flutter pub get"))).toBe(false);
+    expect(calls.some((c) => c.includes("uv sync"))).toBe(false);
+    expect(existsSync(join(dest, "fastify"))).toBe(true);
+  });
+
+  it("install: true with infra-only is a no-op for installs", async () => {
+    dest = join(tmpdir(), `projx-scaffold-infra-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      {
+        name: "infra-only",
+        components: ["infra"],
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes("install"))).toBe(false);
+    expect(calls.some((c) => c.includes("flutter"))).toBe(false);
   });
 });
 
