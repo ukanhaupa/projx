@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import type { EntityOverride } from '../types';
+import type { EntityOverride } from '../../src/types';
 
-vi.mock('../api', () => ({
+vi.mock('../../src/api', () => ({
   api: {
     raw: vi.fn(),
   },
 }));
 
-vi.mock('./overrides', () => ({
+vi.mock('../../src/entities/overrides', () => ({
   entityOverrides: {} as Record<string, EntityOverride>,
 }));
 
@@ -18,14 +18,14 @@ describe('entity loader', () => {
 
   describe('override deep merge', () => {
     it('merges columnOverrides into existing columns', async () => {
-      const { entityOverrides } = await import('./overrides');
+      const { entityOverrides } = await import('../../src/entities/overrides');
       (entityOverrides as Record<string, EntityOverride>)['test-entities'] = {
         columnOverrides: {
           name: { label: 'Full Name' },
         },
       };
 
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -65,7 +65,8 @@ describe('entity loader', () => {
         ],
       });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       const entities = await loadEntities();
 
@@ -75,14 +76,14 @@ describe('entity loader', () => {
     });
 
     it('hides columns via columnOverrides hidden flag', async () => {
-      const { entityOverrides } = await import('./overrides');
+      const { entityOverrides } = await import('../../src/entities/overrides');
       (entityOverrides as Record<string, EntityOverride>)['test-entities'] = {
         columnOverrides: {
           id: { hidden: true },
         },
       };
 
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -121,7 +122,8 @@ describe('entity loader', () => {
         ],
       });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       const entities = await loadEntities();
 
@@ -131,7 +133,7 @@ describe('entity loader', () => {
 
   describe('caching and getters', () => {
     it('returns cached entities on second call', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -160,7 +162,7 @@ describe('entity loader', () => {
       });
 
       const { loadEntities, getEntities, resetEntityCache } =
-        await import('./index');
+        await import('../../src/entities/index');
       resetEntityCache();
       (api.raw as ReturnType<typeof vi.fn>).mockClear();
       await loadEntities();
@@ -172,13 +174,14 @@ describe('entity loader', () => {
     });
 
     it('getEntities returns empty array before loading', async () => {
-      const { getEntities, resetEntityCache } = await import('./index');
+      const { getEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       expect(getEntities()).toEqual([]);
     });
 
     it('getEntityMeta returns meta entities', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -207,7 +210,7 @@ describe('entity loader', () => {
       });
 
       const { loadEntities, getEntityMeta, resetEntityCache } =
-        await import('./index');
+        await import('../../src/entities/index');
       resetEntityCache();
       await loadEntities();
       const meta = getEntityMeta();
@@ -216,7 +219,7 @@ describe('entity loader', () => {
     });
 
     it('getEntityMetaBySlug finds entity by api_prefix', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -245,7 +248,7 @@ describe('entity loader', () => {
       });
 
       const { loadEntities, getEntityMetaBySlug, resetEntityCache } =
-        await import('./index');
+        await import('../../src/entities/index');
       resetEntityCache();
       await loadEntities();
 
@@ -258,7 +261,7 @@ describe('entity loader', () => {
     });
 
     it('resetEntityCache clears all caches', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -287,7 +290,7 @@ describe('entity loader', () => {
       });
 
       const { loadEntities, getEntities, getEntityMeta, resetEntityCache } =
-        await import('./index');
+        await import('../../src/entities/index');
       resetEntityCache();
       await loadEntities();
       expect(getEntities()).toHaveLength(1);
@@ -298,7 +301,7 @@ describe('entity loader', () => {
     });
 
     it('deduplicates concurrent loadEntities calls', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -326,7 +329,8 @@ describe('entity loader', () => {
         ],
       });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       (api.raw as ReturnType<typeof vi.fn>).mockClear();
 
@@ -338,14 +342,14 @@ describe('entity loader', () => {
 
   describe('fieldOverrides merge', () => {
     it('merges fieldOverrides into entity fields', async () => {
-      const { entityOverrides } = await import('./overrides');
+      const { entityOverrides } = await import('../../src/entities/overrides');
       (entityOverrides as Record<string, EntityOverride>)['test-entities'] = {
         fieldOverrides: {
           name: { label: 'Full Name', required: false },
         },
       };
 
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -385,7 +389,8 @@ describe('entity loader', () => {
         ],
       });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       const entities = await loadEntities();
 
@@ -395,14 +400,14 @@ describe('entity loader', () => {
     });
 
     it('hides fields via fieldOverrides hidden flag', async () => {
-      const { entityOverrides } = await import('./overrides');
+      const { entityOverrides } = await import('../../src/entities/overrides');
       (entityOverrides as Record<string, EntityOverride>)['test-entities'] = {
         fieldOverrides: {
           name: { hidden: true },
         },
       };
 
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockResolvedValue({
         entities: [
           {
@@ -441,7 +446,8 @@ describe('entity loader', () => {
         ],
       });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       const entities = await loadEntities();
       expect(entities[0].fields?.find((f) => f.key === 'name')).toBeUndefined();
@@ -458,7 +464,7 @@ describe('entity loader', () => {
     });
 
     it('rejects when fetch exceeds timeout', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>).mockImplementation(
         (_path: string, init?: { signal?: AbortSignal }) =>
           new Promise((_, reject) => {
@@ -470,7 +476,8 @@ describe('entity loader', () => {
           }),
       );
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
       const promise = loadEntities();
 
@@ -480,7 +487,7 @@ describe('entity loader', () => {
     });
 
     it('allows retry after timeout failure', async () => {
-      const { api } = await import('../api');
+      const { api } = await import('../../src/api');
       (api.raw as ReturnType<typeof vi.fn>)
         .mockImplementationOnce(
           (_path: string, init?: { signal?: AbortSignal }) =>
@@ -519,7 +526,8 @@ describe('entity loader', () => {
           ],
         });
 
-      const { loadEntities, resetEntityCache } = await import('./index');
+      const { loadEntities, resetEntityCache } =
+        await import('../../src/entities/index');
       resetEntityCache();
 
       const firstAttempt = loadEntities();

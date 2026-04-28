@@ -124,12 +124,16 @@ export function detectPackageManagerFromComponents(
   return detectPackageManager(cwd);
 }
 
+export const KNOWN_FEATURES = ["auth"] as const;
+export type Feature = (typeof KNOWN_FEATURES)[number];
+
 export interface Options {
   name: string;
   components: Component[];
   git: boolean;
   install: boolean;
   packageManager?: PackageManager;
+  features?: Partial<Record<Feature, string>>;
 }
 
 export function toKebab(s: string): string {

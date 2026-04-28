@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { COMPONENTS, type Component, type Options } from "./utils.js";
+import {
+  COMPONENTS,
+  KNOWN_FEATURES,
+  type Component,
+  type Feature,
+  type Options,
+} from "./utils.js";
+import { parseFeatureFlag } from "./features.js";
 import { runPrompts } from "./prompts.js";
 import { scaffold } from "./scaffold.js";
 import { update } from "./update.js";
@@ -37,6 +44,29 @@ interface ParsedArgs {
     ai?: boolean;
     backend?: boolean;
   };
+}
+
+function matchFeatureFlag(
+  arg: string,
+  argv: string[],
+  i: number,
+): { feature: Feature; value: string; consumedNext: boolean } | null {
+  for (const feat of KNOWN_FEATURES) {
+    const eq = `--${feat}=`;
+    if (arg.startsWith(eq)) {
+      return { feature: feat, value: arg.slice(eq.length), consumedNext: false };
+    }
+    if (arg === `--${feat}`) {
+      const next = argv[i + 1];
+      if (!next || next.startsWith("-")) {
+        throw new Error(
+          `Flag --${feat} requires a value. Use --${feat}=<targets> or --${feat} <targets>.`,
+        );
+      }
+      return { feature: feat, value: next, consumedNext: true };
+    }
+  }
+  return null;
 }
 
 function parseArgs(): ParsedArgs {
@@ -156,6 +186,17 @@ function parseArgs(): ParsedArgs {
       continue;
     }
 
+    {
+      const featureMatch = matchFeatureFlag(arg, args, i);
+      if (featureMatch) {
+        const { feature, value, consumedNext } = featureMatch;
+        parseFeatureFlag(value);
+        options.features = { ...(options.features ?? {}), [feature]: value };
+        if (consumedNext) i++;
+        continue;
+      }
+    }
+
     if (!arg.startsWith("-")) {
       if (
         command === "add" ||
@@ -191,6 +232,7 @@ function printHelp(): void {
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+    --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation
     -y, --yes            Accept defaults (fastify + frontend + e2e)
@@ -200,6 +242,7 @@ function printHelp(): void {
   Examples:
     npx create-projx my-app
     npx create-projx my-app --components fastapi,frontend,e2e
+    npx create-projx my-app --components fastify,frontend,mobile --auth fastify,frontend,mobile
     npx create-projx my-app -y
     npx create-projx add frontend mobile
     npx create-projx add fastify --name email-ingestor

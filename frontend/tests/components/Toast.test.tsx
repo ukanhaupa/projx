@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ToastProvider, useToast } from './Toast';
+import { ToastProvider, useToast } from '../../src/components/Toast';
 
 function TestHarness() {
   const toast = useToast();

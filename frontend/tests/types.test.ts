@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMockMetaEntity } from './testing/entity-test-utils';
-import { metaToEntityConfig } from './types';
+import { metaToEntityConfig } from '../src/types';
 
 describe('metaToEntityConfig', () => {
   it('converts a MetaEntity to EntityConfig', () => {

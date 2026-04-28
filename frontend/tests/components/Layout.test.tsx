@@ -2,15 +2,15 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { EntityConfig } from '../types';
+import type { EntityConfig } from '../../src/types';
 
 // Mock dependencies
-vi.mock('../auth', () => ({
+vi.mock('../../src/auth', () => ({
   getUserInfo: vi.fn(() => ({ name: 'TestUser', email: 'test@example.com' })),
   logout: vi.fn(),
 }));
 
-vi.mock('../entities', () => ({
+vi.mock('../../src/entities', () => ({
   getEntities: vi.fn((): EntityConfig[] => [
     {
       name: 'Products',
@@ -28,16 +28,16 @@ vi.mock('../entities', () => ({
   ]),
 }));
 
-vi.mock('../hooks/useKeyboardShortcuts', () => ({
+vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: vi.fn(),
 }));
 
-vi.mock('../theme', () => ({
+vi.mock('../../src/theme', () => ({
   useTheme: vi.fn(() => ({ theme: 'light', toggle: vi.fn() })),
 }));
 
-import { logout } from '../auth';
-import { Layout } from './Layout';
+import { logout } from '../../src/auth';
+import { Layout } from '../../src/components/Layout';
 
 function renderLayout(initialRoute = '/') {
   return render(

@@ -1,10 +1,10 @@
 import { render, type RenderResult } from '@testing-library/react';
 import { type ReactElement } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { ConfirmProvider } from '../components/ConfirmDialog';
-import { ToastProvider } from '../components/Toast';
-import { ThemeProvider } from '../theme';
-import type { EntityConfig, MetaEntity } from '../types';
+import { ConfirmProvider } from '../../src/components/ConfirmDialog';
+import { ToastProvider } from '../../src/components/Toast';
+import { ThemeProvider } from '../../src/theme';
+import type { EntityConfig, MetaEntity } from '../../src/types';
 
 export function renderWithProviders(ui: ReactElement): RenderResult {
   return render(

@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { useKeyboardShortcuts } from '../../src/hooks/useKeyboardShortcuts';
 
 describe('useKeyboardShortcuts', () => {
   let mockElement: HTMLInputElement;

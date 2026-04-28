@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock auth module before importing api
-vi.mock('./auth', () => ({
+vi.mock('../src/auth', () => ({
   ensureFreshToken: vi.fn().mockResolvedValue(true),
   getToken: vi.fn().mockReturnValue('test-token'),
   logout: vi.fn(),
@@ -13,8 +13,8 @@ import {
   ForbiddenError,
   NotFoundError,
   ValidationError,
-} from './api';
-import { ensureFreshToken, getToken, logout } from './auth';
+} from '../src/api';
+import { ensureFreshToken, getToken, logout } from '../src/auth';
 
 const mockEnsureFreshToken = ensureFreshToken as ReturnType<typeof vi.fn>;
 const mockGetToken = getToken as ReturnType<typeof vi.fn>;

@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../testing/entity-test-utils';
-import { EntityForm } from './EntityForm';
-import { ValidationError } from '../api';
-import type { Field } from '../types';
+import { EntityForm } from '../../src/components/EntityForm';
+import { ValidationError } from '../../src/api';
+import type { Field } from '../../src/types';
 
 const textField: Field = {
   key: 'name',

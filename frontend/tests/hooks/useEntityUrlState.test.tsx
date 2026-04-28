@@ -3,7 +3,7 @@ import { type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { createMockEntityConfig } from '../testing/entity-test-utils';
-import { useEntityUrlState } from './useEntityUrlState';
+import { useEntityUrlState } from '../../src/hooks/useEntityUrlState';
 
 function wrapper(initialEntries: string[] = ['/']) {
   return function Wrapper({ children }: { children: ReactNode }) {

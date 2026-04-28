@@ -8,7 +8,7 @@ function makeToken(payload: Record<string, unknown>): string {
 }
 
 describe('auth', () => {
-  let authModule: typeof import('./auth');
+  let authModule: typeof import('../src/auth');
 
   const originalLocation = window.location;
 
@@ -24,7 +24,7 @@ describe('auth', () => {
       value: { href: '/', assign: vi.fn() },
     });
 
-    authModule = await import('./auth');
+    authModule = await import('../src/auth');
   });
 
   afterEach(() => {
@@ -354,7 +354,7 @@ describe('auth', () => {
 
       // Re-import to get fresh module that reads from localStorage
       vi.resetModules();
-      const freshAuth = await import('./auth');
+      const freshAuth = await import('../src/auth');
       freshAuth.initAuth();
       expect(freshAuth.getRoles()).toEqual([]);
     });
@@ -474,7 +474,7 @@ describe('auth', () => {
         }),
       );
       vi.resetModules();
-      const freshAuth = await import('./auth');
+      const freshAuth = await import('../src/auth');
       freshAuth.initAuth();
       expect(freshAuth.getUserInfo()).toEqual({ name: 'User' });
     });

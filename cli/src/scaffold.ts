@@ -19,6 +19,7 @@ import {
   saveBaselineRef,
   type GeneratorVars,
 } from "./baseline.js";
+import { applyFeatures } from "./features.js";
 
 export async function scaffold(
   opts: Options,
@@ -77,6 +78,20 @@ export async function scaffold(
       true,
     );
     spinner.stop("Scaffold complete.");
+
+    if (opts.features && Object.keys(opts.features).length > 0) {
+      const featSpinner = p.spinner();
+      featSpinner.start("Applying features");
+      await applyFeatures({
+        features: opts.features,
+        repoDir,
+        components: opts.components,
+        instances: opts.components.map((type) => ({ type, path: type })),
+        dest,
+        vars,
+      });
+      featSpinner.stop("Features applied.");
+    }
 
     if (opts.install) {
       await installDeps(dest, opts.components, pm);

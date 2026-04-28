@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ValidationError } from '../api';
-import type { Field } from '../types';
-import { useEntityForm } from './useEntityForm';
+import { ValidationError } from '../../src/api';
+import type { Field } from '../../src/types';
+import { useEntityForm } from '../../src/hooks/useEntityForm';
 
 const fields: Field[] = [
   { key: 'name', label: 'Name', type: 'text', required: true },

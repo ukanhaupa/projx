@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { MetaField } from '../types';
-import { buildMetaFieldMap, formatCellValue } from './formatters';
+import type { MetaField } from '../../src/types';
+import {
+  buildMetaFieldMap,
+  formatCellValue,
+} from '../../src/entities/formatters';
 
 describe('formatCellValue', () => {
   it('returns em dash for null', () => {

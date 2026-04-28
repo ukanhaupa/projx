@@ -1,7 +1,10 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ConfirmProvider, useConfirm } from './ConfirmDialog';
+import {
+  ConfirmProvider,
+  useConfirm,
+} from '../../src/components/ConfirmDialog';
 
 function TestHarness({ onResult }: { onResult: (v: boolean) => void }) {
   const confirm = useConfirm();

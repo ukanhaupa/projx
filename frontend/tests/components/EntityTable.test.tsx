@@ -1,18 +1,21 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UseEntityReturn } from '../hooks/useEntity';
+import type { UseEntityReturn } from '../../src/hooks/useEntity';
 import {
   createMockEntityConfig,
   renderWithProviders,
 } from '../testing/entity-test-utils';
-import type { EntityConfig } from '../types';
-import { EntityTable, type EntityTableProps } from './EntityTable';
+import type { EntityConfig } from '../../src/types';
+import {
+  EntityTable,
+  type EntityTableProps,
+} from '../../src/components/EntityTable';
 
-vi.mock('../entities', () => ({
+vi.mock('../../src/entities', () => ({
   getEntityMetaBySlug: vi.fn(() => undefined),
 }));
-vi.mock('../entities/formatters', () => ({
+vi.mock('../../src/entities/formatters', () => ({
   formatCellValue: vi.fn((v: unknown) => (v == null ? '\u2014' : String(v))),
 }));
 

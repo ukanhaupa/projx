@@ -2,16 +2,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as apiModule from '../api';
+import * as apiModule from '../../src/api';
 import {
   createMockEntityConfig,
   createMockListResponse,
   createMockRows,
 } from '../testing/entity-test-utils';
-import { useEntity } from './useEntity';
+import { useEntity } from '../../src/hooks/useEntity';
 
-vi.mock('../api', async () => {
-  const actual = await vi.importActual('../api');
+vi.mock('../../src/api', async () => {
+  const actual = await vi.importActual('../../src/api');
   return {
     ...actual,
     api: {

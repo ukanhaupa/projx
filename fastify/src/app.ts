@@ -12,6 +12,7 @@ import swaggerPlugin from './plugins/swagger.js';
 import { EntityRegistry, registerEntityRoutes } from './modules/_base/index.js';
 
 import './modules/audit-logs/index.js';
+// projx-anchor: imports
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -49,6 +50,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
   await app.register(authzPlugin);
+  // projx-anchor: plugins
 
   app.get(
     '/api/health',
