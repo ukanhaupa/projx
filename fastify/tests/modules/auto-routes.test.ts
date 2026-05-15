@@ -35,11 +35,13 @@ function makeMockPrisma() {
     $disconnect: vi.fn(),
     $queryRaw: vi.fn(),
     widget: {
-      findMany: vi.fn().mockImplementation(async () => Object.values(records)),
+      findMany: vi
+        .fn()
+        .mockImplementation(async () => Object.values(records).map((r) => ({ ...r }))),
       findUnique: vi
         .fn()
-        .mockImplementation(
-          async (args: { where: { id: string } }) => records[args.where.id] ?? null,
+        .mockImplementation(async (args: { where: { id: string } }) =>
+          records[args.where.id] ? { ...records[args.where.id] } : null,
         ),
       count: vi.fn().mockImplementation(async () => Object.keys(records).length),
       create: vi.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
@@ -242,6 +244,37 @@ describe('registerEntityRoutes', () => {
       });
       expect(res.statusCode).toBe(201);
       expect(res.json().name).toBe('New Widget');
+    });
+
+    it('POST / runs beforeCreate before persisting the record', async () => {
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          columnNames: ['id', 'name', 'invite_code', 'created_at', 'updated_at'],
+          schema: Type.Object({
+            id: Type.String(),
+            name: Type.String(),
+            invite_code: Type.String(),
+            created_at: Type.String(),
+            updated_at: Type.String(),
+          }),
+          beforeCreate: (_request, data) => {
+            data.invite_code = 'INVITE123';
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/widgets',
+        headers,
+        payload: { name: 'Generated Widget' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().invite_code).toBe('INVITE123');
     });
 
     it('PATCH /:id updates a record', async () => {
@@ -511,6 +544,128 @@ describe('registerEntityRoutes', () => {
         headers,
       });
       expect(res.statusCode).toBe(200);
+    });
+  });
+
+  describe('lifecycle hooks', () => {
+    it('POST / runs afterCreate after the record is persisted', async () => {
+      const calls: Array<{ kind: string; payload: unknown }> = [];
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          afterCreate: (_request, record) => {
+            calls.push({ kind: 'afterCreate', payload: record });
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/widgets',
+        headers,
+        payload: { name: 'AfterHook' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].kind).toBe('afterCreate');
+      expect((calls[0].payload as { name: string }).name).toBe('AfterHook');
+    });
+
+    it('POST / succeeds even when afterCreate throws (best-effort)', async () => {
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          afterCreate: () => {
+            throw new Error('after-create boom');
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/widgets',
+        headers,
+        payload: { name: 'AfterThrows' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().name).toBe('AfterThrows');
+    });
+
+    it('PATCH /:id runs beforeUpdate and short-circuits when reply is sent', async () => {
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          beforeUpdate: (_request, reply, data) => {
+            if ((data as { name?: string }).name === 'BLOCKED') {
+              reply.status(409).send({ detail: 'name is blocked', request_id: 'r' });
+            }
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const created = await prisma.widget.create({ data: { name: 'Original' } });
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/widgets/${created.id}`,
+        headers,
+        payload: { name: 'BLOCKED' },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(prisma.widget.update).not.toHaveBeenCalled();
+    });
+
+    it('PATCH /:id runs afterUpdate with the before and after records', async () => {
+      const calls: Array<{ before: unknown; after: unknown }> = [];
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          afterUpdate: (_request, before, after) => {
+            calls.push({ before, after });
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const created = await prisma.widget.create({ data: { name: 'Before' } });
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/widgets/${created.id}`,
+        headers,
+        payload: { name: 'After' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(calls).toHaveLength(1);
+      expect((calls[0].before as { name: string }).name).toBe('Before');
+      expect((calls[0].after as { name: string }).name).toBe('After');
+    });
+
+    it('DELETE /:id runs beforeDelete and can block via thrown error', async () => {
+      const result = await buildRouteTestApp(
+        makeEntityConfig({
+          beforeDelete: (_request, recordId) => {
+            if (recordId) throw new Error('delete forbidden');
+          },
+        }),
+      );
+      app = result.app;
+      prisma = result.prisma;
+      headers = superuserHeaders(app);
+
+      const created = await prisma.widget.create({ data: { name: 'KeepMe' } });
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/widgets/${created.id}`,
+        headers,
+      });
+      expect(res.statusCode).toBe(500);
+      expect(prisma.widget.delete).not.toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,7 @@
 import { existsSync, writeFileSync, unlinkSync } from "node:fs";
 import {
   chmod,
+  mkdtemp,
   mkdir,
   writeFile,
   rm,
@@ -29,7 +30,6 @@ import {
 } from "./utils.js";
 import {
   generateDockerCompose,
-  generateDockerComposeDev,
   generateCiYml,
   generatePreCommit,
   generateReadme,
@@ -94,6 +94,9 @@ async function writeManagedProjx(
   const pmObj = vars.pm as { name?: string } | undefined;
   if (pmObj?.name && !merged.packageManager) {
     merged.packageManager = pmObj.name;
+  }
+  if (typeof vars.orm === "string" && !merged.orm) {
+    merged.orm = vars.orm;
   }
   if (applyDefaults && !merged.defaultsApplied) {
     const userSkip = Array.isArray(merged.skip)
@@ -473,7 +476,9 @@ export async function writeTemplateToDir(
   }
 
   const hasBackend =
-    components.includes("fastapi") || components.includes("fastify");
+    components.includes("fastapi") ||
+    components.includes("fastify") ||
+    components.includes("express");
 
   const userSkip = rootSkip ?? [];
   const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];
@@ -488,11 +493,6 @@ export async function writeTemplateToDir(
       await writeFile(
         join(dest, "docker-compose.yml"),
         await generateDockerCompose(vars),
-      );
-    if (shouldWrite("docker-compose.dev.yml"))
-      await writeFile(
-        join(dest, "docker-compose.dev.yml"),
-        await generateDockerComposeDev(vars),
       );
   }
 
@@ -599,6 +599,7 @@ async function writeOneInstance(
     [type]: targetDir,
   };
   await renderEjsInDir(outDir, { ...vars, paths: instancePaths });
+  await applyOrmProviderToInstance(outDir, type, vars);
 
   await upsertComponentMarker(
     join(dest, targetDir),
@@ -613,6 +614,582 @@ async function writeOneInstance(
     nameSnake,
     vars.nameOverrides,
   );
+}
+
+async function applyOrmProviderToInstance(
+  dir: string,
+  component: Component,
+  vars: GeneratorVars,
+): Promise<void> {
+  if (vars.orm !== "drizzle") return;
+  if (component === "fastify") {
+    await applyDrizzleFastify(dir, vars);
+  } else if (component === "express") {
+    await applyDrizzleExpress(dir, vars);
+  }
+}
+
+async function readJsonObject(path: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path, "utf-8")) as Record<string, unknown>;
+}
+
+async function writeJsonObject(
+  path: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await writeFile(path, JSON.stringify(data, null, 2) + "\n");
+}
+
+function retargetPackageForDrizzle(pkg: Record<string, unknown>): void {
+  if (typeof pkg.description === "string") {
+    pkg.description = pkg.description.replace(/Prisma/g, "Drizzle");
+  }
+  const scripts = (pkg.scripts ?? {}) as Record<string, string>;
+  for (const key of Object.keys(scripts)) {
+    if (key.startsWith("prisma:")) delete scripts[key];
+  }
+  scripts["db:generate"] = "drizzle-kit generate";
+  scripts["db:migrate"] = "drizzle-kit migrate";
+  scripts["db:push"] = "drizzle-kit push";
+  pkg.scripts = scripts;
+
+  const dependencies = (pkg.dependencies ?? {}) as Record<string, string>;
+  delete dependencies["@prisma/client"];
+  dependencies["drizzle-orm"] = "^0.44.5";
+  dependencies.pg = "^8.16.3";
+  pkg.dependencies = dependencies;
+
+  const devDependencies = (pkg.devDependencies ?? {}) as Record<string, string>;
+  delete devDependencies.prisma;
+  devDependencies["@types/pg"] = "^8.15.5";
+  devDependencies["drizzle-kit"] = "^0.31.4";
+  pkg.devDependencies = devDependencies;
+}
+
+async function applyDrizzleFastify(
+  dir: string,
+  vars: GeneratorVars,
+): Promise<void> {
+  await rm(join(dir, "prisma"), { recursive: true, force: true });
+  await rm(join(dir, "src/plugins/prisma.ts"), { force: true });
+  await rm(join(dir, "src/lib/service-config.ts"), { force: true });
+  await rm(join(dir, "src/modules/_base"), { recursive: true, force: true });
+  await rm(join(dir, "src/modules/audit-logs"), {
+    recursive: true,
+    force: true,
+  });
+  await rm(join(dir, "tests/modules/audit-logs.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/audit-middleware.test.ts"), {
+    force: true,
+  });
+  await rm(join(dir, "tests/modules/auto-routes.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/entity-validation.test.ts"), {
+    force: true,
+  });
+  await rm(join(dir, "tests/modules/expand.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/field-privacy.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/meta.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/query-engine.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/repository.test.ts"), { force: true });
+  await rm(join(dir, "tests/modules/service.test.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/crud-test-base.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/crud-test-base.test.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/migration-checksum.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/migration-checksum.test.ts"), {
+    force: true,
+  });
+
+  const pkgPath = join(dir, "package.json");
+  const pkg = await readJsonObject(pkgPath);
+  retargetPackageForDrizzle(pkg);
+  await writeJsonObject(pkgPath, pkg);
+
+  await mkdir(join(dir, "src/db"), { recursive: true });
+  await writeFile(join(dir, "src/db/client.ts"), drizzleClientSource());
+  await writeFile(join(dir, "src/db/schema.ts"), drizzleSchemaSource());
+  await writeFile(join(dir, "drizzle.config.ts"), drizzleConfigSource());
+  await writeFile(join(dir, "src/app.ts"), drizzleFastifyAppSource());
+  await writeDrizzleFastifyTests(dir);
+  await writeFile(join(dir, "Dockerfile"), drizzleNodeDockerfileSource(vars));
+}
+
+async function applyDrizzleExpress(
+  dir: string,
+  vars: GeneratorVars,
+): Promise<void> {
+  await rm(join(dir, "prisma"), { recursive: true, force: true });
+  await rm(join(dir, "src/prisma.ts"), { force: true });
+  await rm(join(dir, "src/modules/_base"), { recursive: true, force: true });
+  await rm(join(dir, "src/modules/audit-logs"), {
+    recursive: true,
+    force: true,
+  });
+  await rm(join(dir, "tests/modules/auto-routes.test.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/crud-test-base.ts"), { force: true });
+  await rm(join(dir, "tests/helpers/migration-checksum.ts"), { force: true });
+  await rm(join(dir, "tests/global-setup.ts"), { force: true });
+
+  const pkgPath = join(dir, "package.json");
+  const pkg = await readJsonObject(pkgPath);
+  retargetPackageForDrizzle(pkg);
+  await writeJsonObject(pkgPath, pkg);
+
+  await mkdir(join(dir, "src/db"), { recursive: true });
+  await writeFile(join(dir, "src/db/client.ts"), drizzleClientSource());
+  await writeFile(join(dir, "src/db/schema.ts"), drizzleSchemaSource());
+  await writeFile(join(dir, "drizzle.config.ts"), drizzleConfigSource());
+  await writeFile(join(dir, "src/app.ts"), drizzleExpressAppSource());
+  await writeFile(join(dir, "src/server.ts"), drizzleExpressServerSource());
+  await writeDrizzleExpressTests(dir);
+  await writeFile(join(dir, "Dockerfile"), drizzleNodeDockerfileSource(vars));
+}
+
+async function writeDrizzleFastifyTests(dir: string): Promise<void> {
+  await rm(join(dir, "tests"), { recursive: true, force: true });
+  await mkdir(join(dir, "tests/modules"), { recursive: true });
+  await writeFile(
+    join(dir, "tests/modules/app.test.ts"),
+    `import { describe, expect, it, afterEach } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { buildApp } from '../../src/app.js';
+
+describe('Fastify Drizzle app', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    await app?.close();
+    app = undefined;
+  });
+
+  it('exposes empty generated metadata until entities are added', async () => {
+    app = await buildApp({ logger: false });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/_meta' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ entities: [], orm: 'drizzle' });
+  });
+});
+`,
+  );
+  await writeFile(
+    join(dir, "vitest.config.ts"),
+    `import { defineConfig } from 'vitest/config';
+import { config } from 'dotenv';
+
+config({ path: '.env.test' });
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/server.ts', 'src/app.ts', 'src/config.ts', 'src/plugins/swagger.ts'],
+      thresholds: {
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      },
+    },
+    pool: 'forks',
+    testTimeout: 15000,
+    hookTimeout: 15000,
+  },
+});
+`,
+  );
+}
+
+async function writeDrizzleExpressTests(dir: string): Promise<void> {
+  await rm(join(dir, "tests"), { recursive: true, force: true });
+  await mkdir(join(dir, "tests"), { recursive: true });
+  await writeFile(
+    join(dir, "tests/app.test.ts"),
+    `import request from 'supertest';
+import { describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app.js';
+
+describe('Express Drizzle app', () => {
+  it('exposes empty generated metadata until entities are added', async () => {
+    const res = await request(buildApp()).get('/api/v1/_meta');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ entities: [], orm: 'drizzle' });
+  });
+
+  it('returns structured errors with request id', async () => {
+    const res = await request(buildApp()).get('/missing').set('x-request-id', 'req-missing');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatchObject({
+      code: 'not_found',
+      request_id: 'req-missing',
+    });
+  });
+});
+`,
+  );
+  await writeFile(
+    join(dir, "vitest.config.ts"),
+    `import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/server.ts', 'src/config.ts'],
+      thresholds: {
+        statements: 80,
+        branches: 70,
+        functions: 80,
+        lines: 80,
+      },
+    },
+  },
+});
+`,
+  );
+}
+
+function drizzleClientSource(): string {
+  return `import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import { config } from '../config.js';
+import * as schema from './schema.js';
+
+export const pool = new Pool({ connectionString: config.DATABASE_URL });
+export const db = drizzle(pool, { schema });
+
+export async function checkDatabase(): Promise<void> {
+  await pool.query('SELECT 1');
+}
+
+export async function closeDatabase(): Promise<void> {
+  await pool.end();
+}
+
+export type DbClient = typeof db;
+`;
+}
+
+function drizzleSchemaSource(): string {
+  return `import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tableName: text('table_name').notNull(),
+  recordId: text('record_id').notNull(),
+  action: text('action').notNull(),
+  oldValue: jsonb('old_value'),
+  newValue: jsonb('new_value'),
+  performedBy: text('performed_by').notNull().default('system'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+`;
+}
+
+function drizzleConfigSource(): string {
+  return `import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  schema: './src/db/schema.ts',
+  out: './drizzle',
+  dialect: 'postgresql',
+  dbCredentials: {
+    url: process.env.DATABASE_URL ?? '',
+  },
+  strict: true,
+  verbose: true,
+});
+`;
+}
+
+function drizzleFastifyAppSource(): string {
+  return `import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import { config } from './config.js';
+import errorHandler from './plugins/error-handler.js';
+import authPlugin from './plugins/auth.js';
+import authzPlugin from './plugins/authz.js';
+import requestIdPlugin from './plugins/request-id.js';
+import swaggerPlugin from './plugins/swagger.js';
+import { checkDatabase, closeDatabase, db } from './db/client.js';
+
+export interface BuildAppOptions {
+  logger?: boolean | object;
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: options.logger ?? {
+      level: config.LOG_LEVEL,
+      transport:
+        process.env.NODE_ENV !== 'production'
+          ? {
+              target: 'pino-pretty',
+              options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+            }
+          : undefined,
+    },
+    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+  });
+
+  app.decorate('db', db);
+  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(cors, {
+    origin: config.CORS_ALLOW_ORIGINS.split(',').map((o) => o.trim()),
+    credentials: true,
+  });
+  await app.register(rateLimit, {
+    max: config.RATE_LIMIT_MAX,
+    timeWindow: config.RATE_LIMIT_WINDOW,
+    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
+  });
+
+  await app.register(swaggerPlugin);
+  await app.register(errorHandler);
+  await app.register(requestIdPlugin);
+  await app.register(authPlugin);
+  await app.register(authzPlugin);
+
+  app.get(
+    '/api/health',
+    {
+      config: { public: true },
+      schema: {
+        tags: ['health'],
+      },
+    },
+    async (_request, reply) => {
+      const checks: Record<string, string> = { app: 'ok' };
+      try {
+        await checkDatabase();
+        checks.database = 'ok';
+      } catch (e) {
+        checks.database = \`error: \${e instanceof Error ? e.message : String(e)}\`;
+        return reply.status(503).send({ status: 'unhealthy', checks });
+      }
+      return reply.send({ status: 'healthy', checks });
+    },
+  );
+
+  app.get(
+    '/api/v1/_meta',
+    {
+      config: { public: true },
+      schema: { tags: ['meta'] },
+    },
+    async () => ({ entities: [], orm: 'drizzle' }),
+  );
+
+  app.addHook('onClose', async () => {
+    await closeDatabase();
+  });
+
+  return app;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    db: typeof db;
+  }
+}
+`;
+}
+
+function drizzleExpressAppSource(): string {
+  return `import crypto from 'node:crypto';
+import compression from 'compression';
+import cors from 'cors';
+import express, { type RequestHandler } from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import pinoHttp from 'pino-http';
+import { allowedOrigins, config } from './config.js';
+import { ApiError, errorHandler, notFoundHandler } from './errors.js';
+import { checkDatabase, db } from './db/client.js';
+
+const requestId: RequestHandler = (req, res, next) => {
+  const incoming = req.headers['x-request-id'];
+  const value = typeof incoming === 'string' && incoming.trim() ? incoming : crypto.randomUUID();
+  res.locals.requestId = value;
+  res.setHeader('x-request-id', value);
+  next();
+};
+
+function corsOrigin(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void,
+): void {
+  const origins = allowedOrigins();
+  if (!origin || origins.includes('*') || origins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(new ApiError(403, 'Origin not allowed', 'origin_not_allowed'));
+}
+
+export function buildApp(): express.Express {
+  const app = express();
+
+  app.disable('x-powered-by');
+  app.locals.db = db;
+  app.use(requestId);
+  app.use(
+    pinoHttp({
+      level: config.LOG_LEVEL,
+      enabled: config.NODE_ENV !== 'test',
+      quietReqLogger: config.NODE_ENV === 'test',
+    }),
+  );
+  app.use(helmet());
+  app.use(cors({ origin: corsOrigin, credentials: true }));
+  app.use(compression());
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+  app.use(
+    rateLimit({
+      windowMs: config.RATE_LIMIT_WINDOW_MS,
+      limit: config.RATE_LIMIT_MAX,
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+    }),
+  );
+
+  app.get('/api/health', async (_req, res) => {
+    const checks: Record<string, string> = { app: 'ok' };
+    try {
+      await checkDatabase();
+      checks.database = 'ok';
+    } catch (e) {
+      checks.database = \`error: \${e instanceof Error ? e.message : String(e)}\`;
+      res.status(503).json({ status: 'unhealthy', checks });
+      return;
+    }
+    res.json({ status: 'healthy', checks });
+  });
+
+  app.get('/api/v1/_meta', (_req, res) => {
+    res.json({ entities: [], orm: 'drizzle' });
+  });
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+}
+`;
+}
+
+function drizzleExpressServerSource(): string {
+  return `import { createServer } from 'node:http';
+import { buildApp } from './app.js';
+import { config } from './config.js';
+import { closeDatabase } from './db/client.js';
+
+const app = buildApp();
+const server = createServer(app);
+
+server.listen(config.PORT, config.HOST, () => {
+  console.log(\`Express API listening on http://\${config.HOST}:\${config.PORT}\`);
+});
+
+function shutdown(signal: string): void {
+  console.log(\`\${signal} received, closing HTTP server\`);
+  server.close((err) => {
+    closeDatabase()
+      .catch((closeErr: unknown) => {
+        console.error(closeErr);
+      })
+      .finally(() => {
+        if (err) {
+          console.error(err);
+          process.exit(1);
+        }
+        process.exit(0);
+      });
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+`;
+}
+
+function drizzleNodeDockerfileSource(vars: GeneratorVars): string {
+  const pm = vars.pm as {
+    name?: string;
+    ci?: string;
+    exec?: string;
+    run?: string;
+    lockfile?: string;
+  };
+  const pmName = pm.name ?? "npm";
+  const lockfile = pm.lockfile ?? "package-lock.json";
+  const install = pm.ci ?? "npm ci";
+  const exec = pm.exec ?? "npx";
+  const run = pm.run ?? "npm run";
+  const setup =
+    pmName === "pnpm"
+      ? `ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+`
+      : pmName === "yarn"
+        ? "RUN corepack enable\n"
+        : pmName === "bun"
+          ? "RUN npm install -g bun\n"
+          : "";
+  return `FROM node:22-bookworm-slim AS base
+
+RUN apt-get update \\
+    && apt-get install -y --no-install-recommends ca-certificates \\
+    && rm -rf /var/lib/apt/lists/*
+
+${setup}\
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json ${lockfile} ./
+RUN ${install}
+
+FROM base AS build
+ENV NODE_OPTIONS="--max-old-space-size=768"
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json drizzle.config.ts ./
+COPY src ./src
+RUN ${run} build
+
+FROM build AS migrate
+CMD ["sh", "-c", "${exec} drizzle-kit push --force"]
+
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN npm install -g pm2@5.4.3
+RUN chown -R node /app
+USER node
+
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node package.json ecosystem.config.cjs* ./
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \\
+    CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+
+CMD ["sh", "-c", "if [ -f ecosystem.config.cjs ]; then pm2-runtime ecosystem.config.cjs; else node dist/server.js; fi"]
+`;
 }
 
 async function substituteNamesForInstance(
@@ -640,6 +1217,15 @@ async function substituteNamesForInstance(
     await replaceInFile(
       join(dest, `${path}/package.json`),
       "projx-fastify",
+      target,
+    );
+  } else if (type === "express") {
+    const target = isCanonical
+      ? (overrides?.express ?? `${name}-express`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/package.json`),
+      "projx-express",
       target,
     );
   } else if (type === "frontend") {
@@ -690,7 +1276,7 @@ export async function detectPackageNameOverrides(
     const name = await readTomlProjectName(file);
     if (name) overrides.fastapi = name;
   }
-  for (const c of ["fastify", "frontend", "e2e"] as const) {
+  for (const c of ["fastify", "express", "frontend", "e2e"] as const) {
     if (!components.includes(c)) continue;
     const file = join(cwd, componentPaths[c], "package.json");
     const name = await readJsonName(file);
@@ -872,8 +1458,7 @@ export async function applyTemplate(
     // --- Tier 2: Per-file 3-way merge using baseline ref ---
     const baselineRef = getBaselineRef(cwd);
     if (baselineRef) {
-      const tmpTemplate = join(tmpdir(), `projx-tpl-${Date.now()}`);
-      await mkdir(tmpTemplate, { recursive: true });
+      const tmpTemplate = await mkdtemp(join(tmpdir(), "projx-tpl-"));
       await writeTemplateToDir(
         tmpTemplate,
         repoDir,

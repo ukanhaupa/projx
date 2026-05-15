@@ -59,6 +59,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       schema: {
         tags: ['health'],
       },
+      logLevel: 'debug',
     },
     async (_request, reply) => {
       const checks: Record<string, string> = { app: 'ok' };
@@ -76,6 +77,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(
     async (instance) => {
       const entities = EntityRegistry.getAll();
+      const skipped = EntityRegistry.getSkipped();
+
+      if (skipped.length > 0) {
+        app.log.warn({ entities: skipped }, 'EntityRegistry skipped auto-route registration');
+      }
 
       for (const entityConfig of entities) {
         const routeRegistrar = entityConfig.customRoutes ?? registerEntityRoutes;

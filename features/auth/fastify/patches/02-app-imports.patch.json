@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/app.ts",
+  "anchor": "// projx-anchor: imports",
+  "insert": "import { authRoutes, initMailer, startVerificationJobs } from './modules/auth/index.js';\n"
+}

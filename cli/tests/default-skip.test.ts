@@ -41,7 +41,6 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     const config = await readProjxConfig(dest);
     expect(config.defaultsApplied).toBe(true);
     expect(config.skip).toContain("docker-compose.yml");
-    expect(config.skip).toContain("docker-compose.dev.yml");
     expect(config.skip).toContain("README.md");
     expect(config.skip).toContain(".githooks/pre-commit");
     expect(config.skip).toContain(".github/workflows/ci.yml");
@@ -144,7 +143,7 @@ describe("default-skip — scenario A: fresh scaffold", () => {
 
     const { existsSync } = await import("node:fs");
     expect(existsSync(join(dest, "docker-compose.yml"))).toBe(true);
-    expect(existsSync(join(dest, "docker-compose.dev.yml"))).toBe(true);
+    expect(existsSync(join(dest, "docker-compose.dev.yml"))).toBe(false);
     expect(existsSync(join(dest, "README.md"))).toBe(true);
     expect(existsSync(join(dest, "fastify/package.json"))).toBe(true);
   });
@@ -190,9 +189,9 @@ describe("default-skip — scenario A: fresh scaffold", () => {
       REPO_DIR,
     );
 
-    const composePath = join(dest, "docker-compose.dev.yml");
+    const composePath = join(dest, "docker-compose.yml");
     let compose = await readFile(composePath, "utf-8");
-    compose = compose.replace("'5173:5173'", "'3000:3000'");
+    compose = compose.replace('"80:80"', '"8080:80"');
     compose = compose.replace("app-network", "myapp-network");
     await writeFile(composePath, compose);
     execSync(
@@ -203,7 +202,7 @@ describe("default-skip — scenario A: fresh scaffold", () => {
     await update(dest, REPO_DIR);
 
     const after = await readFile(composePath, "utf-8");
-    expect(after).toContain("'3000:3000'");
+    expect(after).toContain('"8080:80"');
     expect(after).toContain("myapp-network");
   });
 
@@ -553,7 +552,7 @@ describe("default-skip — scenario G: pinned-update notification", () => {
       REPO_DIR,
     );
 
-    const composePath = join(dest, "docker-compose.dev.yml");
+    const composePath = join(dest, "docker-compose.yml");
     let compose = await readFile(composePath, "utf-8");
     compose = compose.replace("app-network", "user-renamed-network");
     await writeFile(composePath, compose);
@@ -579,6 +578,6 @@ describe("default-skip — scenario G: pinned-update notification", () => {
       Array.isArray(config.skip) ? (config.skip as string[]) : [],
     );
 
-    expect(updates).toContain("docker-compose.dev.yml");
+    expect(updates).toContain("docker-compose.yml");
   });
 });

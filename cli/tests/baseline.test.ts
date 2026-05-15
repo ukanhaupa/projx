@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import { matchesSkip, type GeneratorVars } from "../src/baseline.js";
 import { scaffold } from "../src/scaffold.js";
 import { update } from "../src/update.js";
-import type { ComponentPaths } from "../src/utils.js";
+import type { Component, ComponentPaths } from "../src/utils.js";
 
 const REPO_DIR = join(import.meta.dirname, "../..");
 
@@ -578,6 +578,7 @@ describe("tier 3: direct copy fallback", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -585,7 +586,7 @@ describe("tier 3: direct copy fallback", () => {
     };
     const vars: GeneratorVars = {
       projectName: "t3-app",
-      components: ["fastify"] as any,
+      components: ["fastify"] as Component[],
       paths,
     };
     const { writeTemplateToDir } = await import("../src/baseline.js");
@@ -613,6 +614,7 @@ describe("tier 3: direct copy fallback", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -620,7 +622,7 @@ describe("tier 3: direct copy fallback", () => {
     };
     const vars: GeneratorVars = {
       projectName: "t3-app",
-      components: ["fastify"] as any,
+      components: ["fastify"] as Component[],
       paths,
     };
     const { writeTemplateToDir } = await import("../src/baseline.js");
@@ -646,6 +648,7 @@ describe("tier 3: direct copy fallback", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -653,7 +656,7 @@ describe("tier 3: direct copy fallback", () => {
     };
     const vars: GeneratorVars = {
       projectName: "t3-app",
-      components: ["fastify"] as any,
+      components: ["fastify"] as Component[],
       paths,
     };
     const { writeTemplateToDir } = await import("../src/baseline.js");
@@ -828,6 +831,7 @@ describe("writeTemplateToDir — extraInstances", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -835,7 +839,7 @@ describe("writeTemplateToDir — extraInstances", () => {
     };
     const vars: GeneratorVars = {
       projectName: "multi-app",
-      components: ["fastify"] as any,
+      components: ["fastify"] as Component[],
       paths,
     };
     const { writeTemplateToDir } = await import("../src/baseline.js");

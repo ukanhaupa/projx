@@ -46,13 +46,13 @@ async function getScopeFilters(
   entityConfig: EntityConfig,
 ): Promise<Record<string, unknown> | null> {
   const user = request.authUser as (AuthUser & Record<string, unknown>) | undefined;
-  return computeScopeFilters(user, entityConfig.tableName, new Set(entityConfig.columnNames));
+  return computeScopeFilters(user, entityConfig.tableName, new Set(entityConfig.columnNames ?? []));
 }
 
 export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: EntityConfig): void {
   const hiddenFields = ensureEffectiveHiddenFields(entityConfig);
   const repo = new BaseRepository(fastify.prisma, entityConfig.prismaModel, {
-    columnNames: entityConfig.columnNames,
+    columnNames: entityConfig.columnNames ?? [],
     searchableFields: entityConfig.searchableFields,
     softDelete: entityConfig.softDelete,
     hiddenFields,
@@ -132,7 +132,18 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
       const data = request.body as Record<string, unknown>;
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) Object.assign(data, scopeFilters);
+      await entityConfig.beforeCreate?.(request, data);
       const record = await service.create(data);
+      if (entityConfig.afterCreate) {
+        try {
+          await entityConfig.afterCreate(request, record as Record<string, unknown>);
+        } catch (err) {
+          request.log.error(
+            { err, entity: entityConfig.name, record_id: (record as { id?: string }).id },
+            'afterCreate hook failed (record persisted; hook is best-effort)',
+          );
+        }
+      }
       return reply.status(201).send(record);
     },
   );
@@ -170,7 +181,24 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         const { data: accessible } = await service.list(query);
         if (!accessible.length) return reply.status(404).send({ detail: 'Not found' });
       }
+      if (entityConfig.beforeUpdate) {
+        await entityConfig.beforeUpdate(request, reply, data);
+        if (reply.sent) return;
+      }
+      const before = entityConfig.afterUpdate
+        ? ((await service.get(request.params.id)) as Record<string, unknown> | null)
+        : null;
       const record = await service.update(request.params.id, data);
+      if (entityConfig.afterUpdate && before) {
+        try {
+          await entityConfig.afterUpdate(request, before, record as Record<string, unknown>);
+        } catch (err) {
+          request.log.error(
+            { err, entity: entityConfig.name, record_id: request.params.id },
+            'afterUpdate hook failed (record persisted; hook is best-effort)',
+          );
+        }
+      }
       return reply.send(record);
     },
   );
@@ -199,6 +227,9 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         const { data: accessible } = await service.list(query);
         if (!accessible.length) return reply.status(404).send({ detail: 'Not found' });
       }
+      if (entityConfig.beforeDelete) {
+        await entityConfig.beforeDelete(request, request.params.id);
+      }
       await service.delete(request.params.id);
       return reply.status(204).send();
     },
@@ -225,6 +256,9 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) {
         for (const item of items) Object.assign(item, scopeFilters);
+      }
+      for (const item of items) {
+        await entityConfig.beforeCreate?.(request, item);
       }
       const result = await service.bulkCreate(items);
       return reply.status(201).send({ data: result, count: (result as { count: number }).count });

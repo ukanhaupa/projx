@@ -59,9 +59,8 @@ class DatabaseConfig:
             except TimeoutError:
                 await session.rollback()
                 await session.invalidate()
-                logger.error(
-                    "Session killed: exceeded %ds timeout. Investigate the slow query and optimise it.",
-                    timeout,
+                logger.exception(
+                    f"Session killed: exceeded {timeout}s timeout. Investigate the slow query and optimise it."
                 )
                 raise
             except Exception:

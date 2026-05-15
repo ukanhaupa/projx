@@ -1,0 +1,13 @@
+# Express Backend
+
+Express 5, TypeScript, Prisma, auto-entity CRUD, security middleware, structured errors, request IDs, health checks, Docker, and Vitest.
+
+```bash
+cp .env.example .env
+<%= pm.install %>
+<%= pm.prismaExec %> generate
+<%= pm.run %> dev
+```
+
+API health is available at `GET /api/health`.
+Entity metadata is available at `GET /api/v1/_meta`.

@@ -36,6 +36,7 @@ export async function scaffold(
     components: opts.components,
     paths,
     pm: pmCommands(pm),
+    orm: opts.orm ?? "prisma",
   };
   const isLocal = !!localRepo;
 
@@ -147,6 +148,17 @@ async function installDeps(
           } else {
             p.log.warn(
               `${pm} not found — run 'cd fastify && ${cmds.install}' manually.`,
+            );
+          }
+          break;
+        case "express":
+          if (hasCommand(pmBin)) {
+            spinner.start(`Installing Express dependencies (${cmds.install})`);
+            exec(cmds.install, join(dest, "express"));
+            spinner.stop("Express dependencies installed.");
+          } else {
+            p.log.warn(
+              `${pm} not found — run 'cd express && ${cmds.install}' manually.`,
             );
           }
           break;

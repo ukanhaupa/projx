@@ -170,7 +170,12 @@ describe("unpin", () => {
   it("unpin a component pattern that wasn't pinned is a no-op", async () => {
     dest = join(tmpdir(), `projx-unpin-comp-missing-${Date.now()}`);
     await scaffold(
-      { name: "miss-comp-app", components: ["fastify"], git: true, install: false },
+      {
+        name: "miss-comp-app",
+        components: ["fastify"],
+        git: true,
+        install: false,
+      },
       dest,
       REPO_DIR,
     );

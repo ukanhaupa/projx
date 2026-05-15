@@ -76,6 +76,155 @@ describe("gen entity", () => {
     expect(app).toContain("import './modules/invoice/index.js';");
   });
 
+  it("generates Express schemas, index, prisma model, and test", async () => {
+    dest = join(tmpdir(), `projx-gen-express-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["express"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string,amount:number,status:string");
+
+    const schemasPath = join(dest, "express/src/modules/invoice/schemas.ts");
+    expect(existsSync(schemasPath)).toBe(true);
+    const schemas = await readFile(schemasPath, "utf-8");
+    expect(schemas).toContain("InvoiceSchema");
+    expect(schemas).toContain("CreateInvoiceSchema");
+    expect(schemas).toContain("UpdateInvoiceSchema");
+    expect(schemas).toContain("z.object");
+
+    const indexPath = join(dest, "express/src/modules/invoice/index.ts");
+    expect(existsSync(indexPath)).toBe(true);
+    const index = await readFile(indexPath, "utf-8");
+    expect(index).toContain("EntityRegistry.register(");
+    expect(index).toContain("'invoices'");
+    expect(index).toContain("'/invoices'");
+
+    const prismaPath = join(dest, "express/prisma/schema.prisma");
+    const prisma = await readFile(prismaPath, "utf-8");
+    expect(prisma).toContain("model Invoice {");
+    expect(prisma).toContain('@@map("invoices")');
+
+    const appPath = join(dest, "express/src/app.ts");
+    const app = await readFile(appPath, "utf-8");
+    expect(app).toContain("import './modules/invoice/index.js';");
+
+    const testPath = join(dest, "express/tests/modules/invoice.test.ts");
+    expect(existsSync(testPath)).toBe(true);
+    const test = await readFile(testPath, "utf-8");
+    expect(test).toContain("describeCrudEntity({");
+    expect(test).toContain("createSchema: CreateInvoiceSchema,");
+  });
+
+  it("generates Drizzle table schema when a Node backend uses Drizzle", async () => {
+    dest = join(tmpdir(), `projx-gen-drizzle-${Date.now()}`);
+    await scaffold(
+      {
+        name: "gen-app",
+        components: ["express"],
+        git: true,
+        install: false,
+        orm: "drizzle",
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "invoice", "name:string:unique,amount:number,paid:boolean");
+
+    const schemaPath = join(dest, "express/src/db/schema.ts");
+    const schema = await readFile(schemaPath, "utf-8");
+    expect(schema).toContain("export const invoices = pgTable('invoices'");
+    expect(schema).toContain("name: text('name').notNull().unique()");
+    expect(schema).toContain("amount: integer('amount').notNull()");
+    expect(schema).toContain("paid: boolean('paid').notNull()");
+    expect(existsSync(join(dest, "express/src/modules/invoice"))).toBe(false);
+    expect(existsSync(join(dest, "express/prisma/schema.prisma"))).toBe(false);
+  });
+
+  it("generates beforeCreate hooks for unique generated Fastify fields omitted from create schema", async () => {
+    dest = join(tmpdir(), `projx-gen-fastify-generated-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["fastify"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      "household-invite",
+      "invite_code:string:unique:generated,email:string",
+    );
+
+    const schemas = await readFile(
+      join(dest, "fastify/src/modules/household-invite/schemas.ts"),
+      "utf-8",
+    );
+    expect(schemas).toContain("invite_code: Type.String()");
+    expect(schemas).not.toMatch(
+      /CreateHouseholdInviteSchema[\s\S]+invite_code/,
+    );
+
+    const index = await readFile(
+      join(dest, "fastify/src/modules/household-invite/index.ts"),
+      "utf-8",
+    );
+    expect(index).toContain("import { randomBytes } from 'node:crypto';");
+    expect(index).toContain("function generateHouseholdInviteInviteCode()");
+    expect(index).toContain("beforeCreate:");
+    expect(index).toContain(
+      "data.invite_code = generateHouseholdInviteInviteCode();",
+    );
+
+    const prisma = await readFile(
+      join(dest, "fastify/prisma/schema.prisma"),
+      "utf-8",
+    );
+    expect(prisma).toContain("invite_code String   @db.VarChar(255) @unique");
+  });
+
+  it("generates beforeCreate hooks for unique generated Express fields omitted from create schema", async () => {
+    dest = join(tmpdir(), `projx-gen-express-generated-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["express"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      "household-invite",
+      "invite_code:string:unique:generated,email:string",
+    );
+
+    const schemas = await readFile(
+      join(dest, "express/src/modules/household-invite/schemas.ts"),
+      "utf-8",
+    );
+    expect(schemas).toContain("invite_code: z.string()");
+    expect(schemas).not.toMatch(
+      /CreateHouseholdInviteSchema[\s\S]+invite_code/,
+    );
+
+    const index = await readFile(
+      join(dest, "express/src/modules/household-invite/index.ts"),
+      "utf-8",
+    );
+    expect(index).toContain("import { randomBytes } from 'node:crypto';");
+    expect(index).toContain("function generateHouseholdInviteInviteCode()");
+    expect(index).toContain("beforeCreate:");
+    expect(index).toContain(
+      "data.invite_code = generateHouseholdInviteInviteCode();",
+    );
+
+    const prisma = await readFile(
+      join(dest, "express/prisma/schema.prisma"),
+      "utf-8",
+    );
+    expect(prisma).toContain("invite_code String   @db.VarChar(255) @unique");
+  });
+
   it("generates in primary backend only when both present", async () => {
     dest = join(tmpdir(), `projx-gen-both-${Date.now()}`);
     await scaffold(
@@ -424,6 +573,21 @@ describe("gen entity", () => {
     );
   });
 
+  it("defaults to Express when it is the only backend", async () => {
+    dest = join(tmpdir(), `projx-gen-single-express-${Date.now()}`);
+    await scaffold(
+      { name: "gen-app", components: ["express"], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, "task", "title:string");
+
+    expect(existsSync(join(dest, "express/src/modules/task/schemas.ts"))).toBe(
+      true,
+    );
+  });
+
   it("--ai flag generates in fastapi even when both exist", async () => {
     dest = join(tmpdir(), `projx-gen-ai-flag-${Date.now()}`);
     await scaffold(
@@ -566,9 +730,11 @@ describe("gen entity", () => {
     expect(content).toContain("entityName: 'Invoice',");
     expect(content).toContain("basePath: '/api/v1/invoices',");
     expect(content).toContain("prismaModel: 'Invoice',");
-    expect(content).toContain("name: 'sample text',");
-    expect(content).toContain("amount: 42,");
-    expect(content).toContain("active: true,");
+    expect(content).toContain(
+      "import { CreateInvoiceSchema } from '../../src/modules/invoice/schemas.js';",
+    );
+    expect(content).toContain("createSchema: CreateInvoiceSchema,");
+    expect(content).not.toContain("createPayload:");
     expect(content).toContain("updatePayload: {");
     expect(content).toContain("name: 'updated text',");
   });

@@ -1,4 +1,4 @@
-import { test, expect, fetchEntities } from './fixtures';
+import { test, expect, fetchEntities, allowPageErrors } from './fixtures';
 import { EntityListPage } from './pages/entity-list.page';
 import type { MetaEntity } from './fixtures';
 
@@ -12,7 +12,8 @@ test.describe('Error States and Edge Cases', () => {
   test.describe('API Error Handling', () => {
     test('shows error and retry button on server error', async ({
       authenticatedPage,
-    }) => {
+    }, testInfo) => {
+      allowPageErrors(testInfo, /response .*HTTP 500/);
       test.skip(entities.length === 0, 'No entities discovered');
       const entity = entities[0];
       const slug = entity.api_prefix.replace(/^\//, '');
@@ -29,7 +30,10 @@ test.describe('Error States and Edge Cases', () => {
       await expect(listPage.retryButton).toBeVisible();
     });
 
-    test('retry button refetches data', async ({ authenticatedPage }) => {
+    test('retry button refetches data', async ({
+      authenticatedPage,
+    }, testInfo) => {
+      allowPageErrors(testInfo, /response .*HTTP 500/);
       test.skip(entities.length === 0, 'No entities discovered');
       const entity = entities[0];
       const slug = entity.api_prefix.replace(/^\//, '');

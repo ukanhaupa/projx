@@ -1,19 +1,92 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { TObject, TProperties } from '@sinclair/typebox';
 import { buildTestApp } from './app.js';
 
 export interface CrudTestConfig {
   entityName: string;
   basePath: string;
-  createPayload: Record<string, unknown>;
+  createPayload?: Record<string, unknown>;
+  createSchema?: TObject<TProperties>;
+  payloadOverrides?: Record<string, unknown>;
   updatePayload: Record<string, unknown>;
   uniqueField?: string;
+  uniqueFields?: string[];
   prismaModel: string;
+}
+
+type SchemaLike = {
+  type?: string;
+  format?: string;
+  properties?: Record<string, SchemaLike>;
+  anyOf?: SchemaLike[];
+  items?: SchemaLike;
+  default?: unknown;
+};
+
+function defaultValueFor(key: string, schema: SchemaLike): unknown {
+  if (schema.default !== undefined) return schema.default;
+  const union = schema.anyOf?.find((item) => item.type !== 'null');
+  if (union) return defaultValueFor(key, union);
+
+  switch (schema.type) {
+    case 'string':
+      if (schema.format === 'uuid') return crypto.randomUUID();
+      if (schema.format === 'date-time') return '2030-01-01T00:00:00.000Z';
+      if (schema.format === 'date') return '2030-01-01';
+      return `test-${key.replaceAll('_', '-')}`;
+    case 'integer':
+    case 'number':
+      return 1;
+    case 'boolean':
+      return false;
+    case 'array':
+      return [];
+    case 'object':
+      return {};
+    default:
+      return null;
+  }
+}
+
+export function buildCreatePayload(
+  createSchema: TObject<TProperties>,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const properties = (createSchema as unknown as { properties?: Record<string, SchemaLike> })
+    .properties;
+  if (!properties) return { ...overrides };
+
+  const payload: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(properties)) {
+    payload[key] = defaultValueFor(key, schema);
+  }
+  return { ...payload, ...overrides };
+}
+
+export function resolveUniqueFields(
+  config: Pick<CrudTestConfig, 'uniqueField' | 'uniqueFields'>,
+): string[] {
+  return [
+    ...new Set([
+      ...(config.uniqueField ? [config.uniqueField] : []),
+      ...(config.uniqueFields ?? []),
+    ]),
+  ];
 }
 
 export function describeCrudEntity(config: CrudTestConfig) {
   describe(config.entityName, () => {
     let app: FastifyInstance;
+    const createPayload =
+      config.createPayload ??
+      (config.createSchema
+        ? buildCreatePayload(config.createSchema, config.payloadOverrides)
+        : undefined);
+    if (!createPayload) {
+      throw new Error(`${config.entityName}: createPayload or createSchema is required`);
+    }
+    const uniqueFields = resolveUniqueFields(config);
 
     beforeEach(async () => {
       app = await buildTestApp();
@@ -41,12 +114,12 @@ export function describeCrudEntity(config: CrudTestConfig) {
       const res = await app.inject({
         method: 'POST',
         url: config.basePath,
-        payload: config.createPayload,
+        payload: createPayload,
       });
       expect(res.statusCode).toBe(201);
       const body = res.json();
       expect(body.id).toBeDefined();
-      for (const [key, value] of Object.entries(config.createPayload)) {
+      for (const [key, value] of Object.entries(createPayload)) {
         expect(body[key]).toBe(value);
       }
     });
@@ -55,7 +128,7 @@ export function describeCrudEntity(config: CrudTestConfig) {
       const createRes = await app.inject({
         method: 'POST',
         url: config.basePath,
-        payload: config.createPayload,
+        payload: createPayload,
       });
       const created = createRes.json();
 
@@ -80,7 +153,7 @@ export function describeCrudEntity(config: CrudTestConfig) {
       const createRes = await app.inject({
         method: 'POST',
         url: config.basePath,
-        payload: config.createPayload,
+        payload: createPayload,
       });
       const created = createRes.json();
 
@@ -108,7 +181,7 @@ export function describeCrudEntity(config: CrudTestConfig) {
       const createRes = await app.inject({
         method: 'POST',
         url: config.basePath,
-        payload: config.createPayload,
+        payload: createPayload,
       });
       const created = createRes.json();
 
@@ -140,9 +213,9 @@ export function describeCrudEntity(config: CrudTestConfig) {
           url: config.basePath,
           payload: {
             ...config.createPayload,
-            ...(config.uniqueField
-              ? { [config.uniqueField]: `${config.createPayload[config.uniqueField]}-${i}` }
-              : {}),
+            ...Object.fromEntries(
+              uniqueFields.map((field) => [field, `${createPayload[field]}-${i}`]),
+            ),
           },
         });
       }
@@ -162,7 +235,7 @@ export function describeCrudEntity(config: CrudTestConfig) {
       await app.inject({
         method: 'POST',
         url: config.basePath,
-        payload: config.createPayload,
+        payload: createPayload,
       });
 
       const res = await app.inject({
@@ -173,18 +246,28 @@ export function describeCrudEntity(config: CrudTestConfig) {
       expect(res.json().data.length).toBeGreaterThan(0);
     });
 
-    if (config.uniqueField) {
-      it(`POST ${config.basePath} duplicate returns 409`, async () => {
+    for (const uniqueField of uniqueFields) {
+      it(`POST ${config.basePath} duplicate ${uniqueField} returns 409`, async () => {
+        const firstPayload = { ...createPayload };
+        const secondPayload = {
+          ...createPayload,
+          ...Object.fromEntries(
+            uniqueFields
+              .filter((field) => field !== uniqueField)
+              .map((field) => [field, `${createPayload[field]}-duplicate`]),
+          ),
+        };
+
         await app.inject({
           method: 'POST',
           url: config.basePath,
-          payload: config.createPayload,
+          payload: firstPayload,
         });
 
         const res = await app.inject({
           method: 'POST',
           url: config.basePath,
-          payload: config.createPayload,
+          payload: secondPayload,
         });
         expect(res.statusCode).toBe(409);
         expect(res.json().detail).toBeDefined();

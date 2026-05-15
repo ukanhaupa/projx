@@ -178,5 +178,125 @@ describe('Entity Registration Validation', () => {
       const meta = EntityRegistry.getMeta();
       expect(meta.entities[0].bulk_operations).toBe(false);
     });
+
+    it('derives columnNames from Prisma DMMF when omitted', () => {
+      EntityRegistry.register({
+        ...validEntity,
+        name: 'ServiceConfig',
+        tableName: 'service_configs',
+        prismaModel: 'ServiceConfig',
+        apiPrefix: '/service-configs',
+        searchableFields: ['purpose'],
+        schema: Type.Object({
+          id: Type.String(),
+          purpose: Type.String(),
+          config: Type.String(),
+          is_active: Type.Boolean(),
+          created_at: Type.String(),
+          updated_at: Type.String(),
+        }),
+        createSchema: Type.Object({
+          purpose: Type.String(),
+          config: Type.String(),
+        }),
+        updateSchema: Type.Object({}),
+        columnNames: undefined,
+      });
+
+      expect(EntityRegistry.get('service_configs')?.columnNames).toEqual([
+        'id',
+        'purpose',
+        'config',
+        'is_active',
+        'created_at',
+        'updated_at',
+      ]);
+    });
+
+    it('derives field metadata from Prisma DMMF and applies overrides', () => {
+      EntityRegistry.register({
+        ...validEntity,
+        name: 'ServiceConfig',
+        tableName: 'service_configs',
+        prismaModel: 'ServiceConfig',
+        apiPrefix: '/service-configs',
+        searchableFields: ['purpose'],
+        schema: Type.Object({
+          id: Type.String(),
+          purpose: Type.String(),
+          config: Type.String(),
+          is_active: Type.Boolean(),
+          created_at: Type.String(),
+          updated_at: Type.String(),
+        }),
+        createSchema: Type.Object({
+          purpose: Type.String(),
+          config: Type.String(),
+        }),
+        updateSchema: Type.Object({}),
+        fields: undefined,
+        fieldOverrides: {
+          config: { label: 'Encrypted Config', field_type: 'textarea', filterable: false },
+        },
+      });
+
+      const fields = EntityRegistry.get('service_configs')?.fields ?? [];
+      expect(fields.map((field) => field.key)).toEqual([
+        'id',
+        'purpose',
+        'config',
+        'is_active',
+        'created_at',
+        'updated_at',
+      ]);
+      expect(fields.find((field) => field.key === 'id')?.is_primary_key).toBe(true);
+      expect(fields.find((field) => field.key === 'is_active')?.type).toBe('bool');
+      expect(fields.find((field) => field.key === 'config')?.label).toBe('Encrypted Config');
+      expect(fields.find((field) => field.key === 'config')?.filterable).toBe(false);
+    });
+
+    it('fails loud when a required Prisma field is neither accepted nor filled before create', () => {
+      expect(() =>
+        EntityRegistry.register({
+          ...validEntity,
+          name: 'ServiceConfig',
+          tableName: 'service_configs',
+          prismaModel: 'ServiceConfig',
+          apiPrefix: '/service-configs',
+          searchableFields: ['purpose'],
+          schema: Type.Object({
+            id: Type.String(),
+            purpose: Type.String(),
+            config: Type.String(),
+            is_active: Type.Boolean(),
+            created_at: Type.String(),
+            updated_at: Type.String(),
+          }),
+          createSchema: Type.Object({
+            config: Type.String(),
+          }),
+          updateSchema: Type.Object({}),
+        }),
+      ).toThrow('purpose');
+    });
+
+    it('records skipped auto-route entities instead of silently dropping them', () => {
+      EntityRegistry.register({
+        ...validEntity,
+        tableName: 'hidden_items',
+        private: true,
+      });
+      EntityRegistry.register({
+        ...validEntity,
+        tableName: 'internal_items',
+        skipAutoRoutes: true,
+      });
+
+      expect(EntityRegistry.getAll()).toHaveLength(0);
+      expect(EntityRegistry.getSkipped()).toEqual([
+        { name: 'Item', tableName: 'hidden_items', reason: 'private=true' },
+        { name: 'Item', tableName: 'internal_items', reason: 'skipAutoRoutes=true' },
+      ]);
+    });
   });
 });

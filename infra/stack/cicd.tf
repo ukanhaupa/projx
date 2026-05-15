@@ -59,6 +59,7 @@ data "aws_iam_policy_document" "codebuild_policy" {
       "ecr:BatchGetImage",
       "ecr:BatchCheckLayerAvailability",
       "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages",
       "ecr:GetDownloadUrlForLayer",
       "ecr:InitiateLayerUpload",
       "ecr:PutImage",
@@ -106,6 +107,20 @@ data "aws_iam_policy_document" "codebuild_policy" {
       ]
       resources = ["*"]
     }
+  }
+
+  statement {
+    sid    = "RdsDeploySnapshots"
+    effect = "Allow"
+    actions = [
+      "rds:CreateDBSnapshot",
+      "rds:AddTagsToResource",
+      "rds:DescribeDBSnapshots"
+    ]
+    resources = [
+      "arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:db:${aws_db_instance.shared.identifier}",
+      "arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:snapshot:${aws_db_instance.shared.identifier}-pre-deploy-*"
+    ]
   }
 
   statement {
@@ -442,6 +457,26 @@ resource "aws_codebuild_project" "backend" {
       name  = "COMPOSE_INSTANCE_TAG"
       value = "${local.name_prefix}-compose"
     }
+
+    environment_variable {
+      name  = "COMPOSE_KEEP_IMAGE_COUNT"
+      value = tostring(var.compose_keep_image_count)
+    }
+
+    environment_variable {
+      name  = "RDS_DB_INSTANCE_IDENTIFIER"
+      value = aws_db_instance.shared.identifier
+    }
+
+    environment_variable {
+      name  = "DEPLOY_HEALTH_URL"
+      value = var.backend_deploy_health_url
+    }
+
+    environment_variable {
+      name  = "SLACK_DEPLOY_WEBHOOK"
+      value = var.slack_deploy_webhook
+    }
   }
 
   logs_config {
@@ -523,6 +558,21 @@ resource "aws_codebuild_project" "frontend" {
       name  = "COMPOSE_INSTANCE_TAG"
       value = "${local.name_prefix}-compose"
     }
+
+    environment_variable {
+      name  = "COMPOSE_KEEP_IMAGE_COUNT"
+      value = tostring(var.compose_keep_image_count)
+    }
+
+    environment_variable {
+      name  = "DEPLOY_HEALTH_URL"
+      value = var.frontend_deploy_health_url
+    }
+
+    environment_variable {
+      name  = "SLACK_DEPLOY_WEBHOOK"
+      value = var.slack_deploy_webhook
+    }
   }
 
   logs_config {
@@ -530,6 +580,86 @@ resource "aws_codebuild_project" "frontend" {
       status      = "ENABLED"
       group_name  = "/aws/codebuild/${local.cicd_name_prefix}-frontend"
       stream_name = "build-log"
+    }
+  }
+
+  tags = local.tags
+}
+
+resource "aws_codebuild_project" "rollback" {
+  count    = var.cicd_enabled ? 1 : 0
+  provider = aws.cicd
+
+  name          = "${local.cicd_name_prefix}-rollback"
+  service_role  = aws_iam_role.codebuild[0].arn
+  build_timeout = 15
+
+  source {
+    type      = "NO_SOURCE"
+    buildspec = file("${path.module}/../cicd/buildspec.rollback.yml")
+  }
+
+  artifacts {
+    type = "NO_ARTIFACTS"
+  }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:7.0"
+    type                        = "LINUX_CONTAINER"
+    image_pull_credentials_type = "CODEBUILD"
+
+    environment_variable {
+      name  = "TARGET_AWS_REGION"
+      value = var.aws_region
+    }
+
+    environment_variable {
+      name  = "EKS_CLUSTER_NAME"
+      value = local.use_k8s ? try(module.eks[0].cluster_name, "") : ""
+    }
+
+    environment_variable {
+      name  = "APPS_NAMESPACE"
+      value = var.apps_namespace
+    }
+
+    environment_variable {
+      name  = "BACKEND_ECR_REPOSITORY_URL"
+      value = aws_ecr_repository.backend[0].repository_url
+    }
+
+    environment_variable {
+      name  = "FRONTEND_ECR_REPOSITORY_URL"
+      value = aws_ecr_repository.frontend[0].repository_url
+    }
+
+    environment_variable {
+      name  = "COMPOSE_INSTANCE_TAG"
+      value = "${local.name_prefix}-compose"
+    }
+
+    environment_variable {
+      name  = "BACKEND_DEPLOY_HEALTH_URL"
+      value = var.backend_deploy_health_url
+    }
+
+    environment_variable {
+      name  = "FRONTEND_DEPLOY_HEALTH_URL"
+      value = var.frontend_deploy_health_url
+    }
+
+    environment_variable {
+      name  = "SLACK_DEPLOY_WEBHOOK"
+      value = var.slack_deploy_webhook
+    }
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      status      = "ENABLED"
+      group_name  = "/aws/codebuild/${local.cicd_name_prefix}-rollback"
+      stream_name = "rollback-log"
     }
   }
 

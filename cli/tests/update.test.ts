@@ -114,6 +114,7 @@ describe("update", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -153,6 +154,7 @@ describe("update", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -182,6 +184,7 @@ describe("update", () => {
     const paths: ComponentPaths = {
       fastapi: "fastapi",
       fastify: "fastify",
+      express: "express",
       frontend: "frontend",
       mobile: "mobile",
       e2e: "e2e",
@@ -266,7 +269,6 @@ describe("update — schema migration on legacy projects", () => {
     expect(next.createdAt).toBe("2026-01-01");
     expect(next.defaultsApplied).toBe(true);
     expect(next.skip).toContain("docker-compose.yml");
-    expect(next.skip).toContain("docker-compose.dev.yml");
     expect(next.skip).toContain("README.md");
     expect(next.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });

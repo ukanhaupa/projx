@@ -1,8 +1,15 @@
 import { config } from './config.js';
 import { buildApp } from './app.js';
+import { gracefulShutdown } from './lib/shutdown.js';
 
 async function start() {
   const app = await buildApp();
+
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      void gracefulShutdown(app, signal);
+    });
+  }
 
   try {
     await app.listen({ host: config.HOST, port: config.PORT });

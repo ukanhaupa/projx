@@ -1,7 +1,9 @@
 import * as p from "@clack/prompts";
 import {
   COMPONENTS,
+  ORM_PROVIDERS,
   type Component,
+  type OrmProvider,
   type Options,
   type PackageManager,
   PACKAGE_MANAGERS,
@@ -10,6 +12,7 @@ import {
 export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: "FastAPI", hint: "Python — SQLAlchemy, Alembic, uvicorn" },
   fastify: { label: "Fastify", hint: "Node.js — Prisma, TypeBox, TypeScript" },
+  express: { label: "Express", hint: "Node.js — Express 5, TypeScript" },
   frontend: { label: "Frontend", hint: "React 19 + Vite + React Router" },
   mobile: { label: "Mobile", hint: "Flutter + Riverpod + GoRouter" },
   e2e: { label: "E2E Tests", hint: "Playwright" },
@@ -53,9 +56,27 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
   }
 
   const hasJs = components.some((c) =>
-    ["fastify", "frontend", "e2e"].includes(c),
+    ["fastify", "express", "frontend", "e2e"].includes(c),
   );
+  const hasNodeBackend = components.some((c) =>
+    ["fastify", "express"].includes(c),
+  );
+  let orm: OrmProvider = "prisma";
   let packageManager: PackageManager = "npm";
+
+  if (hasNodeBackend) {
+    const choice = (await p.select({
+      message: "Node backend ORM",
+      options: ORM_PROVIDERS.map((provider) => ({
+        value: provider,
+        label: provider === "prisma" ? "Prisma" : "Drizzle",
+      })),
+      initialValue: "prisma" as OrmProvider,
+    })) as OrmProvider | symbol;
+
+    if (p.isCancel(choice)) process.exit(0);
+    orm = choice as OrmProvider;
+  }
 
   if (hasJs) {
     const pm = (await p.select({
@@ -68,5 +89,5 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
     packageManager = pm as PackageManager;
   }
 
-  return { name, components, git: true, install: true, packageManager };
+  return { name, components, git: true, install: true, packageManager, orm };
 }

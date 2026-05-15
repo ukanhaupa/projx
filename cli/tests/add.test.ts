@@ -121,13 +121,6 @@ describe("add", () => {
       expect(compose).toContain("fastify-migrate:");
       expect(compose).toContain("email-ingestor:");
       expect(compose).toContain("email-ingestor-migrate:");
-
-      const composeDev = await readFile(
-        join(dest, "docker-compose.dev.yml"),
-        "utf-8",
-      );
-      expect(composeDev).toContain("fastify:");
-      expect(composeDev).toContain("email-ingestor:");
     });
 
     it("does not modify existing component dirs (preserves user customizations)", async () => {
@@ -275,7 +268,9 @@ describe("add — installDeps paths (mocked)", () => {
     await add(dest, ["e2e"], REPO_DIR, true);
 
     const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
-    expect(calls.every((c) => !c.includes("npm install") || !c.includes("e2e"))).toBe(true);
+    expect(
+      calls.every((c) => !c.includes("npm install") || !c.includes("e2e")),
+    ).toBe(true);
   });
 
   it("copies .env.example to .env for the new instance", async () => {

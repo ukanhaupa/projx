@@ -1,6 +1,7 @@
 import { test as base, expect } from '@playwright/test';
 import { DashboardPage } from '../pages/dashboard.page';
 import { LoginPage } from '../pages/login.page';
+import { attachPageErrorTracking } from './page-errors';
 
 const TEST_USER = process.env.TEST_USER || 'admin';
 const TEST_PASS = process.env.TEST_PASS || 'admin';
@@ -12,6 +13,12 @@ export type AuthFixtures = {
 };
 
 export const test = base.extend<AuthFixtures>({
+  page: async ({ page }, use, testInfo) => {
+    const assertNoPageErrors = attachPageErrorTracking(page, testInfo);
+    await use(page);
+    assertNoPageErrors();
+  },
+
   loginPage: async ({ page }, use) => {
     await use(new LoginPage(page));
   },

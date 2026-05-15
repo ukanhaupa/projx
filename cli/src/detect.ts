@@ -60,6 +60,15 @@ async function scanDirectory(
       });
     }
 
+    if (allDeps.express) {
+      results.push({
+        component: "express",
+        directory: relPath,
+        confidence: "high",
+        evidence: "package.json has express dependency",
+      });
+    }
+
     if (allDeps.react || allDeps["react-dom"]) {
       results.push({
         component: "frontend",

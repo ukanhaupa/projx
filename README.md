@@ -51,6 +51,12 @@ npx create-projx vision-api --components fastapi -y
 # Node API + React frontend
 npx create-projx saas --components fastify,frontend -y
 
+# Minimal Express API + React frontend
+npx create-projx api-app --components express,frontend -y
+
+# Drizzle-backed Node API + React frontend
+npx create-projx ledger --components express,frontend --orm drizzle -y
+
 # Mobile app with backend
 npx create-projx field-app --components fastapi,mobile -y
 
@@ -74,18 +80,20 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 - **No lock-in.** Projx generates files and walks away. Delete the `.projx` config and it's just a normal repo.
 - **Adopt incrementally.** Already have a project? `projx init` adds CI, hooks, and Docker without touching your code.
 - **Pick your package manager.** npm, pnpm, yarn, or bun. The choice propagates everywhere — scripts, Docker, CI, docs.
+- **Pick your Node ORM.** Prisma stays the auto-CRUD default; Drizzle is available for teams that want explicit SQL migrations and hand-built routes.
 - **AI-agent friendly.** Ships with [SKILL.md](SKILL.md) so Claude, Cursor, and other agents call Projx instead of hand-writing broken scaffolds.
 
 ## What you get
 
-| Component  | Stack                       | What it gives you                                            |
-| ---------- | --------------------------- | ------------------------------------------------------------ |
-| `fastapi`  | Python, SQLAlchemy, Alembic | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs         |
-| `fastify`  | Node.js, Prisma, TypeBox    | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs      |
-| `frontend` | React 19, TypeScript, Vite  | Auto-entity UI from `/_meta`, design tokens, light/dark mode |
-| `mobile`   | Flutter, Riverpod, GoRouter | Auto-entity screens, offline-first with Isar, biometric auth |
-| `e2e`      | Playwright                  | Page object model, auth fixtures, accessibility scans        |
-| `infra`    | Terraform, AWS              | EKS, RDS, VPC, ALB, CodePipeline, multi-environment          |
+| Component  | Stack                                    | What it gives you                                                            |
+| ---------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `fastapi`  | Python, SQLAlchemy, Alembic              | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                         |
+| `fastify`  | Node.js, Prisma or Drizzle, TypeBox      | Auto-entity CRUD with Prisma, JWT auth, typed schemas, OpenAPI docs          |
+| `express`  | Express 5, TypeScript, Prisma or Drizzle | Auto-entity CRUD with Prisma, validation, security middleware, health checks |
+| `frontend` | React 19, TypeScript, Vite               | Auto-entity UI from `/_meta`, design tokens, light/dark mode                 |
+| `mobile`   | Flutter, Riverpod, GoRouter              | Auto-entity screens, offline-first with Isar, biometric auth                 |
+| `e2e`      | Playwright                               | Page object model, auth fixtures, accessibility scans                        |
+| `infra`    | Terraform, AWS                           | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                          |
 
 Plus, in every project: Docker Compose for dev + prod, GitHub Actions CI per component (path-filtered), pre-commit hooks, secret detection, VS Code settings, and 80% test coverage enforced.
 
@@ -109,6 +117,9 @@ npx create-projx my-app
 
 # Non-interactive — specify components
 npx create-projx my-app --components fastify,frontend,e2e
+
+# Use Drizzle for Node backends instead of Prisma
+npx create-projx my-app --components express,frontend --orm drizzle
 
 # Accept defaults (Fastify + Frontend + E2E)
 npx create-projx my-app -y
@@ -189,12 +200,12 @@ Your custom files (controllers, pages, middleware) are never deleted. Files you 
 
 Common user-owned files are **default-skipped** automatically — template updates won't touch them:
 
-| Scope | Default skips |
-|-------|---------------|
-| Root (`.projx`) | `docker-compose.yml`, `docker-compose.dev.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `scripts/setup.sh`, `scripts/setup-docker.sh`, `scripts/setup-ssl.sh` |
-| fastapi | `pyproject.toml` |
-| fastify / frontend / e2e | `package.json` |
-| mobile | `pubspec.yaml` |
+| Scope                    | Default skips                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Root (`.projx`)          | `docker-compose.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `scripts/setup.sh`, `scripts/setup-docker.sh`, `scripts/setup-ssl.sh` |
+| fastapi                  | `pyproject.toml`                                                                                                                                             |
+| fastify / frontend / e2e | `package.json`                                                                                                                                               |
+| mobile                   | `pubspec.yaml`                                                                                                                                               |
 
 Defaults are applied once on first `update` and saved to the `skip` array. To skip additional files, add them to `skip` in `.projx` (root-level) or `.projx-component` (per-component):
 
@@ -233,7 +244,7 @@ npx create-projx doctor [--fix]
 npx create-projx gen entity <name> [--ai | --backend]
 npx create-projx sync [--url <url>]
 
---components <list>    Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+--components <list>    Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
 --name <dir>           Custom directory for `add <type>` (multi-instance)
 --ai                   Target fastapi (AI/ML) for gen entity
 --backend              Target fastify (API backend) for gen entity
@@ -286,7 +297,10 @@ Scaffold a new entity in your primary backend + typed models for frontend/mobile
 npx create-projx gen entity invoice                                          # interactive
 npx create-projx gen entity invoice --fields "name:string,amount:number"     # non-interactive
 npx create-projx gen entity embedding --ai --fields "name:string,vector:json"  # target AI backend
+npx create-projx gen entity invite --fields "email:string,code:string:unique:generated"  # server-fills `code`
 ```
+
+**Field modifiers** (Fastify/Express only, after the type): `unique` adds a Prisma `@unique` constraint; `generated` (alias: `server`, `server-generated`) marks the field as server-populated — it's omitted from the create-schema and a `beforeCreate` hook stub is emitted that fills it before persist (override the body of `generateXxx()` with your slug/code/UUID logic). Use both together for server-issued unique identifiers (invite codes, slugs, short URLs).
 
 When both `fastapi` and `fastify` exist, the entity generates in the **primary backend** only (not both). First run prompts you to choose and saves to `.projx`:
 
@@ -307,6 +321,8 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 
 No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 
+For Drizzle-backed Node projects, `gen entity` appends a typed `pgTable` to `src/db/schema.ts`; run `drizzle-kit generate` and `drizzle-kit migrate` when ready.
+
 ### Sync Types
 
 Regenerate all frontend/mobile types from a running backend:
@@ -321,10 +337,10 @@ Fetches `/_meta` from your backend, generates typed interfaces for every entity.
 The generic `api.ts` client accepts type parameters:
 
 ```tsx
-import type { Invoice } from '../types/invoice';
+import type { Invoice } from "../types/invoice";
 
-const { data } = await api.list<Invoice>('/invoices'); // data: Invoice[]
-const item = await api.get<Invoice>('/invoices', id); // item: Invoice
+const { data } = await api.list<Invoice>("/invoices"); // data: Invoice[]
+const item = await api.get<Invoice>("/invoices", id); // item: Invoice
 ```
 
 ## Rename Component Directories
@@ -349,7 +365,6 @@ my-app/
 ├── e2e/                    # Playwright E2E tests
 │   └── .projx-component
 ├── docker-compose.yml      # Production (backend + frontend + SSL)
-├── docker-compose.dev.yml  # Development (PostgreSQL + hot reload)
 ├── .github/workflows/      # CI per component (runs only on changes)
 ├── .githooks/pre-commit    # Format + lint on commit
 ├── .vscode/                # Editor settings + recommended extensions
@@ -377,9 +392,9 @@ Both backends ship with a `service_configs` table for storing third-party creden
 
 ```ts
 // Fastify
-import { setServiceConfig, getServiceConfig } from './lib/service-config.js';
-await setServiceConfig(prisma, 'smtp', { host, port, user, password });
-const cfg = await getServiceConfig<{ host: string }>(prisma, 'smtp');
+import { setServiceConfig, getServiceConfig } from "./lib/service-config.js";
+await setServiceConfig(prisma, "smtp", { host, port, user, password });
+const cfg = await getServiceConfig<{ host: string }>(prisma, "smtp");
 ```
 
 ```python
@@ -399,15 +414,19 @@ The Fastify backend ships with `@fastify/rate-limit` registered globally. Defaul
 Override per route for sensitive endpoints:
 
 ```ts
-fastify.post('/auth/resend-verification', {
-  config: {
-    rateLimit: {
-      max: 5,
-      timeWindow: '1 hour',
-      keyGenerator: (req) => (req.body?.email ?? req.ip).toLowerCase(),
+fastify.post(
+  "/auth/resend-verification",
+  {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: "1 hour",
+        keyGenerator: (req) => (req.body?.email ?? req.ip).toLowerCase(),
+      },
     },
   },
-}, handler);
+  handler,
+);
 ```
 
 For the FastAPI service, edge rate limits are enforced by the frontend nginx (`auth_limit` and `api_limit` zones in [frontend/nginx.conf](frontend/nginx.conf)) — no application-level limiter is wired by default since the service is internal.

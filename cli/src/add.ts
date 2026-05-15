@@ -112,6 +112,7 @@ export async function add(
       paths,
       instances,
       pm: pmCommands(pm),
+      orm: config.orm ?? "prisma",
     };
 
     const pkg = JSON.parse(
@@ -200,6 +201,7 @@ async function addInstance(
       paths,
       instances,
       pm: pmCommands(pm),
+      orm: config.orm ?? "prisma",
     };
 
     const pkg = JSON.parse(
@@ -211,7 +213,6 @@ async function addInstance(
       ".githooks/pre-commit",
       "scripts/setup.sh",
       "docker-compose.yml",
-      "docker-compose.dev.yml",
     ]);
     const rawSkip: string[] = Array.isArray(config.skip)
       ? (config.skip as string[])
@@ -304,6 +305,19 @@ async function installDeps(
             );
             exec(cmds.install, dir);
             spinner.stop(`Fastify dependencies installed (${path}/).`);
+          } else {
+            p.log.warn(
+              `${pm} not found — run 'cd ${path} && ${cmds.install}' manually.`,
+            );
+          }
+          break;
+        case "express":
+          if (hasCommand(pmBin)) {
+            spinner.start(
+              `Installing Express dependencies (${path}/, ${cmds.install})`,
+            );
+            exec(cmds.install, dir);
+            spinner.stop(`Express dependencies installed (${path}/).`);
           } else {
             p.log.warn(
               `${pm} not found — run 'cd ${path} && ${cmds.install}' manually.`,

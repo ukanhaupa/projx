@@ -9,6 +9,10 @@ echo "Git hooks configured."
   cd <%= inst.path %>
   uv sync --all-extras
 )
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of fastifyInstances) { %>
@@ -16,7 +20,57 @@ echo "<%= inst.display %> dependencies installed."
 (
   cd <%= inst.path %>
   <%= pm.install %>
+<% if (orm === 'drizzle') { %>
+  if [ -f drizzle.config.ts ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> drizzle-kit push --force
+    else
+      echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
+    fi
+  fi
+<% } else { %>
+  if [ -f prisma/schema.prisma ] && [ -z "$(ls -A prisma/migrations 2>/dev/null | grep -v migration_lock.toml)" ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> prisma migrate dev --name init --skip-seed
+    else
+      echo "<%= inst.display %>: skipping initial migration (DATABASE_URL not set)."
+    fi
+  fi
+<% } %>
 )
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
+echo "<%= inst.display %> dependencies installed."
+<% } %>
+<% for (const inst of expressInstances) { %>
+
+(
+  cd <%= inst.path %>
+  <%= pm.install %>
+<% if (orm === 'drizzle') { %>
+  if [ -f drizzle.config.ts ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> drizzle-kit push --force
+    else
+      echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
+    fi
+  fi
+<% } else { %>
+  if [ -f prisma/schema.prisma ] && [ -z "$(ls -A prisma/migrations 2>/dev/null | grep -v migration_lock.toml)" ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> prisma migrate dev --name init --skip-seed
+    else
+      echo "<%= inst.display %>: skipping initial migration (DATABASE_URL not set)."
+    fi
+  fi
+<% } %>
+)
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of frontendInstances) { %>
@@ -25,6 +79,10 @@ echo "<%= inst.display %> dependencies installed."
   cd <%= inst.path %>
   <%= pm.install %>
 )
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
 echo "<%= inst.display %> dependencies installed."
 <% } %>
 <% for (const inst of e2eInstances) { %>
@@ -49,4 +107,4 @@ fi
 <% } %>
 
 echo ""
-echo "Done. Run 'docker compose -f docker-compose.dev.yml up' to start."
+echo "Done. Ensure PostgreSQL is running locally, then run '<%= pm.runDev %>' (or 'uv run main.py') in each service."

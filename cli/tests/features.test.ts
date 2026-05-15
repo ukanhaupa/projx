@@ -203,7 +203,9 @@ describe("applyFeature", () => {
       vars: { projectName: "demo" },
     });
 
-    const pkg = JSON.parse(await readFile(join(dest, "api/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(dest, "api/package.json"), "utf-8"),
+    );
     expect(pkg.dependencies).toEqual({
       fastify: "^5.0.0",
       "sample-dep": "^1.0.0",
@@ -274,7 +276,9 @@ describe("applyFeature", () => {
     const opts = {
       feature: "sample",
       featureRoot,
-      targets: [{ component: "fastify" as const, instance: "api", path: "api" }],
+      targets: [
+        { component: "fastify" as const, instance: "api", path: "api" },
+      ],
       dest,
       vars: { projectName: "demo" },
     };
@@ -289,7 +293,9 @@ describe("applyFeature", () => {
     const env = await readFile(join(dest, "api/.env.example"), "utf-8");
     expect(env.match(/# SAMPLE_KEY=/g)?.length).toBe(1);
 
-    const pkg = JSON.parse(await readFile(join(dest, "api/package.json"), "utf-8"));
+    const pkg = JSON.parse(
+      await readFile(join(dest, "api/package.json"), "utf-8"),
+    );
     expect(pkg.dependencies["sample-dep"]).toBe("^1.0.0");
   });
 

@@ -4,7 +4,7 @@ import { Value } from '@sinclair/typebox/value';
 const ConfigSchema = Type.Object({
   HOST: Type.String({ default: '0.0.0.0' }),
   PORT: Type.Number({ default: 3000 }),
-  LOG_LEVEL: Type.String({ default: 'info' }),
+  LOG_LEVEL: Type.String({ default: 'debug' }),
   DATABASE_URL: Type.String(),
   JWT_SECRET: Type.String({ default: 'dev-secret-change-in-production' }),
   JWT_PROVIDER: Type.Union(
@@ -35,7 +35,7 @@ function loadConfig(): Config {
   const raw = {
     HOST: process.env.HOST ?? '0.0.0.0',
     PORT: Number(process.env.PORT ?? 3000),
-    LOG_LEVEL: process.env.LOG_LEVEL ?? 'info',
+    LOG_LEVEL: process.env.LOG_LEVEL ?? 'debug',
     DATABASE_URL: process.env.DATABASE_URL ?? '',
     JWT_SECRET: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
     JWT_PROVIDER: process.env.JWT_PROVIDER ?? 'shared_secret',

@@ -9,7 +9,6 @@ import {
   readProjxConfig,
   toKebab,
   toSnake,
-  toTitle,
   writeProjxConfig,
 } from "./utils.js";
 
@@ -28,6 +27,8 @@ interface EntityField {
   name: string;
   type: FieldType;
   required: boolean;
+  unique: boolean;
+  generated: boolean;
 }
 
 interface EntityConfig {
@@ -125,12 +126,24 @@ async function promptEntityConfig(name: string): Promise<EntityConfig> {
     })) as boolean;
     if (p.isCancel(required)) process.exit(0);
 
-    fields.push({ name: toSnake(fieldName), type: fieldType, required });
+    fields.push({
+      name: toSnake(fieldName),
+      type: fieldType,
+      required,
+      unique: false,
+      generated: false,
+    });
   }
 
   if (fields.length === 0) {
     p.log.warn("No fields defined. Adding a default 'name' field.");
-    fields.push({ name: "name", type: "string", required: true });
+    fields.push({
+      name: "name",
+      type: "string",
+      required: true,
+      unique: false,
+      generated: false,
+    });
   }
 
   // Searchable fields
@@ -169,7 +182,17 @@ function parseFieldsFlag(raw: string): EntityField[] {
     const required = nameType.endsWith("!");
     const name = toSnake(required ? nameType.slice(0, -1) : nameType);
     const type = (rest[0] || "string") as FieldType;
-    return { name, type, required: required || true };
+    const modifiers = new Set(rest.slice(1).map((item) => item.toLowerCase()));
+    return {
+      name,
+      type,
+      required: required || true,
+      unique: modifiers.has("unique") || modifiers.has("@unique"),
+      generated:
+        modifiers.has("generated") ||
+        modifiers.has("server") ||
+        modifiers.has("server-generated"),
+    };
   });
 }
 
@@ -313,25 +336,6 @@ function typeboxOptional(type: FieldType): string {
   }
 }
 
-function fieldMetaType(type: FieldType): { type: string; fieldType: string } {
-  switch (type) {
-    case "string":
-      return { type: "str", fieldType: "text" };
-    case "number":
-      return { type: "int", fieldType: "number" };
-    case "boolean":
-      return { type: "bool", fieldType: "boolean" };
-    case "date":
-      return { type: "date", fieldType: "date" };
-    case "datetime":
-      return { type: "datetime", fieldType: "datetime" };
-    case "text":
-      return { type: "str", fieldType: "textarea" };
-    case "json":
-      return { type: "dict", fieldType: "textarea" };
-  }
-}
-
 function prismaType(type: FieldType, required: boolean): string {
   const nullable = required ? "" : "?";
   switch (type) {
@@ -350,6 +354,11 @@ function prismaType(type: FieldType, required: boolean): string {
     case "json":
       return `Json${nullable}`;
   }
+}
+
+function prismaFieldType(field: EntityField): string {
+  const base = prismaType(field.type, field.required);
+  return field.unique ? `${base} @unique` : base;
 }
 
 function generateFastifySchemas(config: EntityConfig): string {
@@ -378,7 +387,7 @@ function generateFastifySchemas(config: EntityConfig): string {
 
   // Create schema
   lines.push(`export const Create${className}Schema = Type.Object({`);
-  for (const f of config.fields) {
+  for (const f of config.fields.filter((field) => !field.generated)) {
     if (f.required) {
       lines.push(`  ${f.name}: ${typeboxType(f.type, true)},`);
     } else {
@@ -394,7 +403,7 @@ function generateFastifySchemas(config: EntityConfig): string {
 
   // Update schema
   lines.push(`export const Update${className}Schema = Type.Object({`);
-  for (const f of config.fields) {
+  for (const f of config.fields.filter((field) => !field.generated)) {
     lines.push(`  ${f.name}: ${typeboxOptional(f.type)},`);
   }
   lines.push(`});`);
@@ -411,57 +420,30 @@ function generateFastifyIndex(config: EntityConfig): string {
   const className = toPascal(config.name);
   const camelConfig =
     className.charAt(0).toLowerCase() + className.slice(1) + "Config";
-  const allColumns = [
-    "id",
-    ...config.fields.map((f) => f.name),
-    "created_at",
-    "updated_at",
-  ];
-  if (config.softDelete) allColumns.push("deleted_at");
+  const generatedFields = config.fields.filter((field) => field.generated);
 
   const lines: string[] = [];
 
   lines.push(
-    `import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';`,
+    `import { EntityRegistry, type EntityConfig } from '../_base/index.js';`,
   );
+  if (generatedFields.length > 0) {
+    lines.push(`import { randomBytes } from 'node:crypto';`);
+  }
   lines.push(
     `import { ${className}Schema, Create${className}Schema, Update${className}Schema } from './schemas.js';`,
   );
   lines.push("");
 
-  // FieldMeta array
-  lines.push(`const fields: FieldMeta[] = [`);
-
-  // id field
-  lines.push(
-    `  { key: 'id', label: 'Id', type: 'str', nullable: false, is_auto: true, is_primary_key: true, filterable: true, has_foreign_key: false, field_type: 'text' },`,
-  );
-
-  for (const f of config.fields) {
-    const meta = fieldMetaType(f.type);
+  for (const field of generatedFields) {
     lines.push(
-      `  { key: '${f.name}', label: '${toTitle(f.name)}', type: '${meta.type}', nullable: ${!f.required}, is_auto: false, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: '${meta.fieldType}' },`,
+      `function generate${className}${toPascal(field.name)}(): string {`,
     );
+    lines.push(`  return randomBytes(8).toString('hex').toUpperCase();`);
+    lines.push(`}`);
+    lines.push("");
   }
 
-  // auto fields
-  lines.push(
-    `  { key: 'created_at', label: 'Created At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
-  );
-  lines.push(
-    `  { key: 'updated_at', label: 'Updated At', type: 'datetime', nullable: false, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
-  );
-
-  if (config.softDelete) {
-    lines.push(
-      `  { key: 'deleted_at', label: 'Deleted At', type: 'datetime', nullable: true, is_auto: true, is_primary_key: false, filterable: true, has_foreign_key: false, field_type: 'datetime' },`,
-    );
-  }
-
-  lines.push(`];`);
-  lines.push("");
-
-  // Entity config
   const tags = config.apiPrefix.replace(/^\//, "");
   lines.push(`export const ${camelConfig}: EntityConfig = {`);
   lines.push(`  name: '${className}',`);
@@ -472,7 +454,6 @@ function generateFastifyIndex(config: EntityConfig): string {
   lines.push(`  readonly: ${config.readonly},`);
   lines.push(`  softDelete: ${config.softDelete},`);
   lines.push(`  bulkOperations: ${config.bulkOperations},`);
-  lines.push(`  columnNames: [${allColumns.map((c) => `'${c}'`).join(", ")}],`);
 
   if (config.searchableFields.length > 0) {
     lines.push(
@@ -482,10 +463,25 @@ function generateFastifyIndex(config: EntityConfig): string {
     lines.push(`  searchableFields: [],`);
   }
 
-  lines.push(`  fields,`);
   lines.push(`  schema: ${className}Schema,`);
   lines.push(`  createSchema: Create${className}Schema,`);
   lines.push(`  updateSchema: Update${className}Schema,`);
+  if (generatedFields.length > 0) {
+    lines.push(
+      `  beforeCreateFields: [${generatedFields.map((field) => `'${field.name}'`).join(", ")}],`,
+    );
+    lines.push(`  beforeCreate: (_request, data) => {`);
+    for (const field of generatedFields) {
+      lines.push(
+        `    if (!('${field.name}' in data) || data.${field.name} == null) {`,
+      );
+      lines.push(
+        `      data.${field.name} = generate${className}${toPascal(field.name)}();`,
+      );
+      lines.push(`    }`);
+    }
+    lines.push(`  },`);
+  }
   lines.push(`};`);
   lines.push("");
   lines.push(`EntityRegistry.register(${camelConfig});`);
@@ -503,7 +499,7 @@ function generatePrismaModel(config: EntityConfig): string {
 
   for (const f of config.fields) {
     const padded = f.name.padEnd(10);
-    lines.push(`  ${padded} ${prismaType(f.type, f.required)}`);
+    lines.push(`  ${padded} ${prismaFieldType(f)}`);
   }
 
   if (config.softDelete) {
@@ -521,6 +517,219 @@ function generatePrismaModel(config: EntityConfig): string {
 
   lines.push(`  @@map("${config.tableName}")`);
   lines.push(`}`);
+
+  return lines.join("\n");
+}
+
+function drizzleColumn(field: EntityField): string {
+  let expr: string;
+  switch (field.type) {
+    case "number":
+      expr = `integer('${field.name}')`;
+      break;
+    case "boolean":
+      expr = `boolean('${field.name}')`;
+      break;
+    case "date":
+      expr = `date('${field.name}')`;
+      break;
+    case "datetime":
+      expr = `timestamp('${field.name}', { withTimezone: true })`;
+      break;
+    case "json":
+      expr = `jsonb('${field.name}')`;
+      break;
+    case "text":
+    case "string":
+      expr = `text('${field.name}')`;
+      break;
+  }
+  if (field.required) expr += ".notNull()";
+  if (field.unique) expr += ".unique()";
+  return expr;
+}
+
+function generateDrizzleTable(config: EntityConfig): string {
+  const lines: string[] = [];
+  const tableConst = toCamel(pluralize(toPascal(config.name)));
+  lines.push(`export const ${tableConst} = pgTable('${config.tableName}', {`);
+  lines.push(`  id: uuid('id').primaryKey().defaultRandom(),`);
+  lines.push(
+    `  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),`,
+  );
+  lines.push(
+    `  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),`,
+  );
+  if (config.softDelete) {
+    lines.push(`  deletedAt: timestamp('deleted_at', { withTimezone: true }),`);
+  }
+  for (const field of config.fields) {
+    lines.push(`  ${toCamel(field.name)}: ${drizzleColumn(field)},`);
+  }
+  lines.push(`});`);
+  return lines.join("\n");
+}
+
+// --- Express generation ---
+
+function zodType(type: FieldType, required: boolean): string {
+  const inner = (() => {
+    switch (type) {
+      case "string":
+      case "text":
+        return "z.string()";
+      case "number":
+        return "z.number()";
+      case "boolean":
+        return "z.boolean()";
+      case "date":
+        return "z.string().date()";
+      case "datetime":
+        return "z.string().datetime()";
+      case "json":
+        return "z.unknown()";
+    }
+  })();
+
+  return required ? inner : `${inner}.nullable()`;
+}
+
+function zodOptional(type: FieldType): string {
+  switch (type) {
+    case "string":
+    case "text":
+      return "z.string().optional()";
+    case "number":
+      return "z.number().optional()";
+    case "boolean":
+      return "z.boolean().optional()";
+    case "date":
+      return "z.string().date().optional()";
+    case "datetime":
+      return "z.string().datetime().optional()";
+    case "json":
+      return "z.unknown().optional()";
+  }
+}
+
+function generateExpressSchemas(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const lines: string[] = [];
+
+  lines.push(`import { z } from 'zod';`);
+  lines.push("");
+
+  lines.push(`export const ${className}Schema = z.object({`);
+  lines.push(`  id: z.string().uuid(),`);
+  for (const f of config.fields) {
+    lines.push(`  ${f.name}: ${zodType(f.type, f.required)},`);
+  }
+  lines.push(`  created_at: z.string().datetime(),`);
+  lines.push(`  updated_at: z.string().datetime(),`);
+  if (config.softDelete)
+    lines.push(`  deleted_at: z.string().datetime().nullable(),`);
+  lines.push(`});`);
+  lines.push("");
+  lines.push(`export type ${className} = z.infer<typeof ${className}Schema>;`);
+  lines.push("");
+
+  lines.push(`export const Create${className}Schema = z.object({`);
+  for (const f of config.fields.filter((field) => !field.generated)) {
+    if (f.required) {
+      lines.push(`  ${f.name}: ${zodType(f.type, true)},`);
+    } else {
+      lines.push(`  ${f.name}: ${zodOptional(f.type)},`);
+    }
+  }
+  lines.push(`});`);
+  lines.push("");
+  lines.push(
+    `export type Create${className} = z.infer<typeof Create${className}Schema>;`,
+  );
+  lines.push("");
+
+  lines.push(`export const Update${className}Schema = z.object({`);
+  for (const f of config.fields.filter((field) => !field.generated)) {
+    lines.push(`  ${f.name}: ${zodOptional(f.type)},`);
+  }
+  lines.push(`});`);
+  lines.push("");
+  lines.push(
+    `export type Update${className} = z.infer<typeof Update${className}Schema>;`,
+  );
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function generateExpressIndex(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const camelConfig =
+    className.charAt(0).toLowerCase() + className.slice(1) + "Config";
+  const generatedFields = config.fields.filter((field) => field.generated);
+  const tags = config.apiPrefix.replace(/^\//, "");
+
+  const lines: string[] = [];
+
+  lines.push(
+    `import { EntityRegistry, type EntityConfig } from '../_base/index.js';`,
+  );
+  if (generatedFields.length > 0) {
+    lines.push(`import { randomBytes } from 'node:crypto';`);
+  }
+  lines.push(
+    `import { ${className}Schema, Create${className}Schema, Update${className}Schema } from './schemas.js';`,
+  );
+  lines.push("");
+
+  for (const field of generatedFields) {
+    lines.push(
+      `function generate${className}${toPascal(field.name)}(): string {`,
+    );
+    lines.push(`  return randomBytes(8).toString('hex').toUpperCase();`);
+    lines.push(`}`);
+    lines.push("");
+  }
+
+  lines.push(`export const ${camelConfig}: EntityConfig = {`);
+  lines.push(`  name: '${className}',`);
+  lines.push(`  tableName: '${config.tableName}',`);
+  lines.push(`  prismaModel: '${className}',`);
+  lines.push(`  apiPrefix: '${config.apiPrefix}',`);
+  lines.push(`  tags: ['${tags}'],`);
+  lines.push(`  readonly: ${config.readonly},`);
+  lines.push(`  softDelete: ${config.softDelete},`);
+  lines.push(`  bulkOperations: ${config.bulkOperations},`);
+  if (config.searchableFields.length > 0) {
+    lines.push(
+      `  searchableFields: [${config.searchableFields.map((f) => `'${f}'`).join(", ")}],`,
+    );
+  } else {
+    lines.push(`  searchableFields: [],`);
+  }
+  lines.push(`  schema: ${className}Schema,`);
+  lines.push(`  createSchema: Create${className}Schema,`);
+  lines.push(`  updateSchema: Update${className}Schema,`);
+  if (generatedFields.length > 0) {
+    lines.push(
+      `  beforeCreateFields: [${generatedFields.map((field) => `'${field.name}'`).join(", ")}],`,
+    );
+    lines.push(`  beforeCreate: (_request, data) => {`);
+    for (const field of generatedFields) {
+      lines.push(
+        `    if (!('${field.name}' in data) || data.${field.name} == null) {`,
+      );
+      lines.push(
+        `      data.${field.name} = generate${className}${toPascal(field.name)}();`,
+      );
+      lines.push(`    }`);
+    }
+    lines.push(`  },`);
+  }
+  lines.push(`};`);
+  lines.push("");
+  lines.push(`EntityRegistry.register(${camelConfig});`);
+  lines.push("");
 
   return lines.join("\n");
 }
@@ -605,7 +814,8 @@ function dartType(type: FieldType, required: boolean): string {
 }
 
 function toCamel(s: string): string {
-  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  const pascal = toPascal(s);
+  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
 function dartFromJson(
@@ -932,64 +1142,184 @@ function generateFastifyTest(config: EntityConfig): string {
   const className = toPascal(config.name);
   const basePath = `/api/v1${config.apiPrefix}`;
   const updateField = config.fields[0];
+  const uniqueFields = config.fields.filter((field) => field.unique);
 
   const lines: string[] = [];
 
   lines.push(
     `import { describeCrudEntity } from '../helpers/crud-test-base.js';`,
   );
+  lines.push(
+    `import { Create${className}Schema } from '../../src/modules/${toKebab(config.name)}/schemas.js';`,
+  );
   lines.push("");
   lines.push(`describeCrudEntity({`);
   lines.push(`  entityName: '${className}',`);
   lines.push(`  basePath: '${basePath}',`);
   lines.push(`  prismaModel: '${className}',`);
-  lines.push(`  createPayload: {`);
-  for (const f of config.fields) {
-    lines.push(`    ${f.name}: ${tsLiteral(f.type, "create")},`);
-  }
-  lines.push(`  },`);
+  lines.push(`  createSchema: Create${className}Schema,`);
   lines.push(`  updatePayload: {`);
   lines.push(
     `    ${updateField.name}: ${tsLiteral(updateField.type, "update")},`,
   );
   lines.push(`  },`);
+  if (uniqueFields.length > 0) {
+    lines.push(
+      `  uniqueFields: [${uniqueFields.map((field) => `'${field.name}'`).join(", ")}],`,
+    );
+  }
   lines.push(`});`);
   lines.push("");
 
   return lines.join("\n");
 }
 
+function generateExpressTest(config: EntityConfig): string {
+  const className = toPascal(config.name);
+  const basePath = `/api/v1${config.apiPrefix}`;
+  const updateField = config.fields[0];
+  const uniqueFields = config.fields.filter((field) => field.unique);
+
+  const lines: string[] = [];
+
+  lines.push(
+    `import { describeCrudEntity } from '../helpers/crud-test-base.js';`,
+  );
+  lines.push(
+    `import { Create${className}Schema } from '../../src/modules/${toKebab(config.name)}/schemas.js';`,
+  );
+  lines.push("");
+  lines.push(`describeCrudEntity({`);
+  lines.push(`  entityName: '${className}',`);
+  lines.push(`  basePath: '${basePath}',`);
+  lines.push(`  prismaModel: '${className}',`);
+  lines.push(`  createSchema: Create${className}Schema,`);
+  lines.push(`  updatePayload: {`);
+  lines.push(
+    `    ${updateField.name}: ${tsLiteral(updateField.type, "update")},`,
+  );
+  lines.push(`  },`);
+  if (uniqueFields.length > 0) {
+    lines.push(
+      `  uniqueFields: [${uniqueFields.map((field) => `'${field.name}'`).join(", ")}],`,
+    );
+  }
+  lines.push(`});`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+async function appendDrizzleTable(
+  cwd: string,
+  dir: string,
+  config: EntityConfig,
+  generated: string[],
+): Promise<void> {
+  const schemaDir = join(cwd, dir, "src/db");
+  const schemaPath = join(schemaDir, "schema.ts");
+  const tableConst = toCamel(pluralize(toPascal(config.name)));
+  const tableSource = generateDrizzleTable(config);
+  await mkdir(schemaDir, { recursive: true });
+
+  if (!existsSync(schemaPath)) {
+    await writeFile(
+      schemaPath,
+      `import { boolean, date, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';\n\n${tableSource}\n`,
+    );
+    generated.push(`${dir}/src/db/schema.ts`);
+    return;
+  }
+
+  const content = await readFile(schemaPath, "utf-8");
+  if (content.includes(`export const ${tableConst} = pgTable(`)) return;
+
+  let updated = content;
+  const importLine =
+    "import { boolean, date, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';";
+  if (!updated.includes("drizzle-orm/pg-core")) {
+    updated = importLine + "\n\n" + updated;
+  } else {
+    updated = updated.replace(
+      /import\s+\{([^}]+)\}\s+from\s+'drizzle-orm\/pg-core';/,
+      (_match, imports: string) => {
+        const names = new Set(
+          String(imports)
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        );
+        for (const name of [
+          "boolean",
+          "date",
+          "integer",
+          "jsonb",
+          "pgTable",
+          "text",
+          "timestamp",
+          "uuid",
+        ]) {
+          names.add(name);
+        }
+        return `import { ${[...names].sort().join(", ")} } from 'drizzle-orm/pg-core';`;
+      },
+    );
+  }
+
+  await writeFile(schemaPath, updated.trimEnd() + "\n\n" + tableSource + "\n");
+  generated.push(`${dir}/src/db/schema.ts (table added)`);
+}
+
 // --- Main ---
 
-type BackendTarget = "fastapi" | "fastify";
+type BackendTarget = "fastapi" | "fastify" | "express";
 
 async function resolvePrimaryBackend(
   cwd: string,
   hasFastapi: boolean,
   hasFastify: boolean,
+  hasExpress: boolean,
   backendFlag?: BackendTarget,
 ): Promise<BackendTarget> {
   if (backendFlag) return backendFlag;
-  if (hasFastapi && !hasFastify) return "fastapi";
-  if (hasFastify && !hasFastapi) return "fastify";
+  const backends = [
+    hasFastapi ? "fastapi" : undefined,
+    hasFastify ? "fastify" : undefined,
+    hasExpress ? "express" : undefined,
+  ].filter((item): item is BackendTarget => item !== undefined);
+  if (backends.length === 1) return backends[0];
 
   const config = await readProjxConfig(cwd);
   if (
     config.primaryBackend === "fastapi" ||
-    config.primaryBackend === "fastify"
+    config.primaryBackend === "fastify" ||
+    config.primaryBackend === "express"
   ) {
     return config.primaryBackend;
   }
 
-  if (!process.stdin.isTTY) return "fastify";
+  if (!process.stdin.isTTY) {
+    return hasFastify ? "fastify" : hasExpress ? "express" : "fastapi";
+  }
 
   const choice = (await p.select({
-    message: "Both backends detected. Which is your primary?",
+    message: "Multiple backends detected. Which is your primary?",
     options: [
-      { value: "fastify", label: "fastify (API backend)" },
-      { value: "fastapi", label: "fastapi (AI/ML engine)" },
+      ...(hasFastify
+        ? [{ value: "fastify", label: "fastify (API backend)" }]
+        : []),
+      ...(hasExpress
+        ? [{ value: "express", label: "express (API backend)" }]
+        : []),
+      ...(hasFastapi
+        ? [{ value: "fastapi", label: "fastapi (AI/ML engine)" }]
+        : []),
     ],
-    initialValue: "fastify" as BackendTarget,
+    initialValue: (hasFastify
+      ? "fastify"
+      : hasExpress
+        ? "express"
+        : "fastapi") as BackendTarget,
   })) as BackendTarget | symbol;
 
   if (p.isCancel(choice)) process.exit(0);
@@ -1017,17 +1347,21 @@ export async function gen(
   const pmName: PackageManager =
     (projxData.packageManager as PackageManager) ?? "npm";
   const pm = pmCommands(pmName);
+  const orm = (projxData.orm as string | undefined) ?? "prisma";
 
   const { components: discovered, paths: componentPaths } =
     await discoverComponentsFromMarkers(cwd);
 
   const hasFastapi = discovered.includes("fastapi");
   const hasFastify = discovered.includes("fastify");
+  const hasExpress = discovered.includes("express");
   const hasFrontend = discovered.includes("frontend");
   const hasMobile = discovered.includes("mobile");
 
-  if (!hasFastapi && !hasFastify) {
-    p.log.error("No backend component found. Need fastapi or fastify.");
+  if (!hasFastapi && !hasFastify && !hasExpress) {
+    p.log.error(
+      "No backend component found. Need fastapi, fastify, or express.",
+    );
     process.exit(1);
   }
 
@@ -1035,10 +1369,13 @@ export async function gen(
     cwd,
     hasFastapi,
     hasFastify,
+    hasExpress,
     backendFlag,
   );
   const genFastapi = targetBackend === "fastapi" && hasFastapi;
   const genFastify = targetBackend === "fastify" && hasFastify;
+  const genExpress = targetBackend === "express" && hasExpress;
+  const genDrizzle = orm === "drizzle" && (genFastify || genExpress);
 
   let config: EntityConfig;
 
@@ -1096,7 +1433,7 @@ export async function gen(
     }
   }
 
-  if (genFastify) {
+  if (genFastify && orm !== "drizzle") {
     const dir = componentPaths.fastify;
     const moduleDir = join(cwd, dir, "src/modules", toKebab(config.name));
 
@@ -1159,6 +1496,77 @@ export async function gen(
         generated.push(`${dir}/tests/modules/${toKebab(config.name)}.test.ts`);
       }
     }
+  }
+
+  if (genFastify && orm === "drizzle") {
+    await appendDrizzleTable(cwd, componentPaths.fastify, config, generated);
+  }
+
+  if (genExpress && orm !== "drizzle") {
+    const dir = componentPaths.express;
+    const moduleDir = join(cwd, dir, "src/modules", toKebab(config.name));
+
+    if (existsSync(moduleDir)) {
+      p.log.warn(
+        `${dir}/src/modules/${toKebab(config.name)}/ already exists. Skipping Express.`,
+      );
+    } else {
+      await mkdir(moduleDir, { recursive: true });
+      await writeFile(
+        join(moduleDir, "schemas.ts"),
+        generateExpressSchemas(config),
+      );
+      await writeFile(
+        join(moduleDir, "index.ts"),
+        generateExpressIndex(config),
+      );
+      generated.push(`${dir}/src/modules/${toKebab(config.name)}/schemas.ts`);
+      generated.push(`${dir}/src/modules/${toKebab(config.name)}/index.ts`);
+
+      const appPath = join(cwd, dir, "src/app.ts");
+      if (existsSync(appPath)) {
+        const appContent = await readFile(appPath, "utf-8");
+        const importLine = `import './modules/${toKebab(config.name)}/index.js';`;
+        if (!appContent.includes(importLine)) {
+          const updated = appContent.replace(
+            /^(import\s+'\.\/modules\/.*?';?\s*\n)/m,
+            `$1${importLine}\n`,
+          );
+          if (updated !== appContent) {
+            await writeFile(appPath, updated);
+            generated.push(`${dir}/src/app.ts (import added)`);
+          }
+        }
+      }
+
+      const prismaPath = join(cwd, dir, "prisma/schema.prisma");
+      if (existsSync(prismaPath)) {
+        const prismaContent = await readFile(prismaPath, "utf-8");
+        const modelName = `model ${toPascal(config.name)}`;
+        if (!prismaContent.includes(modelName)) {
+          const prismaModel = generatePrismaModel(config);
+          await writeFile(
+            prismaPath,
+            prismaContent.trimEnd() + "\n\n" + prismaModel + "\n",
+          );
+          generated.push(`${dir}/prisma/schema.prisma (model added)`);
+        }
+      }
+
+      const testsModulesDir = join(cwd, dir, "tests/modules");
+      const expressTestFile = join(
+        testsModulesDir,
+        `${toKebab(config.name)}.test.ts`,
+      );
+      if (existsSync(testsModulesDir) && !existsSync(expressTestFile)) {
+        await writeFile(expressTestFile, generateExpressTest(config));
+        generated.push(`${dir}/tests/modules/${toKebab(config.name)}.test.ts`);
+      }
+    }
+  }
+
+  if (genExpress && orm === "drizzle") {
+    await appendDrizzleTable(cwd, componentPaths.express, config, generated);
   }
 
   if (hasFrontend) {
@@ -1231,12 +1639,19 @@ export async function gen(
     p.log.info("  alembic upgrade head");
   }
 
-  if (genFastify) {
+  if (genFastify && orm !== "drizzle") {
     p.log.info("");
     p.log.info("Fastify next steps:");
     p.log.info(
       `  ${pm.prismaExec} migrate dev --name add_${toSnake(config.name)}`,
     );
+  }
+
+  if (genDrizzle) {
+    p.log.info("");
+    p.log.info("Drizzle next steps:");
+    p.log.info(`  ${pm.exec} drizzle-kit generate`);
+    p.log.info(`  ${pm.exec} drizzle-kit migrate`);
   }
 
   if (hasFrontend) {

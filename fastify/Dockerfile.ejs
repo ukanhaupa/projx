@@ -1,40 +1,91 @@
 <% if (pm === 'bun') { %>
 FROM oven/bun:1-alpine AS base
-<% } %>
-<% if (pm !== 'bun') { %>
-FROM node:20-slim AS base
-<% } %>
+
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile
+
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json bun.lockb tsconfig.json ./
+COPY prisma ./prisma
+COPY src ./src
+RUN bunx prisma generate
+RUN bun run build
+
+FROM build AS migrate
+CMD ["sh", "-c", "bunx prisma migrate deploy"]
+
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN chown -R bun:bun /app
+USER bun
+
+COPY --from=build --chown=bun:bun /app/node_modules ./node_modules
+COPY --from=build --chown=bun:bun /app/dist ./dist
+COPY --chown=bun:bun package.json ./
+COPY --chown=bun:bun prisma ./prisma
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD ["bun", "-e", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
+
+CMD ["bun", "run", "dist/server.js"]
+<% } else { %>
+FROM node:22-bookworm-slim AS base
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 <% if (pm === 'pnpm') { %>
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-<% } %>
-<% if (pm === 'yarn') { %>
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+<% } else if (pm === 'yarn') { %>
 RUN corepack enable
 <% } %>
 
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json <%= pm.lockfile %>* ./
+COPY package.json <%= pm.lockfile %> ./
 <% if (pm === 'pnpm') { %>
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store <%= pm.ci %>
-<% } %>
-<% if (pm !== 'pnpm') { %>
+<% } else { %>
 RUN <%= pm.ci %>
 <% } %>
 
 FROM base AS build
+ENV NODE_OPTIONS="--max-old-space-size=768"
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY package.json <%= pm.lockfile %> tsconfig.json ./
+COPY prisma ./prisma
+COPY src ./src
 RUN <%= pm.prismaExec %> generate
 RUN <%= pm.run %> build
 
-FROM base AS production
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/package.json ./
+FROM build AS migrate
+CMD ["sh", "-c", "<%= pm.prismaExec %> migrate deploy"]
+
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN npm install -g pm2@5.4.3
+RUN chown -R node /app
+USER node
+
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node package.json ecosystem.config.cjs ./
+COPY --chown=node:node prisma ./prisma
 
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+
+CMD ["pm2-runtime", "ecosystem.config.cjs"]
+<% } %>

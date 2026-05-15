@@ -77,7 +77,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   ) as ComponentPaths;
 
   const hasJs = components.some((c) =>
-    ["fastify", "frontend", "e2e"].includes(c),
+    ["fastify", "express", "frontend", "e2e"].includes(c),
   );
   let pm: PackageManager = "npm";
 
@@ -103,6 +103,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
     components,
     paths,
     pm: pmCommands(pm),
+    orm: "prisma",
   };
 
   const dlSpinner = p.spinner();

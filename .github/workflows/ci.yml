@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   changes:
@@ -16,13 +17,14 @@ jobs:
       cli: ${{ steps.filter.outputs.cli }}
       fastapi: ${{ steps.filter.outputs.fastapi }}
       fastify: ${{ steps.filter.outputs.fastify }}
+      express: ${{ steps.filter.outputs.express }}
       frontend: ${{ steps.filter.outputs.frontend }}
       mobile: ${{ steps.filter.outputs.mobile }}
       e2e: ${{ steps.filter.outputs.e2e }}
       infra: ${{ steps.filter.outputs.infra }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
         id: filter
         with:
           filters: |
@@ -32,6 +34,8 @@ jobs:
               - 'fastapi/**'
             fastify:
               - 'fastify/**'
+            express:
+              - 'express/**'
             frontend:
               - 'frontend/**'
             mobile:
@@ -45,31 +49,32 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: python3 scripts/style-check.py frontend/src
 
   cli:
     name: CLI (lint + typecheck + build + test + audit)
     needs: changes
-    if: needs.changes.outputs.cli == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cli
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Configure git for tests
         run: |
           git config --global user.name "CI"
           git config --global user.email "ci@projx.dev"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: pnpm
@@ -84,14 +89,14 @@ jobs:
   fastapi:
     name: FastAPI (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.fastapi == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: fastapi
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
       - run: uv sync --group dev
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
@@ -103,22 +108,35 @@ jobs:
             exit 1
           fi
       - run: uv run lint-imports
-      - run: uv run pip-audit --ignore-vuln CVE-2026-3219
+      - name: Audit Python dependencies
+        run: |
+          run_pip_audit() {
+            for attempt in 1 2 3; do
+              if uv run pip-audit --ignore-vuln CVE-2026-3219; then
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                return 1
+              fi
+              sleep $((attempt * 5))
+            done
+          }
+          run_pip_audit
 
   fastify:
     name: Fastify (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.fastify == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastify == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: fastify
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 20
           cache: pnpm
@@ -133,17 +151,17 @@ jobs:
   frontend:
     name: Frontend (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: pnpm
@@ -154,17 +172,43 @@ jobs:
       - run: pnpm exec tsc --noEmit
       - run: pnpm audit --prod
 
+  express:
+    name: Express (format + lint + typecheck + build + test + audit)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.express == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: express
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: express/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --check .
+      - run: pnpm exec eslint .
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build
+      - run: pnpm exec vitest run --coverage.enabled=false
+      - run: pnpm audit --prod
+
   mobile:
     name: Flutter (format + analyze + test + coverage)
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v5
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
       - run: flutter pub get
@@ -177,17 +221,17 @@ jobs:
   e2e:
     name: E2E (format + lint + typecheck + audit)
     needs: changes
-    if: needs.changes.outputs.e2e == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: e2e
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: pnpm
@@ -201,16 +245,16 @@ jobs:
   infra:
     name: Terraform (fmt + validate)
     needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: infra/stack
     steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
-          terraform_version: '1.11'
+          terraform_version: "1.11"
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate

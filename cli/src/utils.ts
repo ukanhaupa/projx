@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   chmod,
   cp,
+  mkdtemp,
   mkdir,
   readdir,
   readFile,
@@ -19,6 +20,7 @@ export const REPO_URL = `https://github.com/${REPO}`;
 export const COMPONENTS = [
   "fastapi",
   "fastify",
+  "express",
   "frontend",
   "mobile",
   "e2e",
@@ -29,6 +31,9 @@ export type Component = (typeof COMPONENTS)[number];
 
 export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
+export const ORM_PROVIDERS = ["prisma", "drizzle"] as const;
+export type OrmProvider = (typeof ORM_PROVIDERS)[number];
 
 export interface PmCommands {
   name: PackageManager;
@@ -112,7 +117,7 @@ export function detectPackageManagerFromComponents(
   cwd: string,
   componentPaths: Partial<Record<Component, string>>,
 ): PackageManager | null {
-  const jsComponents: Component[] = ["fastify", "frontend", "e2e"];
+  const jsComponents: Component[] = ["fastify", "express", "frontend", "e2e"];
   for (const component of jsComponents) {
     const dir = componentPaths[component];
     if (!dir) continue;
@@ -133,6 +138,7 @@ export interface Options {
   git: boolean;
   install: boolean;
   packageManager?: PackageManager;
+  orm?: OrmProvider;
   features?: Partial<Record<Feature, string>>;
 }
 
@@ -177,8 +183,7 @@ export async function downloadRepo(localPath?: string): Promise<string> {
     return localPath;
   }
 
-  const dest = join(tmpdir(), `projx-${Date.now()}`);
-  await mkdir(dest, { recursive: true });
+  const dest = await mkdtemp(join(tmpdir(), "projx-"));
 
   if (hasCommand("git")) {
     execSync(`git clone --depth 1 ${REPO_URL}.git "${dest}/repo"`, {
@@ -286,7 +291,12 @@ export async function copyStaticFiles(
     manifest.push(".vscode/extensions.json");
   }
 
-  const staticScripts = ["setup-docker.sh", "setup-ssl.sh"];
+  const staticScripts = [
+    "ci-local.sh",
+    "setup-docker.sh",
+    "setup-ssl.sh",
+    "style-check.py",
+  ];
   const scriptsSrc = join(tpl, "scripts");
   if (existsSync(scriptsSrc)) {
     await mkdir(join(dest, "scripts"), { recursive: true });
@@ -457,10 +467,10 @@ export async function writeProjxConfig(
 
 export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   "docker-compose.yml",
-  "docker-compose.dev.yml",
   "README.md",
   ".githooks/pre-commit",
   ".github/workflows/ci.yml",
+  "scripts/ci-local.sh",
   "scripts/setup.sh",
   "scripts/setup-docker.sh",
   "scripts/setup-ssl.sh",
@@ -471,6 +481,7 @@ export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
 > = {
   fastapi: ["pyproject.toml"],
   fastify: ["package.json"],
+  express: ["package.json"],
   frontend: ["package.json"],
   e2e: ["package.json"],
   mobile: ["pubspec.yaml"],
@@ -534,10 +545,11 @@ function evalExpr(expr: string, vars: Record<string, unknown>): unknown {
   const components = vars.components as string[];
   const projectName = vars.projectName as string;
   const pmName = (vars.pm as { name?: string })?.name ?? "npm";
-  const argNames = ["components", "projectName", "pm"];
-  const argValues: unknown[] = [components, projectName, pmName];
+  const orm = (vars.orm as string | undefined) ?? "prisma";
+  const argNames = ["components", "projectName", "pm", "orm"];
+  const argValues: unknown[] = [components, projectName, pmName, orm];
   for (const [k, v] of Object.entries(vars)) {
-    if (k === "components" || k === "projectName" || k === "pm") continue;
+    if (["components", "projectName", "pm", "orm"].includes(k)) continue;
     if (!/^[a-zA-Z_$][\w$]*$/.test(k)) continue;
     argNames.push(k);
     argValues.push(v);

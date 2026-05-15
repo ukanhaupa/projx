@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, mkdir, rm } from "node:fs/promises";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as p from "@clack/prompts";
@@ -114,13 +114,13 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
       components,
       paths: componentPaths,
       pm: pmCommands((raw.packageManager ?? "npm") as "npm"),
+      orm: raw.orm ?? "prisma",
     };
 
     const spinner = p.spinner();
     spinner.start("Analyzing changes");
 
-    const tmpTemplate = join(tmpdir(), `projx-diff-${Date.now()}`);
-    await mkdir(tmpTemplate, { recursive: true });
+    const tmpTemplate = await mkdtemp(join(tmpdir(), "projx-diff-"));
     await writeTemplateToDir(
       tmpTemplate,
       repoDir,

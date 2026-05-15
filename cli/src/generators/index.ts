@@ -23,6 +23,7 @@ function shellSafeUpper(s: string): string {
 const CANONICAL_DISPLAY: Record<Component, string> = {
   fastapi: "FastAPI",
   fastify: "Fastify",
+  express: "Express",
   frontend: "Frontend",
   mobile: "Flutter",
   e2e: "E2E",
@@ -51,6 +52,7 @@ function withInstances(vars: GeneratorVars): GeneratorVars {
     instances: enriched,
     fastapiInstances: byType("fastapi"),
     fastifyInstances: byType("fastify"),
+    expressInstances: byType("express"),
     frontendInstances: byType("frontend"),
     mobileInstances: byType("mobile"),
     e2eInstances: byType("e2e"),
@@ -70,12 +72,6 @@ export async function generateDockerCompose(
   vars: GeneratorVars,
 ): Promise<string> {
   return renderShared("docker-compose.yml.ejs", withInstances(vars));
-}
-
-export async function generateDockerComposeDev(
-  vars: GeneratorVars,
-): Promise<string> {
-  return renderShared("docker-compose.dev.yml.ejs", withInstances(vars));
 }
 
 export async function generatePreCommit(vars: GeneratorVars): Promise<string> {
@@ -120,9 +116,9 @@ export function generateVscodeSettings(vars: GeneratorVars): string {
   settings["editor.codeActionsOnSave"] = { "source.fixAll.eslint": "explicit" };
   settings["eslint.useFlatConfig"] = true;
 
-  const prettierComponent = (["frontend", "fastify", "e2e"] as const).find(
-    (c) => vars.components.includes(c),
-  );
+  const prettierComponent = (
+    ["frontend", "fastify", "express", "e2e"] as const
+  ).find((c) => vars.components.includes(c));
   if (prettierComponent) {
     settings["prettier.configPath"] =
       `${vars.paths[prettierComponent]}/.prettierrc`;

@@ -150,6 +150,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       instances,
       pm: pmCommands(pm),
       nameOverrides,
+      orm: raw.orm ?? "prisma",
     };
 
     const spinner = p.spinner();
@@ -275,7 +276,7 @@ export async function findPinnedFilesWithUpdates(
   componentSkips: Record<string, string[]> | undefined,
   rootSkip: string[],
 ): Promise<string[]> {
-  const { mkdir, rm, readFile } = await import("node:fs/promises");
+  const { mkdtemp, rm, readFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { writeTemplateToDir } = await import("./baseline.js");
 
@@ -297,8 +298,7 @@ export async function findPinnedFilesWithUpdates(
   }
   if (rootPinned.length === 0 && componentPinned.length === 0) return [];
 
-  const tmpTemplate = join(tmpdir(), `projx-pinned-${Date.now()}`);
-  await mkdir(tmpTemplate, { recursive: true });
+  const tmpTemplate = await mkdtemp(join(tmpdir(), "projx-pinned-"));
 
   void componentSkips;
   void rootSkip;

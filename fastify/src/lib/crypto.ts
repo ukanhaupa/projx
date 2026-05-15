@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 
 const ALGO = 'aes-256-gcm';
@@ -6,30 +6,25 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 
 let cachedKey: Buffer | null = null;
-let warnedDerivation = false;
 
 function getKey(): Buffer {
   if (cachedKey) return cachedKey;
   const raw = config.CRED_ENCRYPTION_KEY;
-  if (raw) {
-    const key = Buffer.from(raw, 'base64');
-    if (key.length !== 32) {
-      throw new Error(
-        `CRED_ENCRYPTION_KEY must decode to 32 bytes (got ${key.length}). ` +
-          `Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`,
-      );
-    }
-    cachedKey = key;
-    return key;
-  }
-  if (!warnedDerivation) {
-    warnedDerivation = true;
-    console.warn(
-      '[crypto] CRED_ENCRYPTION_KEY not set — deriving from JWT_SECRET. Set an explicit 32-byte base64 key for production.',
+  if (!raw) {
+    throw new Error(
+      'CRED_ENCRYPTION_KEY is required. ' +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
     );
   }
-  cachedKey = createHash('sha256').update(config.JWT_SECRET).digest();
-  return cachedKey;
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== 32) {
+    throw new Error(
+      `CRED_ENCRYPTION_KEY must decode to 32 bytes (got ${key.length}). ` +
+        `Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`,
+    );
+  }
+  cachedKey = key;
+  return key;
 }
 
 export function encryptString(plaintext: string): string {

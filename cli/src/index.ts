@@ -4,8 +4,10 @@ import { resolve } from "node:path";
 import {
   COMPONENTS,
   KNOWN_FEATURES,
+  ORM_PROVIDERS,
   type Component,
   type Feature,
+  type OrmProvider,
   type Options,
 } from "./utils.js";
 import { parseFeatureFlag } from "./features.js";
@@ -54,7 +56,11 @@ function matchFeatureFlag(
   for (const feat of KNOWN_FEATURES) {
     const eq = `--${feat}=`;
     if (arg.startsWith(eq)) {
-      return { feature: feat, value: arg.slice(eq.length), consumedNext: false };
+      return {
+        feature: feat,
+        value: arg.slice(eq.length),
+        consumedNext: false,
+      };
     }
     if (arg === `--${feat}`) {
       const next = argv[i + 1];
@@ -124,6 +130,17 @@ function parseArgs(): ParsedArgs {
           .split(",")
           .filter((c): c is Component => COMPONENTS.includes(c as Component));
       }
+      continue;
+    }
+
+    if (arg === "--orm") {
+      const val = args[++i] as OrmProvider | undefined;
+      if (!val || !ORM_PROVIDERS.includes(val)) {
+        throw new Error(
+          `Invalid --orm. Use one of: ${ORM_PROVIDERS.join(", ")}`,
+        );
+      }
+      options.orm = val;
       continue;
     }
 
@@ -231,7 +248,8 @@ function printHelp(): void {
     projx sync [--url <url>]      Sync types from running backend
 
   Options:
-    --components <list>  Comma-separated: fastapi,fastify,frontend,mobile,e2e,infra
+    --components <list>  Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
+    --orm <provider>     Node backend ORM: prisma (default), drizzle
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation
@@ -242,6 +260,7 @@ function printHelp(): void {
   Examples:
     npx create-projx my-app
     npx create-projx my-app --components fastapi,frontend,e2e
+    npx create-projx my-app --components express,frontend,e2e --orm drizzle
     npx create-projx my-app --components fastify,frontend,mobile --auth fastify,frontend,mobile
     npx create-projx my-app -y
     npx create-projx add frontend mobile
@@ -369,11 +388,15 @@ async function main(): Promise<void> {
       components: options.components,
       git: options.git ?? true,
       install: options.install ?? true,
+      orm: options.orm ?? "prisma",
+      features: options.features,
     };
   } else {
     opts = await runPrompts(name);
     opts.git = options.git ?? opts.git;
     opts.install = options.install ?? opts.install;
+    opts.orm = options.orm ?? opts.orm ?? "prisma";
+    opts.features = options.features ?? opts.features;
   }
 
   const dest = resolve(process.cwd(), opts.name);

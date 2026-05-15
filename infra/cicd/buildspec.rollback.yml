@@ -1,0 +1,129 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - curl -sSL -o kubectl "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - install -m 0755 kubectl /usr/local/bin/kubectl
+
+  build:
+    commands:
+      - |
+        set -Eeuo pipefail
+
+        SERVICE="${ROLLBACK_SERVICE:-}"
+        IMAGE_TAG="${ROLLBACK_IMAGE_TAG:-}"
+
+        if [ -z "$SERVICE" ] || [ -z "$IMAGE_TAG" ]; then
+          echo "Set ROLLBACK_SERVICE=backend|frontend and ROLLBACK_IMAGE_TAG=<tag> as CodeBuild environment overrides."
+          exit 2
+        fi
+
+        case "$SERVICE" in
+          backend)
+            REPOSITORY_URL="$BACKEND_ECR_REPOSITORY_URL"
+            HEALTH_URL="${BACKEND_DEPLOY_HEALTH_URL:-http://localhost:7860/health}"
+            ;;
+          frontend)
+            REPOSITORY_URL="$FRONTEND_ECR_REPOSITORY_URL"
+            HEALTH_URL="${FRONTEND_DEPLOY_HEALTH_URL:-http://localhost/}"
+            ;;
+          *)
+            echo "ROLLBACK_SERVICE must be backend or frontend."
+            exit 2
+            ;;
+        esac
+
+        json_escape() {
+          printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+        }
+
+        notify_rollback() {
+          local status="$1"
+          if [ -z "${SLACK_DEPLOY_WEBHOOK:-}" ]; then
+            return 0
+          fi
+          curl -fsS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"$(json_escape "$SERVICE rollback $status to $IMAGE_TAG")\"}" \
+            "$SLACK_DEPLOY_WEBHOOK" >/dev/null || true
+        }
+
+        run_health_check() {
+          local status
+          for attempt in 1 2 3 4 5; do
+            status="$(curl -kfsSL -o /dev/null -w '%{http_code}' "$HEALTH_URL" 2>/tmp/projx-rollback-health.err || true)"
+            case "$status" in
+              2*|3*) echo "$SERVICE rollback health check OK ($status)"; return 0 ;;
+            esac
+            echo "$SERVICE rollback health check attempt $attempt failed: HTTP ${status:-000}"
+            sleep $((attempt * 5))
+          done
+          return 1
+        }
+
+        trap 'notify_rollback failed' ERR
+
+        REPOSITORY_NAME="${REPOSITORY_URL#*/}"
+        aws ecr describe-images \
+          --region "$TARGET_AWS_REGION" \
+          --repository-name "$REPOSITORY_NAME" \
+          --image-ids imageTag="$IMAGE_TAG" >/dev/null
+
+        if [ -n "${EKS_CLUSTER_NAME:-}" ]; then
+          aws eks update-kubeconfig --region "$TARGET_AWS_REGION" --name "$EKS_CLUSTER_NAME"
+          kubectl -n "$APPS_NAMESPACE" set image "deployment/$SERVICE" "$SERVICE=$REPOSITORY_URL:$IMAGE_TAG"
+          kubectl -n "$APPS_NAMESPACE" rollout status "deployment/$SERVICE" --timeout=300s
+          if [ -n "$HEALTH_URL" ]; then
+            run_health_check
+          fi
+        else
+          INSTANCE_IDS="$(aws ec2 describe-instances \
+            --region "$TARGET_AWS_REGION" \
+            --filters "Name=tag:Name,Values=$COMPOSE_INSTANCE_TAG" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --output text)"
+          if [ -z "$INSTANCE_IDS" ]; then
+            echo "ERROR: No running compose instance found with tag Name=$COMPOSE_INSTANCE_TAG"
+            exit 1
+          fi
+          INSTANCE_ID="$(echo "$INSTANCE_IDS" | awk '{print $1}')"
+          ECR_REGISTRY="$(echo "$REPOSITORY_URL" | cut -d/ -f1)"
+          REMOTE_COMMAND="$(printf '%s\n' \
+            'set -Eeuo pipefail' \
+            "aws ecr get-login-password --region \"$TARGET_AWS_REGION\" | docker login --username AWS --password-stdin \"$ECR_REGISTRY\"" \
+            "docker pull \"$REPOSITORY_URL:$IMAGE_TAG\"" \
+            "docker tag \"$REPOSITORY_URL:$IMAGE_TAG\" \"$REPOSITORY_URL:latest\"" \
+            "docker-compose -f /opt/docker-compose.yml up -d --no-deps \"$SERVICE\"" \
+            'healthy=false' \
+            'for attempt in 1 2 3 4 5; do' \
+            "  status=\$(curl -kfsSL -o /dev/null -w '%{http_code}' \"$HEALTH_URL\" 2>/tmp/projx-rollback-health.err || true)" \
+            '  case "$status" in' \
+            "    2*|3*) echo \"$SERVICE rollback health check OK (\$status)\"; healthy=true; break ;;" \
+            '  esac' \
+            "  echo \"$SERVICE rollback health check attempt \$attempt failed: HTTP \${status:-000}\"" \
+            '  sleep $((attempt * 5))' \
+            'done' \
+            'if [ "$healthy" != "true" ]; then' \
+            '  exit 1' \
+            'fi')"
+          COMMAND_ID="$(aws ssm send-command \
+            --region "$TARGET_AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands="$REMOTE_COMMAND" \
+            --query 'Command.CommandId' \
+            --output text)"
+          echo "SSM rollback command sent: $COMMAND_ID; waiting for completion..."
+          aws ssm wait command-executed \
+            --region "$TARGET_AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || \
+          (aws ssm get-command-invocation \
+            --region "$TARGET_AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query 'StandardErrorContent' \
+            --output text && exit 1)
+        fi
+
+        notify_rollback succeeded

@@ -42,9 +42,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Back to Dashboard' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Go home' })).toBeInTheDocument();
     spy.mockRestore();
   });
 

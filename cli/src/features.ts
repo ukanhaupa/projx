@@ -117,7 +117,11 @@ export function validateFeatureTargets(
           `No ${t.component} instance named "${t.instance}". Known: ${known}.`,
         );
       }
-      resolved.push({ component: t.component, instance: t.instance, path: match.path });
+      resolved.push({
+        component: t.component,
+        instance: t.instance,
+        path: match.path,
+      });
     } else {
       resolved.push({
         component: t.component,
@@ -338,7 +342,9 @@ async function applyTextPatch(
 ): Promise<void> {
   const filePath = join(targetPath, patch.file);
   if (!existsSync(filePath)) {
-    throw new Error(`text patch failed: ${patch.file} not found in ${targetPath}.`);
+    throw new Error(
+      `text patch failed: ${patch.file} not found in ${targetPath}.`,
+    );
   }
   const content = await readFile(filePath, "utf-8");
   const sentinel = sentinelFor(featureName, patch.anchor, patch.insert);

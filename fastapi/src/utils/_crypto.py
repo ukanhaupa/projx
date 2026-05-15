@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import json
 import os
 from typing import Any
@@ -12,15 +11,15 @@ TAG_LEN = 16
 
 def _get_key() -> bytes:
     raw = os.environ.get("CRED_ENCRYPTION_KEY")
-    if raw:
-        key = base64.b64decode(raw)
-        if len(key) != 32:
-            raise RuntimeError(f"CRED_ENCRYPTION_KEY must decode to 32 bytes (got {len(key)})")
-        return key
-    jwt_secret = os.environ.get("JWT_SECRET")
-    if jwt_secret:
-        return hashlib.sha256(jwt_secret.encode()).digest()
-    raise RuntimeError("CRED_ENCRYPTION_KEY or JWT_SECRET environment variable is required")
+    if not raw:
+        raise RuntimeError(
+            "CRED_ENCRYPTION_KEY is required. "
+            'Generate one with: python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"'
+        )
+    key = base64.b64decode(raw)
+    if len(key) != 32:
+        raise RuntimeError(f"CRED_ENCRYPTION_KEY must decode to 32 bytes (got {len(key)})")
+    return key
 
 
 def encrypt_config(data: dict[str, Any]) -> str:

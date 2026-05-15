@@ -174,4 +174,3 @@ describe("init — guard rails", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });
-
