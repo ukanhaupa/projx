@@ -181,6 +181,8 @@ jobs:
       - run: <%= pm.ci %>
 <% if (orm === 'drizzle') { %>
       - run: <%= pm.exec %> drizzle-kit push --force
+<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+      - run: <%= pm.exec %> tsx scripts/db-sync.ts
 <% } else { %>
       - run: <%= pm.prismaExec %> generate
       - run: <%= pm.prismaExec %> migrate deploy
@@ -237,6 +239,8 @@ jobs:
       - run: <%= pm.ci %>
 <% if (orm === 'drizzle') { %>
       - run: <%= pm.exec %> drizzle-kit push --force
+<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+      - run: <%= pm.exec %> tsx scripts/db-sync.ts
 <% } else { %>
       - run: <%= pm.prismaExec %> generate
       - run: <%= pm.prismaExec %> migrate deploy

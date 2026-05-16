@@ -11,7 +11,11 @@ type ErrorWithCode = Error & {
 
 export default fp(async (fastify) => {
   fastify.setErrorHandler(
-    (error: FastifyError | Error, request: FastifyRequest, reply: FastifyReply) => {
+    (
+      error: FastifyError | Error,
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
       if ('validation' in error && (error as FastifyError).validation) {
         return reply.status(400).send({
           detail: error.message,
@@ -56,7 +60,10 @@ export default fp(async (fastify) => {
       }
 
       request.log.error(error);
-      const statusCode = 'statusCode' in error ? ((error as FastifyError).statusCode ?? 500) : 500;
+      const statusCode =
+        'statusCode' in error
+          ? ((error as FastifyError).statusCode ?? 500)
+          : 500;
       return reply.status(statusCode).send({
         detail: statusCode !== 500 ? error.message : 'Internal server error',
         request_id: request.id,

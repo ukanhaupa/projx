@@ -83,7 +83,13 @@ describe('Entity Registration Validation', () => {
           readonly: false,
           softDelete: false,
           bulkOperations: false,
-          columnNames: ['id', 'name', 'description', 'created_at', 'updated_at'],
+          columnNames: [
+            'id',
+            'name',
+            'description',
+            'created_at',
+            'updated_at',
+          ],
           searchableFields: ['name', 'description'],
           fields: [],
           schema: dummySchema,
@@ -236,7 +242,11 @@ describe('Entity Registration Validation', () => {
         updateSchema: Type.Object({}),
         fields: undefined,
         fieldOverrides: {
-          config: { label: 'Encrypted Config', field_type: 'textarea', filterable: false },
+          config: {
+            label: 'Encrypted Config',
+            field_type: 'textarea',
+            filterable: false,
+          },
         },
       });
 
@@ -249,10 +259,18 @@ describe('Entity Registration Validation', () => {
         'created_at',
         'updated_at',
       ]);
-      expect(fields.find((field) => field.key === 'id')?.is_primary_key).toBe(true);
-      expect(fields.find((field) => field.key === 'is_active')?.type).toBe('bool');
-      expect(fields.find((field) => field.key === 'config')?.label).toBe('Encrypted Config');
-      expect(fields.find((field) => field.key === 'config')?.filterable).toBe(false);
+      expect(fields.find((field) => field.key === 'id')?.is_primary_key).toBe(
+        true,
+      );
+      expect(fields.find((field) => field.key === 'is_active')?.type).toBe(
+        'bool',
+      );
+      expect(fields.find((field) => field.key === 'config')?.label).toBe(
+        'Encrypted Config',
+      );
+      expect(fields.find((field) => field.key === 'config')?.filterable).toBe(
+        false,
+      );
     });
 
     it('fails loud when a required Prisma field is neither accepted nor filled before create', () => {
@@ -295,7 +313,11 @@ describe('Entity Registration Validation', () => {
       expect(EntityRegistry.getAll()).toHaveLength(0);
       expect(EntityRegistry.getSkipped()).toEqual([
         { name: 'Item', tableName: 'hidden_items', reason: 'private=true' },
-        { name: 'Item', tableName: 'internal_items', reason: 'skipAutoRoutes=true' },
+        {
+          name: 'Item',
+          tableName: 'internal_items',
+          reason: 'skipAutoRoutes=true',
+        },
       ]);
     });
   });

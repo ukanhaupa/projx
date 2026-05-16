@@ -33,7 +33,11 @@ describe('rate limit', () => {
     for (let i = 0; i < 3; i++) {
       await app.inject({ method: 'GET', url: '/ping', headers: ipA });
     }
-    const blockedA = await app.inject({ method: 'GET', url: '/ping', headers: ipA });
+    const blockedA = await app.inject({
+      method: 'GET',
+      url: '/ping',
+      headers: ipA,
+    });
     expect(blockedA.statusCode).toBe(429);
     const okB = await app.inject({ method: 'GET', url: '/ping', headers: ipB });
     expect(okB.statusCode).toBe(200);

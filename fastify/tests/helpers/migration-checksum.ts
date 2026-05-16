@@ -32,7 +32,9 @@ export async function calculateMigrationChecksums(
     });
   }
 
-  return migrations.sort((a, b) => a.migration_name.localeCompare(b.migration_name));
+  return migrations.sort((a, b) =>
+    a.migration_name.localeCompare(b.migration_name),
+  );
 }
 
 export async function findMigrationChecksumDrift(
@@ -52,12 +54,18 @@ export async function findMigrationChecksumDrift(
       expected: migration.checksum,
       actual: current.get(migration.migration_name) ?? '',
     }))
-    .filter((migration) => migration.actual && migration.actual !== migration.expected);
+    .filter(
+      (migration) =>
+        migration.actual && migration.actual !== migration.expected,
+    );
 }
 
 export function formatMigrationDriftError(drift: MigrationDrift[]): string {
   const rows = drift
-    .map((item) => `  - ${item.migration_name}: database=${item.expected}, file=${item.actual}`)
+    .map(
+      (item) =>
+        `  - ${item.migration_name}: database=${item.expected}, file=${item.actual}`,
+    )
     .join('\n');
   return [
     '',

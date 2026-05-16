@@ -11,13 +11,17 @@ describe('Express app', () => {
   });
 
   it('propagates a caller request id', async () => {
-    const res = await request(buildApp()).get('/api/health').set('x-request-id', 'req-test');
+    const res = await request(buildApp())
+      .get('/api/health')
+      .set('x-request-id', 'req-test');
 
     expect(res.headers['x-request-id']).toBe('req-test');
   });
 
   it('returns structured errors with request id', async () => {
-    const res = await request(buildApp()).get('/missing').set('x-request-id', 'req-missing');
+    const res = await request(buildApp())
+      .get('/missing')
+      .set('x-request-id', 'req-missing');
 
     expect(res.status).toBe(404);
     expect(res.body.error).toMatchObject({

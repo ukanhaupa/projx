@@ -144,7 +144,11 @@ export const UpdateTaskSchema = Type.Object({
 Create `src/modules/tasks/index.ts`:
 
 ```typescript
-import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';
+import {
+  EntityRegistry,
+  type EntityConfig,
+  type FieldMeta,
+} from '../_base/index.js';
 import { TaskSchema, CreateTaskSchema, UpdateTaskSchema } from './schemas.js';
 
 const fields: FieldMeta[] = [
@@ -225,7 +229,14 @@ export const taskConfig: EntityConfig = {
   readonly: false,
   softDelete: false,
   bulkOperations: true,
-  columnNames: ['id', 'title', 'status', 'assigned_to', 'created_at', 'updated_at'],
+  columnNames: [
+    'id',
+    'title',
+    'status',
+    'assigned_to',
+    'created_at',
+    'updated_at',
+  ],
   searchableFields: ['title', 'assigned_to'],
   fields,
   schema: TaskSchema,

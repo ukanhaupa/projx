@@ -28,6 +28,14 @@ echo "<%= inst.display %> dependencies installed."
       echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
     fi
   fi
+<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+  if [ -f scripts/db-sync.ts ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> tsx scripts/db-sync.ts
+    else
+      echo "<%= inst.display %>: skipping schema sync (DATABASE_URL not set)."
+    fi
+  fi
 <% } else { %>
   if [ -f prisma/schema.prisma ] && [ -z "$(ls -A prisma/migrations 2>/dev/null | grep -v migration_lock.toml)" ]; then
     if [ -n "$DATABASE_URL" ]; then
@@ -55,6 +63,14 @@ echo "<%= inst.display %> dependencies installed."
       <%= pm.exec %> drizzle-kit push --force
     else
       echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
+    fi
+  fi
+<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+  if [ -f scripts/db-sync.ts ]; then
+    if [ -n "$DATABASE_URL" ]; then
+      <%= pm.exec %> tsx scripts/db-sync.ts
+    else
+      echo "<%= inst.display %>: skipping schema sync (DATABASE_URL not set)."
     fi
   fi
 <% } else { %>

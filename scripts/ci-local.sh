@@ -7,7 +7,7 @@
 #   ./scripts/ci-local.sh fastify e2e           # run named sections only
 #
 # Sections (auto-detected by which top-level dirs exist):
-#   fastapi  fastify  express  frontend  e2e  infra
+#   cli  fastapi  fastify  express  frontend  e2e  infra
 
 set -uo pipefail
 
@@ -152,6 +152,17 @@ sec_fastapi() {
   run_step "fastapi audit" uv run pip-audit
 }
 
+sec_cli() {
+  cd "$ROOT_DIR/cli" || exit 1
+  run_step "cli install" pm_install
+  run_step "cli format" pm_exec prettier --check .
+  run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
+  run_step "cli typecheck" pm_exec tsc --noEmit
+  run_step "cli build" pm_run build
+  run_step "cli tests" pm_exec vitest run --coverage.enabled=false
+  run_step "cli audit" pm_audit
+}
+
 sec_fastify() { run_js_component fastify; }
 sec_express() { run_js_component express; }
 sec_frontend() { run_js_component frontend; }
@@ -166,6 +177,7 @@ sec_infra() {
 
 available_sections() {
   local -a found=()
+  [ -d "$ROOT_DIR/cli" ] && found+=("cli")
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")

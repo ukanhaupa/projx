@@ -18,7 +18,9 @@ export interface BuildAppOptions {
   logger?: boolean | object;
 }
 
-export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? {
       level: config.LOG_LEVEL,
@@ -30,7 +32,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
             }
           : undefined,
     },
-    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    genReqId: (req) =>
+      (req.headers['x-request-id'] as string) || crypto.randomUUID(),
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -41,7 +44,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
     timeWindow: config.RATE_LIMIT_WINDOW,
-    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
+    keyGenerator: (request: FastifyRequest) =>
+      request.authUser?.sub ?? request.ip,
   });
 
   await app.register(swaggerPlugin);
@@ -80,18 +84,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       const skipped = EntityRegistry.getSkipped();
 
       if (skipped.length > 0) {
-        app.log.warn({ entities: skipped }, 'EntityRegistry skipped auto-route registration');
+        app.log.warn(
+          { entities: skipped },
+          'EntityRegistry skipped auto-route registration',
+        );
       }
 
       for (const entityConfig of entities) {
-        const routeRegistrar = entityConfig.customRoutes ?? registerEntityRoutes;
+        const routeRegistrar =
+          entityConfig.customRoutes ?? registerEntityRoutes;
         await instance.register(
           async (entityInstance) => {
             routeRegistrar(entityInstance, entityConfig);
           },
           { prefix: entityConfig.apiPrefix },
         );
-        app.log.debug(`Mounted ${entityConfig.name} at /api/v1${entityConfig.apiPrefix}`);
+        app.log.debug(
+          `Mounted ${entityConfig.name} at /api/v1${entityConfig.apiPrefix}`,
+        );
       }
 
       instance.get(

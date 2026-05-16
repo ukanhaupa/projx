@@ -46,7 +46,8 @@ function loadConfig(): Config {
     JWT_AUDIENCE: process.env.JWT_AUDIENCE ?? '',
     JWT_REQUIRE_EXP: process.env.JWT_REQUIRE_EXP !== 'false',
     JWT_VERIFY_NBF: process.env.JWT_VERIFY_NBF !== 'false',
-    CORS_ALLOW_ORIGINS: process.env.CORS_ALLOW_ORIGINS ?? 'http://localhost:5173',
+    CORS_ALLOW_ORIGINS:
+      process.env.CORS_ALLOW_ORIGINS ?? 'http://localhost:5173',
     CRED_ENCRYPTION_KEY: process.env.CRED_ENCRYPTION_KEY ?? '',
     RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX ?? 200),
     RATE_LIMIT_WINDOW: process.env.RATE_LIMIT_WINDOW ?? '1 minute',

@@ -1,5 +1,13 @@
-import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';
-import { AuditLogSchema, CreateAuditLogSchema, UpdateAuditLogSchema } from './schemas.js';
+import {
+  EntityRegistry,
+  type EntityConfig,
+  type FieldMeta,
+} from '../_base/index.js';
+import {
+  AuditLogSchema,
+  CreateAuditLogSchema,
+  UpdateAuditLogSchema,
+} from './schemas.js';
 
 const fields: FieldMeta[] = [
   {

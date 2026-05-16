@@ -1,12 +1,12 @@
-import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { type Component, EXCLUDE, readFileOrNull } from "./utils.js";
+import { existsSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { type Component, EXCLUDE, readFileOrNull } from './utils.js';
 
 export interface DetectedComponent {
   component: Component;
   directory: string;
-  confidence: "high" | "medium";
+  confidence: 'high' | 'medium';
   evidence: string;
 }
 
@@ -18,7 +18,7 @@ export async function detectComponents(
 
   const dirs = entries
     .filter(
-      (e) => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDE.has(e.name),
+      (e) => e.isDirectory() && !e.name.startsWith('.') && !EXCLUDE.has(e.name),
     )
     .map((e) => e.name);
 
@@ -37,13 +37,13 @@ async function scanDirectory(
 ): Promise<DetectedComponent[]> {
   const results: DetectedComponent[] = [];
 
-  const pyproject = await readFileOrNull(join(dir, "pyproject.toml"));
+  const pyproject = await readFileOrNull(join(dir, 'pyproject.toml'));
   if (pyproject && /fastapi/i.test(pyproject)) {
     results.push({
-      component: "fastapi",
+      component: 'fastapi',
       directory: relPath,
-      confidence: "high",
-      evidence: "pyproject.toml has fastapi dependency",
+      confidence: 'high',
+      evidence: 'pyproject.toml has fastapi dependency',
     });
   }
 
@@ -53,62 +53,62 @@ async function scanDirectory(
 
     if (allDeps.fastify) {
       results.push({
-        component: "fastify",
+        component: 'fastify',
         directory: relPath,
-        confidence: "high",
-        evidence: "package.json has fastify dependency",
+        confidence: 'high',
+        evidence: 'package.json has fastify dependency',
       });
     }
 
     if (allDeps.express) {
       results.push({
-        component: "express",
+        component: 'express',
         directory: relPath,
-        confidence: "high",
-        evidence: "package.json has express dependency",
+        confidence: 'high',
+        evidence: 'package.json has express dependency',
       });
     }
 
-    if (allDeps.react || allDeps["react-dom"]) {
+    if (allDeps.react || allDeps['react-dom']) {
       results.push({
-        component: "frontend",
+        component: 'frontend',
         directory: relPath,
-        confidence: "high",
-        evidence: "package.json has react dependency",
+        confidence: 'high',
+        evidence: 'package.json has react dependency',
       });
     }
 
-    if (allDeps["@playwright/test"] || allDeps.playwright) {
+    if (allDeps['@playwright/test'] || allDeps.playwright) {
       results.push({
-        component: "e2e",
+        component: 'e2e',
         directory: relPath,
-        confidence: "high",
-        evidence: "package.json has playwright dependency",
+        confidence: 'high',
+        evidence: 'package.json has playwright dependency',
       });
     }
   }
 
-  const pubspec = await readFileOrNull(join(dir, "pubspec.yaml"));
+  const pubspec = await readFileOrNull(join(dir, 'pubspec.yaml'));
   if (pubspec && /flutter:/i.test(pubspec)) {
     results.push({
-      component: "mobile",
+      component: 'mobile',
       directory: relPath,
-      confidence: "high",
-      evidence: "pubspec.yaml has flutter dependency",
+      confidence: 'high',
+      evidence: 'pubspec.yaml has flutter dependency',
     });
   }
 
   const hasTf =
-    existsSync(join(dir, "main.tf")) ||
-    existsSync(join(dir, "variables.tf")) ||
-    existsSync(join(dir, "stack/main.tf")) ||
-    existsSync(join(dir, "versions.tf"));
+    existsSync(join(dir, 'main.tf')) ||
+    existsSync(join(dir, 'variables.tf')) ||
+    existsSync(join(dir, 'stack/main.tf')) ||
+    existsSync(join(dir, 'versions.tf'));
   if (hasTf) {
     results.push({
-      component: "infra",
+      component: 'infra',
       directory: relPath,
-      confidence: "high",
-      evidence: "Terraform .tf files found",
+      confidence: 'high',
+      evidence: 'Terraform .tf files found',
     });
   }
 
@@ -119,7 +119,7 @@ async function readPkg(dir: string): Promise<{
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 } | null> {
-  const content = await readFileOrNull(join(dir, "package.json"));
+  const content = await readFileOrNull(join(dir, 'package.json'));
   if (!content) return null;
   try {
     return JSON.parse(content);

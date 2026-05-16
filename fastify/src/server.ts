@@ -14,7 +14,9 @@ async function start() {
   try {
     await app.listen({ host: config.HOST, port: config.PORT });
     app.log.info(`Server listening on http://${config.HOST}:${config.PORT}`);
-    app.log.info(`Swagger docs available at http://${config.HOST}:${config.PORT}/docs`);
+    app.log.info(
+      `Swagger docs available at http://${config.HOST}:${config.PORT}/docs`,
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);

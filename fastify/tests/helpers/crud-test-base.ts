@@ -53,8 +53,9 @@ export function buildCreatePayload(
   createSchema: TObject<TProperties>,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  const properties = (createSchema as unknown as { properties?: Record<string, SchemaLike> })
-    .properties;
+  const properties = (
+    createSchema as unknown as { properties?: Record<string, SchemaLike> }
+  ).properties;
   if (!properties) return { ...overrides };
 
   const payload: Record<string, unknown> = {};
@@ -84,13 +85,20 @@ export function describeCrudEntity(config: CrudTestConfig) {
         ? buildCreatePayload(config.createSchema, config.payloadOverrides)
         : undefined);
     if (!createPayload) {
-      throw new Error(`${config.entityName}: createPayload or createSchema is required`);
+      throw new Error(
+        `${config.entityName}: createPayload or createSchema is required`,
+      );
     }
     const uniqueFields = resolveUniqueFields(config);
 
     beforeEach(async () => {
       app = await buildTestApp();
-      const model = (app.prisma as unknown as Record<string, { deleteMany: () => Promise<void> }>)[
+      const model = (
+        app.prisma as unknown as Record<
+          string,
+          { deleteMany: () => Promise<void> }
+        >
+      )[
         config.prismaModel.charAt(0).toLowerCase() + config.prismaModel.slice(1)
       ];
       await model.deleteMany();
@@ -214,7 +222,10 @@ export function describeCrudEntity(config: CrudTestConfig) {
           payload: {
             ...config.createPayload,
             ...Object.fromEntries(
-              uniqueFields.map((field) => [field, `${createPayload[field]}-${i}`]),
+              uniqueFields.map((field) => [
+                field,
+                `${createPayload[field]}-${i}`,
+              ]),
             ),
           },
         });

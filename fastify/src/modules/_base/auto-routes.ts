@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { Type } from '@sinclair/typebox';
-import { ensureEffectiveHiddenFields, type EntityConfig } from './entity-registry.js';
+import {
+  ensureEffectiveHiddenFields,
+  type EntityConfig,
+} from './entity-registry.js';
 import { BaseRepository } from './repository.js';
 import { BaseService } from './service.js';
 import { formatPaginatedResponse, type QueryParams } from './query-engine.js';
@@ -34,7 +37,8 @@ function parseRawQuery(request: FastifyRequest): QueryParams {
   };
 
   for (const [key, value] of Object.entries(parsed)) {
-    if (['page', 'page_size', 'order_by', 'search', 'expand'].includes(key)) continue;
+    if (['page', 'page_size', 'order_by', 'search', 'expand'].includes(key))
+      continue;
     if (typeof value === 'string') result[key] = value;
   }
 
@@ -45,11 +49,20 @@ async function getScopeFilters(
   request: FastifyRequest,
   entityConfig: EntityConfig,
 ): Promise<Record<string, unknown> | null> {
-  const user = request.authUser as (AuthUser & Record<string, unknown>) | undefined;
-  return computeScopeFilters(user, entityConfig.tableName, new Set(entityConfig.columnNames ?? []));
+  const user = request.authUser as
+    | (AuthUser & Record<string, unknown>)
+    | undefined;
+  return computeScopeFilters(
+    user,
+    entityConfig.tableName,
+    new Set(entityConfig.columnNames ?? []),
+  );
 }
 
-export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: EntityConfig): void {
+export function registerEntityRoutes(
+  fastify: FastifyInstance,
+  entityConfig: EntityConfig,
+): void {
   const hiddenFields = ensureEffectiveHiddenFields(entityConfig);
   const repo = new BaseRepository(fastify.prisma, entityConfig.prismaModel, {
     columnNames: entityConfig.columnNames ?? [],
@@ -74,7 +87,9 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
       const expandFields = parseExpandParam(query.expand);
       const include = buildIncludeFromExpand(expandFields, entityConfig);
       const { data, total } = await service.list(query, include);
-      return reply.send(formatPaginatedResponse(data, total, query.page, query.page_size));
+      return reply.send(
+        formatPaginatedResponse(data, total, query.page, query.page_size),
+      );
     },
   );
 
@@ -86,7 +101,10 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         params: Type.Object({ id: Type.String({ format: 'uuid' }) }),
       },
     },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply,
+    ) => {
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) {
         const query: QueryParams = {
@@ -96,7 +114,8 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
           id: request.params.id,
         };
         const { data } = await service.list(query);
-        if (!data.length) return reply.status(404).send({ detail: 'Not found' });
+        if (!data.length)
+          return reply.status(404).send({ detail: 'Not found' });
         const expandFields = parseExpandParam(parseRawQuery(request).expand);
         if (expandFields.length) {
           const include = buildIncludeFromExpand(expandFields, entityConfig);
@@ -136,10 +155,17 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
       const record = await service.create(data);
       if (entityConfig.afterCreate) {
         try {
-          await entityConfig.afterCreate(request, record as Record<string, unknown>);
+          await entityConfig.afterCreate(
+            request,
+            record as Record<string, unknown>,
+          );
         } catch (err) {
           request.log.error(
-            { err, entity: entityConfig.name, record_id: (record as { id?: string }).id },
+            {
+              err,
+              entity: entityConfig.name,
+              record_id: (record as { id?: string }).id,
+            },
             'afterCreate hook failed (record persisted; hook is best-effort)',
           );
         }
@@ -163,12 +189,16 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         },
       },
     },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply,
+    ) => {
       const data = request.body as Record<string, unknown>;
       if (!data || Object.keys(data).length === 0) {
-        return reply
-          .status(400)
-          .send({ detail: 'Request body cannot be empty', request_id: request.id });
+        return reply.status(400).send({
+          detail: 'Request body cannot be empty',
+          request_id: request.id,
+        });
       }
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) {
@@ -179,19 +209,27 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
           id: request.params.id,
         };
         const { data: accessible } = await service.list(query);
-        if (!accessible.length) return reply.status(404).send({ detail: 'Not found' });
+        if (!accessible.length)
+          return reply.status(404).send({ detail: 'Not found' });
       }
       if (entityConfig.beforeUpdate) {
         await entityConfig.beforeUpdate(request, reply, data);
         if (reply.sent) return;
       }
       const before = entityConfig.afterUpdate
-        ? ((await service.get(request.params.id)) as Record<string, unknown> | null)
+        ? ((await service.get(request.params.id)) as Record<
+            string,
+            unknown
+          > | null)
         : null;
       const record = await service.update(request.params.id, data);
       if (entityConfig.afterUpdate && before) {
         try {
-          await entityConfig.afterUpdate(request, before, record as Record<string, unknown>);
+          await entityConfig.afterUpdate(
+            request,
+            before,
+            record as Record<string, unknown>,
+          );
         } catch (err) {
           request.log.error(
             { err, entity: entityConfig.name, record_id: request.params.id },
@@ -215,7 +253,10 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         },
       },
     },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply,
+    ) => {
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) {
         const query: QueryParams = {
@@ -225,7 +266,8 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
           id: request.params.id,
         };
         const { data: accessible } = await service.list(query);
-        if (!accessible.length) return reply.status(404).send({ detail: 'Not found' });
+        if (!accessible.length)
+          return reply.status(404).send({ detail: 'Not found' });
       }
       if (entityConfig.beforeDelete) {
         await entityConfig.beforeDelete(request, request.params.id);
@@ -261,7 +303,9 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
         await entityConfig.beforeCreate?.(request, item);
       }
       const result = await service.bulkCreate(items);
-      return reply.status(201).send({ data: result, count: (result as { count: number }).count });
+      return reply
+        .status(201)
+        .send({ data: result, count: (result as { count: number }).count });
     },
   );
 
@@ -280,9 +324,15 @@ export function registerEntityRoutes(fastify: FastifyInstance, entityConfig: Ent
       const { ids } = request.body as { ids: string[] };
       const scopeFilters = await getScopeFilters(request, entityConfig);
       if (scopeFilters) {
-        const query: QueryParams = { page: 1, page_size: ids.length, ...scopeFilters };
+        const query: QueryParams = {
+          page: 1,
+          page_size: ids.length,
+          ...scopeFilters,
+        };
         const { data: accessible } = await service.list(query);
-        const accessibleIds = (accessible as Array<{ id: string }>).map((r) => r.id);
+        const accessibleIds = (accessible as Array<{ id: string }>).map(
+          (r) => r.id,
+        );
         const filtered = ids.filter((id) => accessibleIds.includes(id));
         if (filtered.length) await service.bulkDelete(filtered);
       } else {

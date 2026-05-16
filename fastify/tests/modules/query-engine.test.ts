@@ -9,7 +9,14 @@ import {
 } from '../../src/modules/_base/query-engine.js';
 
 describe('Query Engine', () => {
-  const columns = new Set(['id', 'name', 'price', 'is_active', 'created_at', 'category_id']);
+  const columns = new Set([
+    'id',
+    'name',
+    'price',
+    'is_active',
+    'created_at',
+    'category_id',
+  ]);
 
   describe('extractFilters', () => {
     it('strips reserved params', () => {
@@ -26,7 +33,11 @@ describe('Query Engine', () => {
     });
 
     it('strips empty values', () => {
-      const filters = extractFilters({ name: '', price: undefined, is_active: 'true' });
+      const filters = extractFilters({
+        name: '',
+        price: undefined,
+        is_active: 'true',
+      });
       expect(filters).toEqual({ is_active: 'true' });
     });
   });
@@ -38,7 +49,10 @@ describe('Query Engine', () => {
     });
 
     it('ignores unknown columns', () => {
-      const where = buildWhereClause({ unknown_field: 'value', name: 'Widget' }, columns);
+      const where = buildWhereClause(
+        { unknown_field: 'value', name: 'Widget' },
+        columns,
+      );
       expect(where).toEqual({ name: 'Widget' });
     });
 
@@ -58,12 +72,18 @@ describe('Query Engine', () => {
     });
 
     it('builds __gte and __lte range filter', () => {
-      const where = buildWhereClause({ price__gte: '10', price__lte: '100' }, columns);
+      const where = buildWhereClause(
+        { price__gte: '10', price__lte: '100' },
+        columns,
+      );
       expect(where).toEqual({ price: { gte: 10, lte: 100 } });
     });
 
     it('builds __gt and __lt range filter', () => {
-      const where = buildWhereClause({ price__gt: '10', price__lt: '100' }, columns);
+      const where = buildWhereClause(
+        { price__gt: '10', price__lt: '100' },
+        columns,
+      );
       expect(where).toEqual({ price: { gt: 10, lt: 100 } });
     });
 
@@ -102,7 +122,9 @@ describe('Query Engine', () => {
 
   describe('buildOrderByClause', () => {
     it('defaults to created_at desc', () => {
-      expect(buildOrderByClause(undefined, columns)).toEqual([{ created_at: 'desc' }]);
+      expect(buildOrderByClause(undefined, columns)).toEqual([
+        { created_at: 'desc' },
+      ]);
     });
 
     it('parses ascending sort', () => {
@@ -110,7 +132,9 @@ describe('Query Engine', () => {
     });
 
     it('parses descending sort', () => {
-      expect(buildOrderByClause('-price', columns)).toEqual([{ price: 'desc' }]);
+      expect(buildOrderByClause('-price', columns)).toEqual([
+        { price: 'desc' },
+      ]);
     });
 
     it('parses multi-column sort', () => {
@@ -121,7 +145,9 @@ describe('Query Engine', () => {
     });
 
     it('ignores invalid columns', () => {
-      expect(buildOrderByClause('name,invalid_col', columns)).toEqual([{ name: 'asc' }]);
+      expect(buildOrderByClause('name,invalid_col', columns)).toEqual([
+        { name: 'asc' },
+      ]);
     });
   });
 

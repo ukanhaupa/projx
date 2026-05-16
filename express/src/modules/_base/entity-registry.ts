@@ -58,7 +58,10 @@ export type AfterUpdateHook = (
   after: Record<string, unknown>,
 ) => void | Promise<void>;
 
-export type BeforeDeleteHook = (request: Request, recordId: string) => void | Promise<void>;
+export type BeforeDeleteHook = (
+  request: Request,
+  recordId: string,
+) => void | Promise<void>;
 
 export interface EntityConfig {
   name: string;
@@ -93,7 +96,9 @@ export function ensureEffectiveHiddenFields(config: EntityConfig): Set<string> {
   if (config._effectiveHiddenFields) return config._effectiveHiddenFields;
   const columnSet = new Set(config.columnNames ?? []);
   const explicit = new Set(config.hiddenFields ?? []);
-  const baseline = new Set([...BUILT_IN_PRIVATE_COLUMNS].filter((col) => columnSet.has(col)));
+  const baseline = new Set(
+    [...BUILT_IN_PRIVATE_COLUMNS].filter((col) => columnSet.has(col)),
+  );
   config._effectiveHiddenFields = new Set([...explicit, ...baseline]);
   return config._effectiveHiddenFields;
 }
@@ -188,9 +193,14 @@ function deriveFields(config: EntityConfig, model: DmmfModel): FieldMeta[] {
   const relationMap = relationTargets(model);
   const createKeys = schemaKeys(config.createSchema);
   const updateKeys = schemaKeys(config.updateSchema);
-  const existing = new Map((config.fields ?? []).map((field) => [field.key, field]));
+  const existing = new Map(
+    (config.fields ?? []).map((field) => [field.key, field]),
+  );
   const enumValues = new Map(
-    datamodel().enums.map((item) => [item.name, item.values.map((value) => value.name)]),
+    datamodel().enums.map((item) => [
+      item.name,
+      item.values.map((value) => value.name),
+    ]),
   );
 
   return scalarFields(model).map((field) => {
@@ -200,7 +210,8 @@ function deriveFields(config: EntityConfig, model: DmmfModel): FieldMeta[] {
       label: titleize(field.name),
       ...baseType,
       nullable: !field.isRequired,
-      is_auto: field.hasDefaultValue || field.isUpdatedAt === true || field.isId,
+      is_auto:
+        field.hasDefaultValue || field.isUpdatedAt === true || field.isId,
       is_primary_key: field.isId,
       filterable: field.type !== 'Json',
       searchable: field.type === 'String' ? true : undefined,
@@ -237,7 +248,8 @@ function validateCreateCoverage(config: EntityConfig): void {
   const hookFields = new Set(config.beforeCreateFields ?? []);
   const missing = scalarFields(model).filter((field) => {
     if (!field.isRequired) return false;
-    if (field.isId || field.hasDefaultValue || field.isUpdatedAt === true) return false;
+    if (field.isId || field.hasDefaultValue || field.isUpdatedAt === true)
+      return false;
     return !createKeys.has(field.name) && !hookFields.has(field.name);
   });
 
@@ -245,7 +257,9 @@ function validateCreateCoverage(config: EntityConfig): void {
   throw new Error(
     `Entity "${config.name}" does not accept or populate required Prisma field(s): ${missing
       .map((field) => field.name)
-      .join(', ')}. Add them to createSchema or list them in beforeCreateFields.`,
+      .join(
+        ', ',
+      )}. Add them to createSchema or list them in beforeCreateFields.`,
   );
 }
 
@@ -265,7 +279,10 @@ class EntityRegistryClass {
 
     const normalized = normalizeConfig(config);
 
-    if (normalized.softDelete && !(normalized.columnNames ?? []).includes('deleted_at')) {
+    if (
+      normalized.softDelete &&
+      !(normalized.columnNames ?? []).includes('deleted_at')
+    ) {
       throw new Error(
         `Entity "${normalized.name}" has softDelete enabled but "deleted_at" is not in columnNames. ` +
           `Add a deleted_at column to your Prisma model and columnNames array.`,
@@ -316,7 +333,9 @@ class EntityRegistryClass {
           readonly: entity.readonly,
           soft_delete: entity.softDelete,
           bulk_operations: entity.bulkOperations && !entity.readonly,
-          fields: (entity.fields ?? []).filter((field) => !hidden.has(field.key)),
+          fields: (entity.fields ?? []).filter(
+            (field) => !hidden.has(field.key),
+          ),
         };
       }),
     };

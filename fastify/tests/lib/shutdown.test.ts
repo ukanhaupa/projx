@@ -19,7 +19,10 @@ describe('gracefulShutdown', () => {
     const app = fakeApp();
     const exit = vi.fn() as unknown as (code: number) => never;
     await gracefulShutdown(app, 'SIGTERM', exit);
-    expect(app.log.info).toHaveBeenCalledWith({ signal: 'SIGTERM' }, 'shutdown_signal_received');
+    expect(app.log.info).toHaveBeenCalledWith(
+      { signal: 'SIGTERM' },
+      'shutdown_signal_received',
+    );
     expect(app.close).toHaveBeenCalledOnce();
     expect(exit).toHaveBeenCalledWith(0);
   });

@@ -1,16 +1,18 @@
-import { existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, writeFileSync, unlinkSync } from 'node:fs';
 import {
   chmod,
+  cp,
   mkdtemp,
   mkdir,
   writeFile,
   rm,
   readFile,
   copyFile,
-} from "node:fs/promises";
-import { execSync } from "node:child_process";
-import { join, dirname } from "node:path";
-import { tmpdir } from "node:os";
+} from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import {
   type Component,
   type ComponentInstance,
@@ -27,7 +29,7 @@ import {
   toSnake,
   upsertComponentMarker,
   writeProjxConfig,
-} from "./utils.js";
+} from './utils.js';
 import {
   generateDockerCompose,
   generateCiYml,
@@ -35,7 +37,7 @@ import {
   generateReadme,
   generateSetupSh,
   generateVscodeSettings,
-} from "./generators/index.js";
+} from './generators/index.js';
 
 export interface GeneratorVars {
   projectName: string;
@@ -47,12 +49,12 @@ export interface GeneratorVars {
 }
 
 export interface MergeResult {
-  status: "clean" | "merged" | "conflicts";
+  status: 'clean' | 'merged' | 'conflicts';
   mergedFiles?: string[];
   conflictedFiles?: string[];
 }
 
-export const BASELINE_REF = "refs/projx/baseline";
+export const BASELINE_REF = 'refs/projx/baseline';
 
 async function migrateComponentMarkers(
   cwd: string,
@@ -61,7 +63,7 @@ async function migrateComponentMarkers(
   applyDefaults: boolean,
 ): Promise<void> {
   const { readComponentMarker, writeComponentMarker } =
-    await import("./utils.js");
+    await import('./utils.js');
   for (const component of components) {
     const dir = componentPaths[component];
     const markerDir = join(cwd, dir);
@@ -85,7 +87,7 @@ async function writeManagedProjx(
 ): Promise<void> {
   const existing = await readProjxConfig(cwd);
   delete existing.components;
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toISOString().split('T')[0];
   const merged: Record<string, unknown> = {
     ...existing,
     version,
@@ -95,7 +97,7 @@ async function writeManagedProjx(
   if (pmObj?.name && !merged.packageManager) {
     merged.packageManager = pmObj.name;
   }
-  if (typeof vars.orm === "string" && !merged.orm) {
+  if (typeof vars.orm === 'string' && !merged.orm) {
     merged.orm = vars.orm;
   }
   if (applyDefaults && !merged.defaultsApplied) {
@@ -110,21 +112,21 @@ async function writeManagedProjx(
 
 export function matchesSkip(filePath: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
-    if (pattern === "**") return true;
-    if (pattern.endsWith("/**")) {
+    if (pattern === '**') return true;
+    if (pattern.endsWith('/**')) {
       const prefix = pattern.slice(0, -3);
-      if (filePath.startsWith(prefix + "/") || filePath === prefix) return true;
+      if (filePath.startsWith(prefix + '/') || filePath === prefix) return true;
     }
-    if (pattern.startsWith("**/")) {
+    if (pattern.startsWith('**/')) {
       const suffix = pattern.slice(3);
-      if (suffix.startsWith("*.")) {
+      if (suffix.startsWith('*.')) {
         const ext = suffix.slice(1);
         if (filePath.endsWith(ext)) return true;
-      } else if (filePath.endsWith(suffix) || filePath.includes("/" + suffix)) {
+      } else if (filePath.endsWith(suffix) || filePath.includes('/' + suffix)) {
         return true;
       }
     }
-    if (pattern.startsWith("*.")) {
+    if (pattern.startsWith('*.')) {
       const ext = pattern.slice(1);
       if (filePath.endsWith(ext)) return true;
     }
@@ -137,10 +139,10 @@ export function matchesSkip(filePath: string, patterns: string[]): boolean {
 
 export function saveBaselineRef(cwd: string): void {
   try {
-    const head = execSync("git rev-parse HEAD", { cwd, stdio: "pipe" })
+    const head = execSync('git rev-parse HEAD', { cwd, stdio: 'pipe' })
       .toString()
       .trim();
-    execSync(`git update-ref ${BASELINE_REF} ${head}`, { cwd, stdio: "pipe" });
+    execSync(`git update-ref ${BASELINE_REF} ${head}`, { cwd, stdio: 'pipe' });
   } catch {
     // non-critical
   }
@@ -151,7 +153,7 @@ export function getBaselineRef(cwd: string): string | null {
   try {
     return execSync(`git rev-parse --verify ${BASELINE_REF}`, {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     })
       .toString()
       .trim();
@@ -161,9 +163,9 @@ export function getBaselineRef(cwd: string): string | null {
 
   // Fallback: find the commit that last modified .projx (= last template apply)
   try {
-    const sha = execSync("git log -1 --format=%H -- .projx", {
+    const sha = execSync('git log -1 --format=%H -- .projx', {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     })
       .toString()
       .trim();
@@ -183,7 +185,7 @@ export function getFileAtRef(
   try {
     return execSync(`git show ${ref}:"${filePath}"`, {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     }).toString();
   } catch {
     return null;
@@ -206,7 +208,7 @@ function mergeFileThreeWay(
     writeFileSync(theirsTmp, theirsContent);
     execSync(
       `git merge-file -L "your changes" -L "previous projx baseline" -L "new projx template" "${oursPath}" "${baseTmp}" "${theirsTmp}"`,
-      { stdio: "pipe" },
+      { stdio: 'pipe' },
     );
     return true;
   } catch {
@@ -229,7 +231,7 @@ export async function collectAllFiles(
   dir: string,
   base: string,
 ): Promise<string[]> {
-  const { readdir } = await import("node:fs/promises");
+  const { readdir } = await import('node:fs/promises');
   const results: string[] = [];
 
   const walk = async (current: string): Promise<void> => {
@@ -267,7 +269,7 @@ function lookupBaseContent(
   const direct = getFileAtRef(cwd, baselineRef, file);
   if (direct !== null) return direct;
 
-  const slash = file.indexOf("/");
+  const slash = file.indexOf('/');
   if (slash === -1) return null;
   const topDir = file.slice(0, slash);
   const canonical = pathFallbacks[topDir];
@@ -287,9 +289,9 @@ async function tryThreeWayMerge(
   const pathFallbacks = buildPathFallbacks(componentPaths);
 
   for (const file of templateFiles) {
-    if (file === ".projx") continue;
+    if (file === '.projx') continue;
     const isMarker =
-      file.endsWith("/.projx-component") || file === ".projx-component";
+      file.endsWith('/.projx-component') || file === '.projx-component';
     const oursPath = join(cwd, file);
     if (isMarker && existsSync(oursPath)) continue;
     if (!existsSync(oursPath)) {
@@ -309,12 +311,12 @@ async function tryThreeWayMerge(
 
     let theirsContent: string;
     try {
-      theirsContent = await readFile(join(templateDir, file), "utf-8");
+      theirsContent = await readFile(join(templateDir, file), 'utf-8');
     } catch {
       continue;
     }
 
-    const oursContent = await readFile(oursPath, "utf-8");
+    const oursContent = await readFile(oursPath, 'utf-8');
 
     if (theirsContent === baseContent) continue;
 
@@ -348,14 +350,14 @@ function createOrphanWorktree(cwd: string): {
   const worktree = join(tmpdir(), `projx-wt-${id}`);
 
   try {
-    execSync("git worktree prune", { cwd, stdio: "pipe" });
+    execSync('git worktree prune', { cwd, stdio: 'pipe' });
   } catch {
     // non-critical
   }
 
   execSync(`git worktree add --orphan -b ${branch} "${worktree}"`, {
     cwd,
-    stdio: "pipe",
+    stdio: 'pipe',
   });
 
   return { worktree, branch };
@@ -365,19 +367,19 @@ function cleanupWorktree(cwd: string, worktree: string, branch: string): void {
   try {
     execSync(`git worktree remove "${worktree}" --force`, {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     });
   } catch {
     try {
       rm(worktree, { recursive: true, force: true });
-      execSync("git worktree prune", { cwd, stdio: "pipe" });
+      execSync('git worktree prune', { cwd, stdio: 'pipe' });
     } catch {
       // best effort
     }
   }
 
   try {
-    execSync(`git branch -D ${branch}`, { cwd, stdio: "pipe" });
+    execSync(`git branch -D ${branch}`, { cwd, stdio: 'pipe' });
   } catch {
     // branch may already be gone
   }
@@ -392,7 +394,7 @@ async function removeSkippedFiles(
 ): Promise<void> {
   if (skipPatterns.length === 0) return;
 
-  const { readdir, unlink } = await import("node:fs/promises");
+  const { readdir, unlink } = await import('node:fs/promises');
 
   const walk = async (current: string, base: string): Promise<void> => {
     const entries = await readdir(current, { withFileTypes: true });
@@ -402,9 +404,9 @@ async function removeSkippedFiles(
 
       if (entry.isDirectory()) {
         await walk(full, base);
-      } else if (entry.name !== ".projx-component") {
-        const targetRel = rel.endsWith(".ejs")
-          ? rel.slice(0, -".ejs".length)
+      } else if (entry.name !== '.projx-component') {
+        const targetRel = rel.endsWith('.ejs')
+          ? rel.slice(0, -'.ejs'.length)
           : rel;
         if (
           !matchesSkip(targetRel, skipPatterns) &&
@@ -476,9 +478,9 @@ export async function writeTemplateToDir(
   }
 
   const hasBackend =
-    components.includes("fastapi") ||
-    components.includes("fastify") ||
-    components.includes("express");
+    components.includes('fastapi') ||
+    components.includes('fastify') ||
+    components.includes('express');
 
   const userSkip = rootSkip ?? [];
   const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];
@@ -488,49 +490,49 @@ export async function writeTemplateToDir(
     return !existsSync(join(realCwd, file));
   };
 
-  if (hasBackend || components.includes("frontend")) {
-    if (shouldWrite("docker-compose.yml"))
+  if (hasBackend || components.includes('frontend')) {
+    if (shouldWrite('docker-compose.yml'))
       await writeFile(
-        join(dest, "docker-compose.yml"),
+        join(dest, 'docker-compose.yml'),
         await generateDockerCompose(vars),
       );
   }
 
-  if (shouldWrite("README.md"))
-    await writeFile(join(dest, "README.md"), await generateReadme(vars));
+  if (shouldWrite('README.md'))
+    await writeFile(join(dest, 'README.md'), await generateReadme(vars));
 
-  if (shouldWrite(".githooks/pre-commit")) {
-    await mkdir(join(dest, ".githooks"), { recursive: true });
+  if (shouldWrite('.githooks/pre-commit')) {
+    await mkdir(join(dest, '.githooks'), { recursive: true });
     await writeFile(
-      join(dest, ".githooks/pre-commit"),
+      join(dest, '.githooks/pre-commit'),
       await generatePreCommit(vars),
     );
-    await chmod(join(dest, ".githooks/pre-commit"), 0o755);
+    await chmod(join(dest, '.githooks/pre-commit'), 0o755);
   }
 
-  if (shouldWrite(".github/workflows/ci.yml")) {
-    await mkdir(join(dest, ".github/workflows"), { recursive: true });
+  if (shouldWrite('.github/workflows/ci.yml')) {
+    await mkdir(join(dest, '.github/workflows'), { recursive: true });
     await writeFile(
-      join(dest, ".github/workflows/ci.yml"),
+      join(dest, '.github/workflows/ci.yml'),
       await generateCiYml(vars),
     );
   }
 
-  if (shouldWrite("scripts/setup.sh")) {
-    await mkdir(join(dest, "scripts"), { recursive: true });
+  if (shouldWrite('scripts/setup.sh')) {
+    await mkdir(join(dest, 'scripts'), { recursive: true });
     await writeFile(
-      join(dest, "scripts/setup.sh"),
+      join(dest, 'scripts/setup.sh'),
       await generateSetupSh(vars),
     );
-    await chmod(join(dest, "scripts/setup.sh"), 0o755);
+    await chmod(join(dest, 'scripts/setup.sh'), 0o755);
   }
 
   await copyStaticFiles(repoDir, dest);
 
-  if (shouldWrite(".vscode/settings.json")) {
-    await mkdir(join(dest, ".vscode"), { recursive: true });
+  if (shouldWrite('.vscode/settings.json')) {
+    await mkdir(join(dest, '.vscode'), { recursive: true });
     await writeFile(
-      join(dest, ".vscode/settings.json"),
+      join(dest, '.vscode/settings.json'),
       generateVscodeSettings(vars),
     );
   }
@@ -578,7 +580,7 @@ async function writeOneInstance(
     ...new Set([...baseSkip, ...markerSkip, ...defaultSkip]),
   ];
 
-  const tmpDir = join(dest, "__cptmp__");
+  const tmpDir = join(dest, '__cptmp__');
   await copyComponent(repoDir, type, tmpDir);
   const srcDir = join(tmpDir, type);
 
@@ -588,7 +590,7 @@ async function writeOneInstance(
 
   const outDir = join(dest, targetDir);
   await mkdir(outDir, { recursive: true });
-  const { cp } = await import("node:fs/promises");
+  const { cp } = await import('node:fs/promises');
   if (existsSync(srcDir)) {
     await cp(srcDir, outDir, { recursive: true, force: true });
   }
@@ -621,512 +623,136 @@ async function applyOrmProviderToInstance(
   component: Component,
   vars: GeneratorVars,
 ): Promise<void> {
-  if (vars.orm !== "drizzle") return;
-  if (component === "fastify") {
-    await applyDrizzleFastify(dir, vars);
-  } else if (component === "express") {
-    await applyDrizzleExpress(dir, vars);
+  const orm = typeof vars.orm === 'string' ? vars.orm : undefined;
+  if (!orm || orm === 'prisma') return;
+  if (component !== 'fastify' && component !== 'express') return;
+  await applyOrmAddon(orm, component, dir, vars);
+}
+
+function sharedAddonDir(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  return join(thisFile, '../../src/addons');
+}
+
+interface OrmManifest {
+  name: string;
+  displayName: string;
+  frameworks: string[];
+  removeFromBase: string[];
+  packageOverrides: {
+    descriptionReplace?: { from: string; to: string };
+    removeDependencies?: string[];
+    removeDevDependencies?: string[];
+    addDependencies?: Record<string, string>;
+    addDevDependencies?: Record<string, string>;
+    removeScriptPrefixes?: string[];
+    addScripts?: Record<string, string>;
+  };
+}
+
+async function loadOrmManifest(orm: string): Promise<OrmManifest> {
+  const path = join(sharedAddonDir(), 'orms', orm, 'manifest.json');
+  if (!existsSync(path)) {
+    throw new Error(
+      `ORM "${orm}" is not yet supported. No manifest found at ${path}.`,
+    );
   }
+  return JSON.parse(await readFile(path, 'utf-8')) as OrmManifest;
+}
+
+function applyPackageOverrides(
+  pkg: Record<string, unknown>,
+  overrides: OrmManifest['packageOverrides'],
+): void {
+  if (overrides.descriptionReplace && typeof pkg.description === 'string') {
+    pkg.description = pkg.description.replaceAll(
+      overrides.descriptionReplace.from,
+      overrides.descriptionReplace.to,
+    );
+  }
+  const scripts = (pkg.scripts ?? {}) as Record<string, string>;
+  for (const prefix of overrides.removeScriptPrefixes ?? []) {
+    for (const key of Object.keys(scripts)) {
+      if (key.startsWith(prefix)) delete scripts[key];
+    }
+  }
+  Object.assign(scripts, overrides.addScripts ?? {});
+  pkg.scripts = scripts;
+
+  const dependencies = (pkg.dependencies ?? {}) as Record<string, string>;
+  for (const dep of overrides.removeDependencies ?? []) {
+    delete dependencies[dep];
+  }
+  Object.assign(dependencies, overrides.addDependencies ?? {});
+  pkg.dependencies = dependencies;
+
+  const devDependencies = (pkg.devDependencies ?? {}) as Record<string, string>;
+  for (const dep of overrides.removeDevDependencies ?? []) {
+    delete devDependencies[dep];
+  }
+  Object.assign(devDependencies, overrides.addDevDependencies ?? {});
+  pkg.devDependencies = devDependencies;
+}
+
+async function applyOrmAddon(
+  orm: string,
+  framework: 'fastify' | 'express',
+  dir: string,
+  vars: GeneratorVars,
+): Promise<void> {
+  const manifest = await loadOrmManifest(orm);
+  if (!manifest.frameworks.includes(framework)) {
+    throw new Error(
+      `ORM "${orm}" does not support framework "${framework}". Supported: ${manifest.frameworks.join(', ')}`,
+    );
+  }
+
+  for (const relPath of manifest.removeFromBase) {
+    await rm(join(dir, relPath), { recursive: true, force: true });
+  }
+
+  const pkgPath = join(dir, 'package.json');
+  const pkg = await readJsonObject(pkgPath);
+  applyPackageOverrides(pkg, manifest.packageOverrides);
+  await writeJsonObject(pkgPath, pkg);
+
+  const addonRoot = join(sharedAddonDir(), 'orms', orm);
+  const sharedSrc = join(addonRoot, 'shared');
+  const frameworkSrc = join(addonRoot, framework);
+
+  if (existsSync(sharedSrc)) {
+    await cp(sharedSrc, dir, { recursive: true, force: true });
+  }
+  if (existsSync(frameworkSrc)) {
+    await cp(frameworkSrc, dir, { recursive: true, force: true });
+  }
+
+  await writeFile(
+    join(dir, 'Dockerfile'),
+    ormNodeDockerfileSource(manifest, vars),
+  );
 }
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
-  return JSON.parse(await readFile(path, "utf-8")) as Record<string, unknown>;
+  return JSON.parse(await readFile(path, 'utf-8')) as Record<string, unknown>;
 }
 
 async function writeJsonObject(
   path: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  await writeFile(path, JSON.stringify(data, null, 2) + "\n");
+  await writeFile(path, JSON.stringify(data, null, 2) + '\n');
 }
 
-function retargetPackageForDrizzle(pkg: Record<string, unknown>): void {
-  if (typeof pkg.description === "string") {
-    pkg.description = pkg.description.replace(/Prisma/g, "Drizzle");
-  }
-  const scripts = (pkg.scripts ?? {}) as Record<string, string>;
-  for (const key of Object.keys(scripts)) {
-    if (key.startsWith("prisma:")) delete scripts[key];
-  }
-  scripts["db:generate"] = "drizzle-kit generate";
-  scripts["db:migrate"] = "drizzle-kit migrate";
-  scripts["db:push"] = "drizzle-kit push";
-  pkg.scripts = scripts;
-
-  const dependencies = (pkg.dependencies ?? {}) as Record<string, string>;
-  delete dependencies["@prisma/client"];
-  dependencies["drizzle-orm"] = "^0.44.5";
-  dependencies.pg = "^8.16.3";
-  pkg.dependencies = dependencies;
-
-  const devDependencies = (pkg.devDependencies ?? {}) as Record<string, string>;
-  delete devDependencies.prisma;
-  devDependencies["@types/pg"] = "^8.15.5";
-  devDependencies["drizzle-kit"] = "^0.31.4";
-  pkg.devDependencies = devDependencies;
+interface DockerfileManifest {
+  extraConfigFiles?: string[];
+  migrateCommand?: string;
 }
 
-async function applyDrizzleFastify(
-  dir: string,
+function ormNodeDockerfileSource(
+  manifest: OrmManifest,
   vars: GeneratorVars,
-): Promise<void> {
-  await rm(join(dir, "prisma"), { recursive: true, force: true });
-  await rm(join(dir, "src/plugins/prisma.ts"), { force: true });
-  await rm(join(dir, "src/lib/service-config.ts"), { force: true });
-  await rm(join(dir, "src/modules/_base"), { recursive: true, force: true });
-  await rm(join(dir, "src/modules/audit-logs"), {
-    recursive: true,
-    force: true,
-  });
-  await rm(join(dir, "tests/modules/audit-logs.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/audit-middleware.test.ts"), {
-    force: true,
-  });
-  await rm(join(dir, "tests/modules/auto-routes.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/entity-validation.test.ts"), {
-    force: true,
-  });
-  await rm(join(dir, "tests/modules/expand.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/field-privacy.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/meta.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/query-engine.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/repository.test.ts"), { force: true });
-  await rm(join(dir, "tests/modules/service.test.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/crud-test-base.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/crud-test-base.test.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/migration-checksum.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/migration-checksum.test.ts"), {
-    force: true,
-  });
-
-  const pkgPath = join(dir, "package.json");
-  const pkg = await readJsonObject(pkgPath);
-  retargetPackageForDrizzle(pkg);
-  await writeJsonObject(pkgPath, pkg);
-
-  await mkdir(join(dir, "src/db"), { recursive: true });
-  await writeFile(join(dir, "src/db/client.ts"), drizzleClientSource());
-  await writeFile(join(dir, "src/db/schema.ts"), drizzleSchemaSource());
-  await writeFile(join(dir, "drizzle.config.ts"), drizzleConfigSource());
-  await writeFile(join(dir, "src/app.ts"), drizzleFastifyAppSource());
-  await writeDrizzleFastifyTests(dir);
-  await writeFile(join(dir, "Dockerfile"), drizzleNodeDockerfileSource(vars));
-}
-
-async function applyDrizzleExpress(
-  dir: string,
-  vars: GeneratorVars,
-): Promise<void> {
-  await rm(join(dir, "prisma"), { recursive: true, force: true });
-  await rm(join(dir, "src/prisma.ts"), { force: true });
-  await rm(join(dir, "src/modules/_base"), { recursive: true, force: true });
-  await rm(join(dir, "src/modules/audit-logs"), {
-    recursive: true,
-    force: true,
-  });
-  await rm(join(dir, "tests/modules/auto-routes.test.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/crud-test-base.ts"), { force: true });
-  await rm(join(dir, "tests/helpers/migration-checksum.ts"), { force: true });
-  await rm(join(dir, "tests/global-setup.ts"), { force: true });
-
-  const pkgPath = join(dir, "package.json");
-  const pkg = await readJsonObject(pkgPath);
-  retargetPackageForDrizzle(pkg);
-  await writeJsonObject(pkgPath, pkg);
-
-  await mkdir(join(dir, "src/db"), { recursive: true });
-  await writeFile(join(dir, "src/db/client.ts"), drizzleClientSource());
-  await writeFile(join(dir, "src/db/schema.ts"), drizzleSchemaSource());
-  await writeFile(join(dir, "drizzle.config.ts"), drizzleConfigSource());
-  await writeFile(join(dir, "src/app.ts"), drizzleExpressAppSource());
-  await writeFile(join(dir, "src/server.ts"), drizzleExpressServerSource());
-  await writeDrizzleExpressTests(dir);
-  await writeFile(join(dir, "Dockerfile"), drizzleNodeDockerfileSource(vars));
-}
-
-async function writeDrizzleFastifyTests(dir: string): Promise<void> {
-  await rm(join(dir, "tests"), { recursive: true, force: true });
-  await mkdir(join(dir, "tests/modules"), { recursive: true });
-  await writeFile(
-    join(dir, "tests/modules/app.test.ts"),
-    `import { describe, expect, it, afterEach } from 'vitest';
-import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../src/app.js';
-
-describe('Fastify Drizzle app', () => {
-  let app: FastifyInstance | undefined;
-
-  afterEach(async () => {
-    await app?.close();
-    app = undefined;
-  });
-
-  it('exposes empty generated metadata until entities are added', async () => {
-    app = await buildApp({ logger: false });
-    const res = await app.inject({ method: 'GET', url: '/api/v1/_meta' });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ entities: [], orm: 'drizzle' });
-  });
-});
-`,
-  );
-  await writeFile(
-    join(dir, "vitest.config.ts"),
-    `import { defineConfig } from 'vitest/config';
-import { config } from 'dotenv';
-
-config({ path: '.env.test' });
-
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['tests/**/*.test.ts'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/app.ts', 'src/config.ts', 'src/plugins/swagger.ts'],
-      thresholds: {
-        statements: 80,
-        branches: 80,
-        functions: 80,
-        lines: 80,
-      },
-    },
-    pool: 'forks',
-    testTimeout: 15000,
-    hookTimeout: 15000,
-  },
-});
-`,
-  );
-}
-
-async function writeDrizzleExpressTests(dir: string): Promise<void> {
-  await rm(join(dir, "tests"), { recursive: true, force: true });
-  await mkdir(join(dir, "tests"), { recursive: true });
-  await writeFile(
-    join(dir, "tests/app.test.ts"),
-    `import request from 'supertest';
-import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-
-describe('Express Drizzle app', () => {
-  it('exposes empty generated metadata until entities are added', async () => {
-    const res = await request(buildApp()).get('/api/v1/_meta');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ entities: [], orm: 'drizzle' });
-  });
-
-  it('returns structured errors with request id', async () => {
-    const res = await request(buildApp()).get('/missing').set('x-request-id', 'req-missing');
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toMatchObject({
-      code: 'not_found',
-      request_id: 'req-missing',
-    });
-  });
-});
-`,
-  );
-  await writeFile(
-    join(dir, "vitest.config.ts"),
-    `import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['tests/**/*.test.ts'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/config.ts'],
-      thresholds: {
-        statements: 80,
-        branches: 70,
-        functions: 80,
-        lines: 80,
-      },
-    },
-  },
-});
-`,
-  );
-}
-
-function drizzleClientSource(): string {
-  return `import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
-import { config } from '../config.js';
-import * as schema from './schema.js';
-
-export const pool = new Pool({ connectionString: config.DATABASE_URL });
-export const db = drizzle(pool, { schema });
-
-export async function checkDatabase(): Promise<void> {
-  await pool.query('SELECT 1');
-}
-
-export async function closeDatabase(): Promise<void> {
-  await pool.end();
-}
-
-export type DbClient = typeof db;
-`;
-}
-
-function drizzleSchemaSource(): string {
-  return `import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-
-export const auditLogs = pgTable('audit_logs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tableName: text('table_name').notNull(),
-  recordId: text('record_id').notNull(),
-  action: text('action').notNull(),
-  oldValue: jsonb('old_value'),
-  newValue: jsonb('new_value'),
-  performedBy: text('performed_by').notNull().default('system'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-`;
-}
-
-function drizzleConfigSource(): string {
-  return `import { defineConfig } from 'drizzle-kit';
-
-export default defineConfig({
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  dialect: 'postgresql',
-  dbCredentials: {
-    url: process.env.DATABASE_URL ?? '',
-  },
-  strict: true,
-  verbose: true,
-});
-`;
-}
-
-function drizzleFastifyAppSource(): string {
-  return `import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
-import cors from '@fastify/cors';
-import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
-import { config } from './config.js';
-import errorHandler from './plugins/error-handler.js';
-import authPlugin from './plugins/auth.js';
-import authzPlugin from './plugins/authz.js';
-import requestIdPlugin from './plugins/request-id.js';
-import swaggerPlugin from './plugins/swagger.js';
-import { checkDatabase, closeDatabase, db } from './db/client.js';
-
-export interface BuildAppOptions {
-  logger?: boolean | object;
-}
-
-export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
-  const app = Fastify({
-    logger: options.logger ?? {
-      level: config.LOG_LEVEL,
-      transport:
-        process.env.NODE_ENV !== 'production'
-          ? {
-              target: 'pino-pretty',
-              options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
-            }
-          : undefined,
-    },
-    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
-  });
-
-  app.decorate('db', db);
-  await app.register(helmet, { contentSecurityPolicy: false });
-  await app.register(cors, {
-    origin: config.CORS_ALLOW_ORIGINS.split(',').map((o) => o.trim()),
-    credentials: true,
-  });
-  await app.register(rateLimit, {
-    max: config.RATE_LIMIT_MAX,
-    timeWindow: config.RATE_LIMIT_WINDOW,
-    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
-  });
-
-  await app.register(swaggerPlugin);
-  await app.register(errorHandler);
-  await app.register(requestIdPlugin);
-  await app.register(authPlugin);
-  await app.register(authzPlugin);
-
-  app.get(
-    '/api/health',
-    {
-      config: { public: true },
-      schema: {
-        tags: ['health'],
-      },
-    },
-    async (_request, reply) => {
-      const checks: Record<string, string> = { app: 'ok' };
-      try {
-        await checkDatabase();
-        checks.database = 'ok';
-      } catch (e) {
-        checks.database = \`error: \${e instanceof Error ? e.message : String(e)}\`;
-        return reply.status(503).send({ status: 'unhealthy', checks });
-      }
-      return reply.send({ status: 'healthy', checks });
-    },
-  );
-
-  app.get(
-    '/api/v1/_meta',
-    {
-      config: { public: true },
-      schema: { tags: ['meta'] },
-    },
-    async () => ({ entities: [], orm: 'drizzle' }),
-  );
-
-  app.addHook('onClose', async () => {
-    await closeDatabase();
-  });
-
-  return app;
-}
-
-declare module 'fastify' {
-  interface FastifyInstance {
-    db: typeof db;
-  }
-}
-`;
-}
-
-function drizzleExpressAppSource(): string {
-  return `import crypto from 'node:crypto';
-import compression from 'compression';
-import cors from 'cors';
-import express, { type RequestHandler } from 'express';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
-import pinoHttp from 'pino-http';
-import { allowedOrigins, config } from './config.js';
-import { ApiError, errorHandler, notFoundHandler } from './errors.js';
-import { checkDatabase, db } from './db/client.js';
-
-const requestId: RequestHandler = (req, res, next) => {
-  const incoming = req.headers['x-request-id'];
-  const value = typeof incoming === 'string' && incoming.trim() ? incoming : crypto.randomUUID();
-  res.locals.requestId = value;
-  res.setHeader('x-request-id', value);
-  next();
-};
-
-function corsOrigin(
-  origin: string | undefined,
-  callback: (err: Error | null, allow?: boolean) => void,
-): void {
-  const origins = allowedOrigins();
-  if (!origin || origins.includes('*') || origins.includes(origin)) {
-    callback(null, true);
-    return;
-  }
-  callback(new ApiError(403, 'Origin not allowed', 'origin_not_allowed'));
-}
-
-export function buildApp(): express.Express {
-  const app = express();
-
-  app.disable('x-powered-by');
-  app.locals.db = db;
-  app.use(requestId);
-  app.use(
-    pinoHttp({
-      level: config.LOG_LEVEL,
-      enabled: config.NODE_ENV !== 'test',
-      quietReqLogger: config.NODE_ENV === 'test',
-    }),
-  );
-  app.use(helmet());
-  app.use(cors({ origin: corsOrigin, credentials: true }));
-  app.use(compression());
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
-  app.use(
-    rateLimit({
-      windowMs: config.RATE_LIMIT_WINDOW_MS,
-      limit: config.RATE_LIMIT_MAX,
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-    }),
-  );
-
-  app.get('/api/health', async (_req, res) => {
-    const checks: Record<string, string> = { app: 'ok' };
-    try {
-      await checkDatabase();
-      checks.database = 'ok';
-    } catch (e) {
-      checks.database = \`error: \${e instanceof Error ? e.message : String(e)}\`;
-      res.status(503).json({ status: 'unhealthy', checks });
-      return;
-    }
-    res.json({ status: 'healthy', checks });
-  });
-
-  app.get('/api/v1/_meta', (_req, res) => {
-    res.json({ entities: [], orm: 'drizzle' });
-  });
-
-  app.use(notFoundHandler);
-  app.use(errorHandler);
-
-  return app;
-}
-`;
-}
-
-function drizzleExpressServerSource(): string {
-  return `import { createServer } from 'node:http';
-import { buildApp } from './app.js';
-import { config } from './config.js';
-import { closeDatabase } from './db/client.js';
-
-const app = buildApp();
-const server = createServer(app);
-
-server.listen(config.PORT, config.HOST, () => {
-  console.log(\`Express API listening on http://\${config.HOST}:\${config.PORT}\`);
-});
-
-function shutdown(signal: string): void {
-  console.log(\`\${signal} received, closing HTTP server\`);
-  server.close((err) => {
-    closeDatabase()
-      .catch((closeErr: unknown) => {
-        console.error(closeErr);
-      })
-      .finally(() => {
-        if (err) {
-          console.error(err);
-          process.exit(1);
-        }
-        process.exit(0);
-      });
-  });
-  setTimeout(() => process.exit(1), 10_000).unref();
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-`;
-}
-
-function drizzleNodeDockerfileSource(vars: GeneratorVars): string {
+): string {
   const pm = vars.pm as {
     name?: string;
     ci?: string;
@@ -1134,22 +760,36 @@ function drizzleNodeDockerfileSource(vars: GeneratorVars): string {
     run?: string;
     lockfile?: string;
   };
-  const pmName = pm.name ?? "npm";
-  const lockfile = pm.lockfile ?? "package-lock.json";
-  const install = pm.ci ?? "npm ci";
-  const exec = pm.exec ?? "npx";
-  const run = pm.run ?? "npm run";
+  const pmName = pm.name ?? 'npm';
+  const lockfile = pm.lockfile ?? 'package-lock.json';
+  const install = pm.ci ?? 'npm ci';
+  const exec = pm.exec ?? 'npx';
+  const run = pm.run ?? 'npm run';
+  const dockerCfg = ((
+    manifest as unknown as { dockerfile?: DockerfileManifest }
+  ).dockerfile ?? {}) as DockerfileManifest;
+  const extraConfigCopy = (dockerCfg.extraConfigFiles ?? []).join(' ');
+  const migrateCmd = dockerCfg.migrateCommand ?? '';
   const setup =
-    pmName === "pnpm"
+    pmName === 'pnpm'
       ? `ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 `
-      : pmName === "yarn"
-        ? "RUN corepack enable\n"
-        : pmName === "bun"
-          ? "RUN npm install -g bun\n"
-          : "";
+      : pmName === 'yarn'
+        ? 'RUN corepack enable\n'
+        : pmName === 'bun'
+          ? 'RUN npm install -g bun\n'
+          : '';
+  const buildCopy = extraConfigCopy
+    ? `COPY package.json tsconfig.json ${extraConfigCopy} ./`
+    : `COPY package.json tsconfig.json ./`;
+  const migrateStage = migrateCmd
+    ? `FROM build AS migrate
+CMD ["sh", "-c", "${exec} ${migrateCmd}"]
+
+`
+    : '';
   return `FROM node:22-bookworm-slim AS base
 
 RUN apt-get update \\
@@ -1166,14 +806,11 @@ RUN ${install}
 FROM base AS build
 ENV NODE_OPTIONS="--max-old-space-size=768"
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json drizzle.config.ts ./
+${buildCopy}
 COPY src ./src
 RUN ${run} build
 
-FROM build AS migrate
-CMD ["sh", "-c", "${exec} drizzle-kit push --force"]
-
-FROM base AS runtime
+${migrateStage}FROM base AS runtime
 ENV NODE_ENV=production
 RUN npm install -g pm2@5.4.3
 RUN chown -R node /app
@@ -1201,65 +838,65 @@ async function substituteNamesForInstance(
 ): Promise<void> {
   const { type, path } = inst;
   const isCanonical = path === type;
-  if (type === "fastapi") {
+  if (type === 'fastapi') {
     const target = isCanonical
       ? (overrides?.fastapi ?? `${name}-fastapi`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/pyproject.toml`),
-      "projx-fastapi",
+      'projx-fastapi',
       target,
     );
-  } else if (type === "fastify") {
+  } else if (type === 'fastify') {
     const target = isCanonical
       ? (overrides?.fastify ?? `${name}-fastify`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/package.json`),
-      "projx-fastify",
+      'projx-fastify',
       target,
     );
-  } else if (type === "express") {
+  } else if (type === 'express') {
     const target = isCanonical
       ? (overrides?.express ?? `${name}-express`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/package.json`),
-      "projx-express",
+      'projx-express',
       target,
     );
-  } else if (type === "frontend") {
+  } else if (type === 'frontend') {
     const target = isCanonical
       ? (overrides?.frontend ?? `${name}-frontend`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/package.json`),
-      "projx-frontend",
+      'projx-frontend',
       target,
     );
-  } else if (type === "e2e") {
+  } else if (type === 'e2e') {
     const target = isCanonical
       ? (overrides?.e2e ?? `${name}-e2e`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/package.json`),
-      "projx-e2e",
+      'projx-e2e',
       target,
     );
-  } else if (type === "mobile") {
+  } else if (type === 'mobile') {
     const target = isCanonical
       ? (overrides?.mobile ?? `${nameSnake}_mobile`)
       : toSnake(`${nameSnake}_${path}`);
     await replaceInFile(
       join(dest, `${path}/pubspec.yaml`),
-      "projx_mobile",
+      'projx_mobile',
       target,
     );
     await replaceInDir(
       join(dest, path),
-      "package:projx_mobile/",
+      'package:projx_mobile/',
       `package:${target}/`,
-      ".dart",
+      '.dart',
     );
   }
 }
@@ -1271,19 +908,19 @@ export async function detectPackageNameOverrides(
 ): Promise<Partial<Record<Component, string>>> {
   const overrides: Partial<Record<Component, string>> = {};
 
-  if (components.includes("fastapi")) {
-    const file = join(cwd, componentPaths.fastapi, "pyproject.toml");
+  if (components.includes('fastapi')) {
+    const file = join(cwd, componentPaths.fastapi, 'pyproject.toml');
     const name = await readTomlProjectName(file);
     if (name) overrides.fastapi = name;
   }
-  for (const c of ["fastify", "express", "frontend", "e2e"] as const) {
+  for (const c of ['fastify', 'express', 'frontend', 'e2e'] as const) {
     if (!components.includes(c)) continue;
-    const file = join(cwd, componentPaths[c], "package.json");
+    const file = join(cwd, componentPaths[c], 'package.json');
     const name = await readJsonName(file);
     if (name) overrides[c] = name;
   }
-  if (components.includes("mobile")) {
-    const file = join(cwd, componentPaths.mobile, "pubspec.yaml");
+  if (components.includes('mobile')) {
+    const file = join(cwd, componentPaths.mobile, 'pubspec.yaml');
     const name = await readPubspecName(file);
     if (name) overrides.mobile = name;
   }
@@ -1294,7 +931,7 @@ export async function detectPackageNameOverrides(
 async function readTomlProjectName(file: string): Promise<string | null> {
   if (!existsSync(file)) return null;
   try {
-    const content = await readFile(file, "utf-8");
+    const content = await readFile(file, 'utf-8');
     const match = content.match(/^\s*name\s*=\s*"([^"]+)"/m);
     return match?.[1] ?? null;
   } catch {
@@ -1305,8 +942,8 @@ async function readTomlProjectName(file: string): Promise<string | null> {
 async function readJsonName(file: string): Promise<string | null> {
   if (!existsSync(file)) return null;
   try {
-    const data = JSON.parse(await readFile(file, "utf-8"));
-    return typeof data.name === "string" ? data.name : null;
+    const data = JSON.parse(await readFile(file, 'utf-8'));
+    return typeof data.name === 'string' ? data.name : null;
   } catch {
     return null;
   }
@@ -1315,7 +952,7 @@ async function readJsonName(file: string): Promise<string | null> {
 async function readPubspecName(file: string): Promise<string | null> {
   if (!existsSync(file)) return null;
   try {
-    const content = await readFile(file, "utf-8");
+    const content = await readFile(file, 'utf-8');
     const match = content.match(/^\s*name\s*:\s*([A-Za-z0-9_]+)/m);
     return match?.[1] ?? null;
   } catch {
@@ -1340,7 +977,7 @@ export async function applyTemplate(
 ): Promise<MergeResult> {
   const hasHead = (() => {
     try {
-      execSync("git rev-parse HEAD", { cwd, stdio: "pipe" });
+      execSync('git rev-parse HEAD', { cwd, stdio: 'pipe' });
       return true;
     } catch {
       return false;
@@ -1364,7 +1001,7 @@ export async function applyTemplate(
         instancesToScaffold,
       },
     );
-    return { status: "clean" };
+    return { status: 'clean' };
   }
 
   // --- Write template into orphan worktree ---
@@ -1388,34 +1025,34 @@ export async function applyTemplate(
       },
     );
 
-    execSync("git add -A", { cwd: worktree, stdio: "pipe" });
+    execSync('git add -A', { cwd: worktree, stdio: 'pipe' });
 
-    const diff = execSync("git diff --cached --stat", {
+    const diff = execSync('git diff --cached --stat', {
       cwd: worktree,
-      stdio: "pipe",
+      stdio: 'pipe',
     })
       .toString()
       .trim();
     if (!diff) {
       cleanupWorktree(cwd, worktree, branch);
-      return { status: "clean" };
+      return { status: 'clean' };
     }
 
     execSync(
-      `git -c core.hooksPath=/dev/null commit -m "projx: template v${version} [${components.join(", ")}]"`,
-      { cwd: worktree, stdio: "pipe" },
+      `git -c core.hooksPath=/dev/null commit -m "projx: template v${version} [${components.join(', ')}]"`,
+      { cwd: worktree, stdio: 'pipe' },
     );
 
     // Remove worktree but keep branch for merging
     try {
       execSync(`git worktree remove "${worktree}" --force`, {
         cwd,
-        stdio: "pipe",
+        stdio: 'pipe',
       });
     } catch {
       try {
         await rm(worktree, { recursive: true, force: true });
-        execSync("git worktree prune", { cwd, stdio: "pipe" });
+        execSync('git worktree prune', { cwd, stdio: 'pipe' });
       } catch {
         // best effort
       }
@@ -1426,12 +1063,12 @@ export async function applyTemplate(
     try {
       execSync(
         `git merge ${branch} --allow-unrelated-histories -m "projx: update to template v${version}"`,
-        { cwd, stdio: "pipe" },
+        { cwd, stdio: 'pipe' },
       );
       mergeClean = true;
     } catch {
       try {
-        execSync("git merge --abort", { cwd, stdio: "pipe" });
+        execSync('git merge --abort', { cwd, stdio: 'pipe' });
       } catch {
         // may not be in merge state
       }
@@ -1439,7 +1076,7 @@ export async function applyTemplate(
 
     // Delete temp branch
     try {
-      execSync(`git branch -D ${branch}`, { cwd, stdio: "pipe" });
+      execSync(`git branch -D ${branch}`, { cwd, stdio: 'pipe' });
     } catch {
       // non-critical
     }
@@ -1452,13 +1089,13 @@ export async function applyTemplate(
         applyDefaults,
       );
       saveBaselineRef(cwd);
-      return { status: "clean" };
+      return { status: 'clean' };
     }
 
     // --- Tier 2: Per-file 3-way merge using baseline ref ---
     const baselineRef = getBaselineRef(cwd);
     if (baselineRef) {
-      const tmpTemplate = await mkdtemp(join(tmpdir(), "projx-tpl-"));
+      const tmpTemplate = await mkdtemp(join(tmpdir(), 'projx-tpl-'));
       await writeTemplateToDir(
         tmpTemplate,
         repoDir,
@@ -1493,41 +1130,41 @@ export async function applyTemplate(
 
       if (result.conflicted.length === 0) {
         await writeManagedProjx(cwd, version, vars, applyDefaults);
-        execSync("git add -A", { cwd, stdio: "pipe" });
-        const staged = execSync("git diff --cached --stat", {
+        execSync('git add -A', { cwd, stdio: 'pipe' });
+        const staged = execSync('git diff --cached --stat', {
           cwd,
-          stdio: "pipe",
+          stdio: 'pipe',
         })
           .toString()
           .trim();
         if (staged) {
           execSync(
             `git -c core.hooksPath=/dev/null commit -m "projx: update to template v${version} (3-way merge)"`,
-            { cwd, stdio: "pipe" },
+            { cwd, stdio: 'pipe' },
           );
         }
         saveBaselineRef(cwd);
         return result.merged.length > 0
-          ? { status: "merged", mergedFiles: result.merged }
-          : { status: "clean" };
+          ? { status: 'merged', mergedFiles: result.merged }
+          : { status: 'clean' };
       }
 
       await writeManagedProjx(cwd, version, vars, applyDefaults);
 
       for (const f of result.merged) {
         try {
-          execSync(`git add "${f}"`, { cwd, stdio: "pipe" });
+          execSync(`git add "${f}"`, { cwd, stdio: 'pipe' });
         } catch {
           // best effort
         }
       }
-      execSync("git add .projx", { cwd, stdio: "pipe" });
+      execSync('git add .projx', { cwd, stdio: 'pipe' });
       for (const component of components) {
         const dir = componentPaths[component];
         const markerRel = `${dir}/.projx-component`;
         if (existsSync(join(cwd, markerRel))) {
           try {
-            execSync(`git add "${markerRel}"`, { cwd, stdio: "pipe" });
+            execSync(`git add "${markerRel}"`, { cwd, stdio: 'pipe' });
           } catch {
             // best effort
           }
@@ -1535,7 +1172,7 @@ export async function applyTemplate(
       }
 
       return {
-        status: "conflicts",
+        status: 'conflicts',
         mergedFiles: result.merged,
         conflictedFiles: result.conflicted,
       };
@@ -1564,7 +1201,7 @@ export async function applyTemplate(
       componentPaths,
       applyDefaults,
     );
-    return { status: "conflicts" };
+    return { status: 'conflicts' };
   } catch (err) {
     cleanupWorktree(cwd, worktree, branch);
     throw err;

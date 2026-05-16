@@ -27,6 +27,8 @@ scripts/     Static scripts copied into scaffolded projects
 
 The CLI fetches the whole repo (or uses `--local <path>`) and copies the component directories into the user's project. Shared scaffolding files (CI yaml, README, docker-compose, pre-commit, setup.sh) live in [cli/src/templates/](cli/src/templates/) as `.ejs` files rendered at scaffold time by the hand-rolled engine in [cli/src/utils.ts](cli/src/utils.ts).
 
+ORM-specific scaffolding (Drizzle, Sequelize, TypeORM) lives in [cli/src/addons/orms/<orm>/](cli/src/addons/orms/) — see the **ORM addons** section below. The CLI excludes `src/addons/` from its own tsconfig/eslint/coverage; addon files are real `.ts` files for the scaffolded project, not the CLI.
+
 ## Hand-rolled template engine
 
 The EJS-like engine in [cli/src/utils.ts](cli/src/utils.ts) (`render`) supports `<% if %>`, `<% for %>`, `<%= expr %>`. It is intentionally minimal — do not introduce a dep on real EJS. Shared template vars:
@@ -35,6 +37,37 @@ The EJS-like engine in [cli/src/utils.ts](cli/src/utils.ts) (`render`) supports 
 - `fastapiInstances`, `fastifyInstances`, `frontendInstances`, `mobileInstances`, `e2eInstances`, `infraInstances` — all enriched with `path`, `upper`, `display`
 
 Multi-instance support: a project can have N fastify instances at different paths. Generators iterate the `*Instances` arrays.
+
+## ORM addons
+
+ORMs other than Prisma (the default) are scaffolded via self-contained addons at [cli/src/addons/orms/<orm>/](cli/src/addons/orms/). Currently shipped: `drizzle`, `sequelize`, `typeorm`. Each addon has:
+
+```
+addons/orms/<orm>/
+  manifest.json                # deps to add/remove, files to remove from base, scripts, Dockerfile config
+  shared/                      # files identical between fastify and express
+    src/db/                    # connection setup (client.ts / data-source.ts)
+    src/{models,entities}/     # aggregator with anchor for `gen entity` to append into
+    src/modules/_base/         # registry.ts + query-engine.ts (ORM-flavored helpers)
+    scripts/db-sync.ts         # schema sync (drizzle uses drizzle-kit push instead)
+  fastify/                     # fastify-specific overlay
+    src/app.ts                 # with `// projx-anchor: entity-imports` + `entity-registrations`
+    src/modules/_base/         # auto-routes.ts (Fastify), index.ts
+    tests/, vitest.config.ts
+  express/                     # express-specific overlay (same shape)
+  gen-entity/                  # templates used by `gen entity`, placeholders like `__ENTITY_PASCAL__`
+```
+
+CLI dispatch:
+
+- [cli/src/baseline.ts](cli/src/baseline.ts) — `applyOrmAddon(orm, framework, dir, vars)` is generic: reads `manifest.json`, removes the Prisma files listed in `removeFromBase`, applies package.json overrides (deps, scripts, descriptionReplace), copies `shared/` + `<framework>/` into the project, and writes a Dockerfile parameterized by `manifest.dockerfile.{extraConfigFiles,migrateCommand}`.
+- [cli/src/gen.ts](cli/src/gen.ts) — `append<Orm>Entity(cwd, dir, framework, config, generated)` loads from `gen-entity/*.ts`, substitutes `__PLACEHOLDER__` tokens (e.g. `__ENTITY_PASCAL__`, `__SAMPLE_PAYLOAD__`, `__COLUMN_DECORATORS__`), writes the schema/model/entity file, the router, the test, and inserts wiring lines into `src/app.ts` at the two anchors (`entity-imports`, `entity-registrations`) and into the models/entities aggregator at its two anchors (`model-imports`, `model-exports`).
+
+All four ORMs (Prisma in the base + Drizzle/Sequelize/TypeORM via addons) ship the same runtime surface: CRUD via `registerEntityRoutes`, pagination, equality filtering, `ILIKE` search, order_by with `-` prefix for desc, bulk operations, and the lifecycle hook contract (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`).
+
+`src/addons/` is in `package.json#files` so addons ship in the published npm package. It is excluded from the CLI's `tsconfig.json` include, `eslint.config.js` ignores, and `vitest.config.ts` coverage — these files are templates for scaffolded projects, not part of the CLI build.
+
+**Adding a new ORM** (e.g., Kysely): create `addons/orms/kysely/` matching the layout above. Add `kysely` to `ORM_PROVIDERS` in [cli/src/utils.ts](cli/src/utils.ts) and to the help string in [cli/src/index.ts](cli/src/index.ts). Add an `append<Orm>Entity` function in [cli/src/gen.ts](cli/src/gen.ts) following the existing pattern. Update [setup.sh.ejs](cli/src/templates/setup.sh.ejs) + [ci.yml.ejs](cli/src/templates/ci.yml.ejs) if the migrate command differs from `tsx scripts/db-sync.ts`. No `baseline.ts` core changes needed.
 
 ## Commands
 

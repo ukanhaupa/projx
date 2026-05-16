@@ -13,7 +13,10 @@ import './modules/audit-logs/index.js';
 
 const requestId: RequestHandler = (req, res, next) => {
   const incoming = req.headers['x-request-id'];
-  const value = typeof incoming === 'string' && incoming.trim() ? incoming : crypto.randomUUID();
+  const value =
+    typeof incoming === 'string' && incoming.trim()
+      ? incoming
+      : crypto.randomUUID();
   res.locals.requestId = value;
   res.setHeader('x-request-id', value);
   next();

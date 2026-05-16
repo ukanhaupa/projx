@@ -1,10 +1,14 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
   DATABASE_URL: z
     .string()
-    .default('postgresql://postgres:postgres@localhost:5432/express_template?schema=public'),
+    .default(
+      'postgresql://postgres:postgres@localhost:5432/express_template?schema=public',
+    ),
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.string().default('debug'),

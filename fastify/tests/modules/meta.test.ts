@@ -37,7 +37,9 @@ describe('Meta endpoint', () => {
     });
 
     const body = res.json();
-    const auditLog = body.entities.find((e: Record<string, unknown>) => e.name === 'AuditLog');
+    const auditLog = body.entities.find(
+      (e: Record<string, unknown>) => e.name === 'AuditLog',
+    );
     expect(auditLog).toBeDefined();
     expect(auditLog.table_name).toBe('audit_logs');
     expect(auditLog.api_prefix).toBe('/audit-logs');
@@ -56,7 +58,9 @@ describe('Meta endpoint', () => {
     });
 
     const body = res.json();
-    const auditLog = body.entities.find((e: Record<string, unknown>) => e.name === 'AuditLog');
+    const auditLog = body.entities.find(
+      (e: Record<string, unknown>) => e.name === 'AuditLog',
+    );
     const tableNameField = auditLog.fields.find(
       (f: Record<string, unknown>) => f.key === 'table_name',
     );
@@ -80,7 +84,9 @@ describe('Meta endpoint', () => {
     });
 
     const body = res.json();
-    const auditLog = body.entities.find((e: Record<string, unknown>) => e.name === 'AuditLog');
+    const auditLog = body.entities.find(
+      (e: Record<string, unknown>) => e.name === 'AuditLog',
+    );
     expect(auditLog).toBeDefined();
     expect(auditLog.readonly).toBe(true);
     expect(auditLog.bulk_operations).toBe(false);

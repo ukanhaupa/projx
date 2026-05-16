@@ -28,7 +28,8 @@ type ModelDelegate = {
 };
 
 function formatOf(def: SchemaDef): string | undefined {
-  return def.checks?.map((check) => check.def).find((defn) => defn?.format)?.format;
+  return def.checks?.map((check) => check.def).find((defn) => defn?.format)
+    ?.format;
 }
 
 function defaultValueFor(key: string, def: SchemaDef): unknown {
@@ -56,7 +57,10 @@ export function buildCreatePayload(
   const shape = createSchema.shape;
   const payload: Record<string, unknown> = {};
   for (const [key, schema] of Object.entries(shape)) {
-    payload[key] = defaultValueFor(key, (schema as unknown as { def?: SchemaDef }).def ?? {});
+    payload[key] = defaultValueFor(
+      key,
+      (schema as unknown as { def?: SchemaDef }).def ?? {},
+    );
   }
   return { ...payload, ...overrides };
 }
@@ -81,7 +85,9 @@ export function describeCrudEntity(config: CrudTestConfig) {
         ? buildCreatePayload(config.createSchema, config.payloadOverrides)
         : undefined);
     if (!createPayload) {
-      throw new Error(`${config.entityName}: createPayload or createSchema is required`);
+      throw new Error(
+        `${config.entityName}: createPayload or createSchema is required`,
+      );
     }
     const uniqueFields = resolveUniqueFields(config);
 
@@ -114,14 +120,20 @@ export function describeCrudEntity(config: CrudTestConfig) {
     });
 
     it(`GET ${config.basePath}/:id returns the record`, async () => {
-      const created = await request(app).post(config.basePath).send(createPayload);
-      const res = await request(app).get(`${config.basePath}/${created.body.id}`);
+      const created = await request(app)
+        .post(config.basePath)
+        .send(createPayload);
+      const res = await request(app).get(
+        `${config.basePath}/${created.body.id}`,
+      );
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(created.body.id);
     });
 
     it(`PATCH ${config.basePath}/:id updates the record`, async () => {
-      const created = await request(app).post(config.basePath).send(createPayload);
+      const created = await request(app)
+        .post(config.basePath)
+        .send(createPayload);
       const res = await request(app)
         .patch(`${config.basePath}/${created.body.id}`)
         .send(config.updatePayload);
@@ -132,8 +144,12 @@ export function describeCrudEntity(config: CrudTestConfig) {
     });
 
     it(`DELETE ${config.basePath}/:id removes the record`, async () => {
-      const created = await request(app).post(config.basePath).send(createPayload);
-      const res = await request(app).delete(`${config.basePath}/${created.body.id}`);
+      const created = await request(app)
+        .post(config.basePath)
+        .send(createPayload);
+      const res = await request(app).delete(
+        `${config.basePath}/${created.body.id}`,
+      );
       expect(res.status).toBe(204);
     });
 
@@ -149,10 +165,14 @@ export function describeCrudEntity(config: CrudTestConfig) {
           ),
         };
 
-        const first = await request(app).post(config.basePath).send(firstPayload);
+        const first = await request(app)
+          .post(config.basePath)
+          .send(firstPayload);
         expect(first.status).toBe(201);
 
-        const second = await request(app).post(config.basePath).send(secondPayload);
+        const second = await request(app)
+          .post(config.basePath)
+          .send(secondPayload);
         expect(second.status).toBe(409);
         expect(second.body.error.code).toBe('conflict');
       });

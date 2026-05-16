@@ -1,13 +1,13 @@
-import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { existsSync } from 'node:fs';
+import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import {
   COMPONENTS,
   render,
   type Component,
   type ComponentInstance,
   type Feature,
-} from "./utils.js";
+} from './utils.js';
 
 export interface FeatureTarget {
   component: Component;
@@ -29,7 +29,7 @@ interface FeatureManifest {
 }
 
 interface PackageJsonPatch {
-  type: "package-json";
+  type: 'package-json';
   merge: {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -38,11 +38,11 @@ interface PackageJsonPatch {
 }
 
 interface TextPatch {
-  type: "text";
+  type: 'text';
   file: string;
   anchor: string;
   insert: string;
-  position?: "after" | "before";
+  position?: 'after' | 'before';
 }
 
 type Patch = PackageJsonPatch | TextPatch;
@@ -58,7 +58,7 @@ export interface ApplyFeatureOptions {
 export function parseFeatureFlag(input: string): FeatureTarget[] {
   const trimmed = input.trim();
   if (!trimmed) return [];
-  const pieces = trimmed.split(",");
+  const pieces = trimmed.split(',');
   const out: FeatureTarget[] = [];
   for (const raw of pieces) {
     const piece = raw.trim();
@@ -67,7 +67,7 @@ export function parseFeatureFlag(input: string): FeatureTarget[] {
         `Invalid feature flag: empty target in "${input}". Use "component[:instance],..." form.`,
       );
     }
-    const parts = piece.split(":").map((p) => p.trim());
+    const parts = piece.split(':').map((p) => p.trim());
     if (parts.length > 2 || parts.some((p) => !p)) {
       throw new Error(
         `Invalid feature flag target "${piece}". Expected "component" or "component:instance".`,
@@ -76,7 +76,7 @@ export function parseFeatureFlag(input: string): FeatureTarget[] {
     const [component, instance] = parts;
     if (!(COMPONENTS as readonly string[]).includes(component)) {
       throw new Error(
-        `Unknown component "${component}". Valid: ${COMPONENTS.join(", ")}.`,
+        `Unknown component "${component}". Valid: ${COMPONENTS.join(', ')}.`,
       );
     }
     out.push(
@@ -98,7 +98,7 @@ export function validateFeatureTargets(
   for (const t of targets) {
     if (supports && !supports.includes(t.component)) {
       throw new Error(
-        `Feature does not support ${t.component}. Supported: ${supports.join(", ")}.`,
+        `Feature does not support ${t.component}. Supported: ${supports.join(', ')}.`,
       );
     }
     const candidates = instances
@@ -112,7 +112,7 @@ export function validateFeatureTargets(
     if (t.instance) {
       const match = candidates.find((c) => c.path === t.instance);
       if (!match) {
-        const known = candidates.map((c) => c.path).join(", ");
+        const known = candidates.map((c) => c.path).join(', ');
         throw new Error(
           `No ${t.component} instance named "${t.instance}". Known: ${known}.`,
         );
@@ -143,7 +143,7 @@ export interface ApplyFeaturesOptions {
 }
 
 export async function applyFeatures(opts: ApplyFeaturesOptions): Promise<void> {
-  const featureRoot = join(opts.repoDir, "features");
+  const featureRoot = join(opts.repoDir, 'features');
   for (const [name, raw] of Object.entries(opts.features) as [
     Feature,
     string,
@@ -157,7 +157,7 @@ export async function applyFeatures(opts: ApplyFeaturesOptions): Promise<void> {
       );
     }
     const manifest = JSON.parse(
-      await readFile(join(featureDir, "feature.json"), "utf-8"),
+      await readFile(join(featureDir, 'feature.json'), 'utf-8'),
     ) as { supports: Component[] };
     const resolved = validateFeatureTargets(
       targets,
@@ -188,7 +188,7 @@ export async function applyFeature(opts: ApplyFeatureOptions): Promise<void> {
   for (const target of opts.targets) {
     if (!manifest.supports.includes(target.component)) {
       throw new Error(
-        `Feature "${opts.feature}" does not support ${target.component}. Supported: ${manifest.supports.join(", ")}.`,
+        `Feature "${opts.feature}" does not support ${target.component}. Supported: ${manifest.supports.join(', ')}.`,
       );
     }
     await applyTarget({
@@ -206,11 +206,11 @@ async function readManifest(
   featureDir: string,
   feature: string,
 ): Promise<FeatureManifest> {
-  const path = join(featureDir, "feature.json");
+  const path = join(featureDir, 'feature.json');
   if (!existsSync(path)) {
     throw new Error(`Feature "${feature}" missing feature.json at ${path}.`);
   }
-  const raw = await readFile(path, "utf-8");
+  const raw = await readFile(path, 'utf-8');
   const manifest = JSON.parse(raw) as FeatureManifest;
   if (!manifest.name || !Array.isArray(manifest.supports)) {
     throw new Error(`Feature "${feature}" manifest is malformed.`);
@@ -238,12 +238,12 @@ async function applyTarget(args: ApplyTargetArgs): Promise<void> {
     );
   }
 
-  const filesDir = join(stackDir, "files");
+  const filesDir = join(stackDir, 'files');
   if (existsSync(filesDir)) {
     await renderFilesInto(filesDir, targetPath, args.vars);
   }
 
-  const patchesDir = join(stackDir, "patches");
+  const patchesDir = join(stackDir, 'patches');
   if (existsSync(patchesDir)) {
     await applyPatches(patchesDir, targetPath, args.featureName);
   }
@@ -264,12 +264,12 @@ async function renderFilesInto(
   const entries = await collectFiles(filesDir);
   for (const rel of entries) {
     const src = join(filesDir, rel);
-    const isEjs = rel.endsWith(".ejs");
+    const isEjs = rel.endsWith('.ejs');
     const outRel = isEjs ? rel.slice(0, -4) : rel;
     const dst = join(targetPath, outRel);
     await mkdir(dirname(dst), { recursive: true });
     if (isEjs || /\.(ts|tsx|js|jsx|py|dart|md|json|yml|yaml|html)$/.test(rel)) {
-      const raw = await readFile(src, "utf-8");
+      const raw = await readFile(src, 'utf-8');
       await writeFile(dst, render(raw, vars));
     } else {
       await cp(src, dst);
@@ -297,14 +297,14 @@ async function applyPatches(
   featureName: string,
 ): Promise<void> {
   const files = (await readdir(patchesDir))
-    .filter((f) => f.endsWith(".json"))
+    .filter((f) => f.endsWith('.json'))
     .sort();
   for (const file of files) {
-    const raw = await readFile(join(patchesDir, file), "utf-8");
+    const raw = await readFile(join(patchesDir, file), 'utf-8');
     const patch = JSON.parse(raw) as Patch;
-    if (patch.type === "package-json") {
+    if (patch.type === 'package-json') {
       await applyPackageJsonPatch(targetPath, patch);
-    } else if (patch.type === "text") {
+    } else if (patch.type === 'text') {
       await applyTextPatch(targetPath, patch, featureName);
     } else {
       throw new Error(
@@ -318,21 +318,21 @@ async function applyPackageJsonPatch(
   targetPath: string,
   patch: PackageJsonPatch,
 ): Promise<void> {
-  const pkgPath = join(targetPath, "package.json");
+  const pkgPath = join(targetPath, 'package.json');
   if (!existsSync(pkgPath)) {
     throw new Error(`package-json patch failed: ${pkgPath} not found.`);
   }
-  const pkg = JSON.parse(await readFile(pkgPath, "utf-8")) as Record<
+  const pkg = JSON.parse(await readFile(pkgPath, 'utf-8')) as Record<
     string,
     unknown
   >;
   const merge = patch.merge;
-  for (const key of ["dependencies", "devDependencies", "scripts"] as const) {
+  for (const key of ['dependencies', 'devDependencies', 'scripts'] as const) {
     const incoming = merge[key];
     if (!incoming) continue;
     pkg[key] = { ...((pkg[key] as Record<string, string>) ?? {}), ...incoming };
   }
-  await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 }
 
 async function applyTextPatch(
@@ -346,7 +346,7 @@ async function applyTextPatch(
       `text patch failed: ${patch.file} not found in ${targetPath}.`,
     );
   }
-  const content = await readFile(filePath, "utf-8");
+  const content = await readFile(filePath, 'utf-8');
   const sentinel = sentinelFor(featureName, patch.anchor, patch.insert);
   if (content.includes(sentinel)) return;
   const idx = content.indexOf(patch.anchor);
@@ -357,25 +357,25 @@ async function applyTextPatch(
   }
   const insertWithSentinel = patch.insert + sentinel;
   let next: string;
-  if (patch.position === "before") {
+  if (patch.position === 'before') {
     next = content.slice(0, idx) + insertWithSentinel + content.slice(idx);
   } else {
     const end = idx + patch.anchor.length;
     const after = content.slice(end);
-    const newline = after.startsWith("\n") ? "\n" : "\n";
+    const newline = after.startsWith('\n') ? '\n' : '\n';
     next =
       content.slice(0, end) +
       newline +
       insertWithSentinel +
-      (after.startsWith("\n") ? after.slice(1) : after);
+      (after.startsWith('\n') ? after.slice(1) : after);
   }
   await writeFile(filePath, next);
 }
 
 function sentinelFor(feature: string, anchor: string, insert: string): string {
-  const hash = simpleHash(anchor + "|" + insert);
-  const isHash = anchor.includes("#");
-  const open = isHash ? "# " : "// ";
+  const hash = simpleHash(anchor + '|' + insert);
+  const isHash = anchor.includes('#');
+  const open = isHash ? '# ' : '// ';
   return `${open}projx-feature: ${feature} ${hash}\n`;
 }
 
@@ -390,11 +390,11 @@ async function appendEnvExample(
   featureName: string,
   keys: string[],
 ): Promise<void> {
-  const envPath = join(targetPath, ".env.example");
-  let content = existsSync(envPath) ? await readFile(envPath, "utf-8") : "";
+  const envPath = join(targetPath, '.env.example');
+  let content = existsSync(envPath) ? await readFile(envPath, 'utf-8') : '';
   const header = `# Added by feature: ${featureName}`;
   if (content.includes(header)) return;
-  if (content && !content.endsWith("\n")) content += "\n";
+  if (content && !content.endsWith('\n')) content += '\n';
   content += `\n${header}\n`;
   for (const key of keys) content += `# ${key}=\n`;
   await writeFile(envPath, content);
@@ -404,9 +404,9 @@ async function recordFeatureInMarker(
   targetPath: string,
   featureName: string,
 ): Promise<void> {
-  const markerPath = join(targetPath, ".projx-component");
+  const markerPath = join(targetPath, '.projx-component');
   if (!existsSync(markerPath)) return;
-  const raw = await readFile(markerPath, "utf-8");
+  const raw = await readFile(markerPath, 'utf-8');
   const marker = JSON.parse(raw) as {
     component: string;
     skip: string[];
@@ -415,6 +415,6 @@ async function recordFeatureInMarker(
   marker.features = marker.features ?? [];
   if (!marker.features.includes(featureName)) {
     marker.features.push(featureName);
-    await writeFile(markerPath, JSON.stringify(marker, null, 2) + "\n");
+    await writeFile(markerPath, JSON.stringify(marker, null, 2) + '\n');
   }
 }

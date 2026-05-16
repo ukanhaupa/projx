@@ -45,5 +45,7 @@ export function decryptString(payload: string): string {
   const ct = buf.subarray(IV_LEN + TAG_LEN);
   const decipher = createDecipheriv(ALGO, getKey(), iv);
   decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+  return Buffer.concat([decipher.update(ct), decipher.final()]).toString(
+    'utf8',
+  );
 }

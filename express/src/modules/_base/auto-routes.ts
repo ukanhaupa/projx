@@ -1,4 +1,8 @@
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
 import { z } from 'zod';
 import type { PrismaLike } from '../../prisma.js';
 import { ApiError } from '../../errors.js';
@@ -12,7 +16,11 @@ import { BaseService } from './service.js';
 import { formatPaginatedResponse, type QueryParams } from './query-engine.js';
 import { buildIncludeFromExpand, parseExpandParam } from './expand.js';
 
-type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+type AsyncHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => Promise<void>;
 
 function asyncHandler(handler: AsyncHandler) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -23,7 +31,10 @@ function asyncHandler(handler: AsyncHandler) {
 function parseRawQuery(req: Request): QueryParams {
   const rawUrl = new URL(req.originalUrl, 'http://localhost');
   const page = Math.max(1, Number(rawUrl.searchParams.get('page')) || 1);
-  const pageSize = Math.min(100, Math.max(1, Number(rawUrl.searchParams.get('page_size')) || 10));
+  const pageSize = Math.min(
+    100,
+    Math.max(1, Number(rawUrl.searchParams.get('page_size')) || 10),
+  );
 
   const result: QueryParams = {
     page,
@@ -34,14 +45,18 @@ function parseRawQuery(req: Request): QueryParams {
   };
 
   for (const [key, value] of rawUrl.searchParams.entries()) {
-    if (['page', 'page_size', 'order_by', 'search', 'expand'].includes(key)) continue;
+    if (['page', 'page_size', 'order_by', 'search', 'expand'].includes(key))
+      continue;
     result[key] = value;
   }
 
   return result;
 }
 
-function parseBody(schema: EntitySchema, body: unknown): Record<string, unknown> {
+function parseBody(
+  schema: EntitySchema,
+  body: unknown,
+): Record<string, unknown> {
   const result = schema.safeParse(body);
   if (!result.success) {
     throw new ApiError(422, z.prettifyError(result.error), 'validation_error');
@@ -70,7 +85,9 @@ export function registerEntityRoutes(
       const expandFields = parseExpandParam(query.expand);
       const include = buildIncludeFromExpand(expandFields, entityConfig);
       const { data, total } = await service.list(query, include);
-      res.json(formatPaginatedResponse(data, total, query.page, query.page_size));
+      res.json(
+        formatPaginatedResponse(data, total, query.page, query.page_size),
+      );
     }),
   );
 
@@ -95,10 +112,17 @@ export function registerEntityRoutes(
       const record = await service.create(data);
       if (entityConfig.afterCreate) {
         try {
-          await entityConfig.afterCreate(req, record as Record<string, unknown>);
+          await entityConfig.afterCreate(
+            req,
+            record as Record<string, unknown>,
+          );
         } catch (err) {
           req.log?.error?.(
-            { err, entity: entityConfig.name, record_id: (record as { id?: string }).id },
+            {
+              err,
+              entity: entityConfig.name,
+              record_id: (record as { id?: string }).id,
+            },
             'afterCreate hook failed (record persisted; hook is best-effort)',
           );
         }
@@ -111,14 +135,25 @@ export function registerEntityRoutes(
     router.post(
       '/bulk',
       asyncHandler(async (req, res) => {
-        const result = z.object({ items: z.array(entityConfig.createSchema) }).safeParse(req.body);
+        const result = z
+          .object({ items: z.array(entityConfig.createSchema) })
+          .safeParse(req.body);
         if (!result.success) {
-          throw new ApiError(422, z.prettifyError(result.error), 'validation_error');
+          throw new ApiError(
+            422,
+            z.prettifyError(result.error),
+            'validation_error',
+          );
         }
         for (const item of result.data.items) {
-          await entityConfig.beforeCreate?.(req, item as Record<string, unknown>);
+          await entityConfig.beforeCreate?.(
+            req,
+            item as Record<string, unknown>,
+          );
         }
-        const created = await service.bulkCreate(result.data.items as Record<string, unknown>[]);
+        const created = await service.bulkCreate(
+          result.data.items as Record<string, unknown>[],
+        );
         res.status(201).json({ data: created, count: created.count });
       }),
     );
@@ -126,9 +161,15 @@ export function registerEntityRoutes(
     router.delete(
       '/bulk',
       asyncHandler(async (req, res) => {
-        const result = z.object({ ids: z.array(z.string().uuid()) }).safeParse(req.body);
+        const result = z
+          .object({ ids: z.array(z.string().uuid()) })
+          .safeParse(req.body);
         if (!result.success) {
-          throw new ApiError(422, z.prettifyError(result.error), 'validation_error');
+          throw new ApiError(
+            422,
+            z.prettifyError(result.error),
+            'validation_error',
+          );
         }
         await service.bulkDelete(result.data.ids);
         res.status(204).send();
@@ -154,7 +195,11 @@ export function registerEntityRoutes(
       const record = await service.update(recordId, data);
       if (entityConfig.afterUpdate && before) {
         try {
-          await entityConfig.afterUpdate(req, before, record as Record<string, unknown>);
+          await entityConfig.afterUpdate(
+            req,
+            before,
+            record as Record<string, unknown>,
+          );
         } catch (err) {
           req.log?.error?.(
             { err, entity: entityConfig.name, record_id: recordId },

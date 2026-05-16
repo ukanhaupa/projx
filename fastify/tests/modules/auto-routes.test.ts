@@ -37,66 +37,83 @@ function makeMockPrisma() {
     widget: {
       findMany: vi
         .fn()
-        .mockImplementation(async () => Object.values(records).map((r) => ({ ...r }))),
+        .mockImplementation(async () =>
+          Object.values(records).map((r) => ({ ...r })),
+        ),
       findUnique: vi
         .fn()
         .mockImplementation(async (args: { where: { id: string } }) =>
           records[args.where.id] ? { ...records[args.where.id] } : null,
         ),
-      count: vi.fn().mockImplementation(async () => Object.keys(records).length),
-      create: vi.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
-        const id = crypto.randomUUID();
-        const record = {
-          id,
-          ...args.data,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        records[id] = record;
-        return record;
-      }),
+      count: vi
+        .fn()
+        .mockImplementation(async () => Object.keys(records).length),
+      create: vi
+        .fn()
+        .mockImplementation(async (args: { data: Record<string, unknown> }) => {
+          const id = crypto.randomUUID();
+          const record = {
+            id,
+            ...args.data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          records[id] = record;
+          return record;
+        }),
       update: vi
         .fn()
         .mockImplementation(
-          async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          async (args: {
+            where: { id: string };
+            data: Record<string, unknown>;
+          }) => {
             const record = records[args.where.id];
             if (!record) throw new Error('Record not found');
             Object.assign(record, args.data);
             return record;
           },
         ),
-      delete: vi.fn().mockImplementation(async (args: { where: { id: string } }) => {
-        const record = records[args.where.id];
-        delete records[args.where.id];
-        return record;
-      }),
-      createMany: vi.fn().mockImplementation(async (args: { data: unknown }) => {
-        const items = args.data as Record<string, unknown>[];
-        let count = 0;
-        if (Array.isArray(items)) {
-          for (const item of items) {
-            const id = crypto.randomUUID();
-            records[id] = {
-              id,
-              ...item,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-            count++;
+      delete: vi
+        .fn()
+        .mockImplementation(async (args: { where: { id: string } }) => {
+          const record = records[args.where.id];
+          delete records[args.where.id];
+          return record;
+        }),
+      createMany: vi
+        .fn()
+        .mockImplementation(async (args: { data: unknown }) => {
+          const items = args.data as Record<string, unknown>[];
+          let count = 0;
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              const id = crypto.randomUUID();
+              records[id] = {
+                id,
+                ...item,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+              count++;
+            }
           }
-        }
-        return { count };
-      }),
-      deleteMany: vi.fn().mockImplementation(async (args: { where: { id: { in: string[] } } }) => {
-        let count = 0;
-        for (const id of args.where.id.in) {
-          if (records[id]) {
-            delete records[id];
-            count++;
-          }
-        }
-        return { count };
-      }),
+          return { count };
+        }),
+      deleteMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { where: { id: { in: string[] } } }) => {
+            let count = 0;
+            for (const id of args.where.id.in) {
+              if (records[id]) {
+                delete records[id];
+                count++;
+              }
+            }
+            return { count };
+          },
+        ),
     },
     _records: records,
   };
@@ -125,7 +142,10 @@ function makeEntityConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
 async function buildRouteTestApp(
   entityConfig: EntityConfig,
   mockPrisma?: ReturnType<typeof makeMockPrisma>,
-): Promise<{ app: FastifyInstance; prisma: ReturnType<typeof makeMockPrisma> }> {
+): Promise<{
+  app: FastifyInstance;
+  prisma: ReturnType<typeof makeMockPrisma>;
+}> {
   const app = Fastify({ logger: false });
   const prisma = mockPrisma ?? makeMockPrisma();
 
@@ -163,7 +183,11 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / returns paginated list', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.data).toBeDefined();
@@ -171,7 +195,11 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / with search param triggers search', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?search=foo', headers });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets?search=foo',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
     });
 
@@ -249,7 +277,13 @@ describe('registerEntityRoutes', () => {
     it('POST / runs beforeCreate before persisting the record', async () => {
       const result = await buildRouteTestApp(
         makeEntityConfig({
-          columnNames: ['id', 'name', 'invite_code', 'created_at', 'updated_at'],
+          columnNames: [
+            'id',
+            'name',
+            'invite_code',
+            'created_at',
+            'updated_at',
+          ],
           schema: Type.Object({
             id: Type.String(),
             name: Type.String(),
@@ -278,7 +312,9 @@ describe('registerEntityRoutes', () => {
     });
 
     it('PATCH /:id updates a record', async () => {
-      const created = await prisma.widget.create({ data: { name: 'Old Name' } });
+      const created = await prisma.widget.create({
+        data: { name: 'Old Name' },
+      });
       const res = await app.inject({
         method: 'PATCH',
         url: `/api/v1/widgets/${created.id}`,
@@ -312,7 +348,9 @@ describe('registerEntityRoutes', () => {
     });
 
     it('DELETE /:id removes a record', async () => {
-      const created = await prisma.widget.create({ data: { name: 'To Delete' } });
+      const created = await prisma.widget.create({
+        data: { name: 'To Delete' },
+      });
       const res = await app.inject({
         method: 'DELETE',
         url: `/api/v1/widgets/${created.id}`,
@@ -333,14 +371,20 @@ describe('registerEntityRoutes', () => {
 
   describe('readonly entity', () => {
     beforeEach(async () => {
-      const result = await buildRouteTestApp(makeEntityConfig({ readonly: true }));
+      const result = await buildRouteTestApp(
+        makeEntityConfig({ readonly: true }),
+      );
       app = result.app;
       prisma = result.prisma;
       headers = superuserHeaders(app);
     });
 
     it('GET / works on readonly entity', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
     });
 
@@ -376,7 +420,9 @@ describe('registerEntityRoutes', () => {
 
   describe('bulk operations', () => {
     beforeEach(async () => {
-      const result = await buildRouteTestApp(makeEntityConfig({ bulkOperations: true }));
+      const result = await buildRouteTestApp(
+        makeEntityConfig({ bulkOperations: true }),
+      );
       app = result.app;
       prisma = result.prisma;
       headers = superuserHeaders(app);
@@ -410,7 +456,9 @@ describe('registerEntityRoutes', () => {
 
   describe('bulk operations not registered when disabled', () => {
     beforeEach(async () => {
-      const result = await buildRouteTestApp(makeEntityConfig({ bulkOperations: false }));
+      const result = await buildRouteTestApp(
+        makeEntityConfig({ bulkOperations: false }),
+      );
       app = result.app;
       prisma = result.prisma;
       headers = superuserHeaders(app);
@@ -460,7 +508,10 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / succeeds with matching resource:action.scope permission', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.all'] });
+      const token = app.jwt.sign({
+        sub: 'user-1',
+        permissions: ['widgets:read.all'],
+      });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
@@ -470,7 +521,10 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / returns 403 with wrong resource permission', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['other:read.all'] });
+      const token = app.jwt.sign({
+        sub: 'user-1',
+        permissions: ['other:read.all'],
+      });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
@@ -482,7 +536,10 @@ describe('registerEntityRoutes', () => {
     it('GET /:id maps to resource:read.one', async () => {
       const id = crypto.randomUUID();
       prisma._records[id] = { id, name: 'W', created_at: '', updated_at: '' };
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.one'] });
+      const token = app.jwt.sign({
+        sub: 'user-1',
+        permissions: ['widgets:read.one'],
+      });
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/widgets/${id}`,
@@ -492,7 +549,10 @@ describe('registerEntityRoutes', () => {
     });
 
     it('POST / maps to resource:create.one', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:create.one'] });
+      const token = app.jwt.sign({
+        sub: 'user-1',
+        permissions: ['widgets:create.one'],
+      });
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/widgets/',
@@ -503,7 +563,10 @@ describe('registerEntityRoutes', () => {
     });
 
     it('wildcard action matches any scope', async () => {
-      const token = app.jwt.sign({ sub: 'user-1', permissions: ['widgets:read.*'] });
+      const token = app.jwt.sign({
+        sub: 'user-1',
+        permissions: ['widgets:read.*'],
+      });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/widgets',
@@ -537,7 +600,9 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET /:id with expand=category passes include to query', async () => {
-      const created = await prisma.widget.create({ data: { name: 'Expandable' } });
+      const created = await prisma.widget.create({
+        data: { name: 'Expandable' },
+      });
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/widgets/${created.id}?expand=category`,
@@ -600,7 +665,9 @@ describe('registerEntityRoutes', () => {
         makeEntityConfig({
           beforeUpdate: (_request, reply, data) => {
             if ((data as { name?: string }).name === 'BLOCKED') {
-              reply.status(409).send({ detail: 'name is blocked', request_id: 'r' });
+              reply
+                .status(409)
+                .send({ detail: 'name is blocked', request_id: 'r' });
             }
           },
         }),
@@ -609,7 +676,9 @@ describe('registerEntityRoutes', () => {
       prisma = result.prisma;
       headers = superuserHeaders(app);
 
-      const created = await prisma.widget.create({ data: { name: 'Original' } });
+      const created = await prisma.widget.create({
+        data: { name: 'Original' },
+      });
       const res = await app.inject({
         method: 'PATCH',
         url: `/api/v1/widgets/${created.id}`,
@@ -678,14 +747,22 @@ describe('registerEntityRoutes', () => {
     });
 
     it('GET / with no query string', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets', headers });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
       expect(res.json().pagination.current_page).toBe(1);
       expect(res.json().pagination.page_size).toBe(10);
     });
 
     it('GET / with invalid page defaults to 1', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/widgets?page=0', headers });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/widgets?page=0',
+        headers,
+      });
       expect(res.statusCode).toBe(200);
       expect(res.json().pagination.current_page).toBe(1);
     });

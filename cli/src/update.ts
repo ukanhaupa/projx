@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { readFile, unlink } from "node:fs/promises";
-import { execSync } from "node:child_process";
-import { join } from "node:path";
-import * as p from "@clack/prompts";
+import { existsSync } from 'node:fs';
+import { readFile, unlink } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import {
   COMPONENT_MARKER,
   type Component,
@@ -18,25 +18,25 @@ import {
   readProjxConfig,
   writeComponentMarker,
   writeProjxConfig,
-} from "./utils.js";
+} from './utils.js';
 import {
   applyTemplate,
   detectPackageNameOverrides,
   saveBaselineRef,
   type GeneratorVars,
-} from "./baseline.js";
+} from './baseline.js';
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {
-  p.intro("projx update");
+  p.intro('projx update');
   const isLocal = !!localRepo;
 
   if (!isGitRepo(cwd)) {
-    p.log.error("projx update requires a git repo.");
+    p.log.error('projx update requires a git repo.');
     process.exit(1);
   }
 
   try {
-    execSync("git worktree prune", { cwd, stdio: "pipe" });
+    execSync('git worktree prune', { cwd, stdio: 'pipe' });
   } catch {
     // non-critical
   }
@@ -57,9 +57,9 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       `Found ${pendingConflicts.length} file(s) with unresolved conflict markers from a prior update:`,
     );
     for (const f of pendingConflicts) p.log.info(`  ${f}`);
-    p.log.info("");
+    p.log.info('');
 
-    const resumeVersion = String(raw.version ?? "unknown");
+    const resumeVersion = String(raw.version ?? 'unknown');
     const handled = await promptSkipLearning(
       cwd,
       componentPaths,
@@ -67,17 +67,17 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       pendingConflicts,
     );
     if (!handled) {
-      p.log.info("");
+      p.log.info('');
       p.log.info(
-        "Resolve manually with `git diff` then `git add` / `git checkout --`,",
+        'Resolve manually with `git diff` then `git add` / `git checkout --`,',
       );
-      p.log.info("or re-run `npx create-projx update` to resume the prompt.");
+      p.log.info('or re-run `npx create-projx update` to resume the prompt.');
     }
     return;
   }
 
   if (hasUncommittedChanges(cwd)) {
-    p.log.error("You have uncommitted changes. Commit or stash them first.");
+    p.log.error('You have uncommitted changes. Commit or stash them first.');
     process.exit(1);
   }
 
@@ -88,11 +88,11 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
 
   if (Object.keys(raw).length > 0) {
     p.log.info(
-      `Found .projx (v${raw.version ?? "unknown"}, components: ${components.join(", ")})`,
+      `Found .projx (v${raw.version ?? 'unknown'}, components: ${components.join(', ')})`,
     );
   } else {
-    p.log.warn("No .projx file found. Detected components from markers.");
-    p.log.info(`Detected: ${components.join(", ")}`);
+    p.log.warn('No .projx file found. Detected components from markers.');
+    p.log.info(`Detected: ${components.join(', ')}`);
   }
 
   for (const c of components) {
@@ -111,25 +111,25 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     p.log.error(String(err));
     process.exit(1);
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
 
     const name = detectProjectName(cwd, components, componentPaths);
     const recordedPm = raw.packageManager as PackageManager | undefined;
     const detectedPm = detectPackageManagerFromComponents(cwd, componentPaths);
-    const pm: PackageManager = detectedPm ?? recordedPm ?? "npm";
+    const pm: PackageManager = detectedPm ?? recordedPm ?? 'npm';
     if (detectedPm && recordedPm && detectedPm !== recordedPm) {
       p.log.warn(
         `packageManager mismatch: .projx says "${recordedPm}" but lockfile is "${detectedPm}". Using "${detectedPm}".`,
@@ -150,18 +150,18 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       instances,
       pm: pmCommands(pm),
       nameOverrides,
-      orm: raw.orm ?? "prisma",
+      orm: raw.orm ?? 'prisma',
     };
 
     const spinner = p.spinner();
-    spinner.start("Applying template update");
+    spinner.start('Applying template update');
     const rootSkip: string[] = Array.isArray(raw.skip)
       ? (raw.skip as string[])
       : [];
     const isLegacyMigration = !raw.defaultsApplied;
     if (isLegacyMigration) {
       p.log.info(
-        "Legacy project detected — applying default skip patterns for user-owned files.",
+        'Legacy project detected — applying default skip patterns for user-owned files.',
       );
     }
     const result = await applyTemplate(
@@ -176,7 +176,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       isLegacyMigration,
       extraInstances,
     );
-    spinner.stop("Template applied.");
+    spinner.stop('Template applied.');
 
     const pinnedUpdates = await findPinnedFilesWithUpdates(
       cwd,
@@ -189,23 +189,23 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       rootSkip,
     );
     if (pinnedUpdates.length > 0) {
-      p.log.info("");
+      p.log.info('');
       p.log.info(
         `${pinnedUpdates.length} pinned file(s) have template updates available:`,
       );
       for (const f of pinnedUpdates) p.log.info(`  ${f}`);
       p.log.info(
-        "Run `npx create-projx unpin <file> && npx create-projx update` to opt in.",
+        'Run `npx create-projx unpin <file> && npx create-projx update` to opt in.',
       );
     }
 
-    if (result.status === "merged") {
+    if (result.status === 'merged') {
       saveBaselineRef(cwd);
       p.log.success(
         `${result.mergedFiles?.length ?? 0} file(s) merged cleanly.`,
       );
       p.outro(`Updated to template v${version}.`);
-    } else if (result.status === "conflicts") {
+    } else if (result.status === 'conflicts') {
       if (result.mergedFiles && result.mergedFiles.length > 0) {
         p.log.success(
           `${result.mergedFiles.length} file(s) merged cleanly and staged.`,
@@ -225,10 +225,10 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
         result.conflictedFiles ?? [],
       );
       if (!handled) {
-        p.log.info("");
-        p.log.info("Review:  git diff");
-        p.log.info("Keep:    git add <file>");
-        p.log.info("Discard: git checkout -- <file>");
+        p.log.info('');
+        p.log.info('Review:  git diff');
+        p.log.info('Keep:    git add <file>');
+        p.log.info('Discard: git checkout -- <file>');
         p.log.info(
           `Commit:  git add . && git commit -m "projx: update to v${version}"`,
         );
@@ -248,7 +248,7 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
 
 function isGitRepo(cwd: string): boolean {
   try {
-    execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" });
+    execSync('git rev-parse --is-inside-work-tree', { cwd, stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -257,7 +257,7 @@ function isGitRepo(cwd: string): boolean {
 
 function hasUncommittedChanges(cwd: string): boolean {
   try {
-    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+    const status = execSync('git status --porcelain', { cwd, stdio: 'pipe' })
       .toString()
       .trim();
     return status.length > 0;
@@ -276,9 +276,9 @@ export async function findPinnedFilesWithUpdates(
   componentSkips: Record<string, string[]> | undefined,
   rootSkip: string[],
 ): Promise<string[]> {
-  const { mkdtemp, rm, readFile } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { writeTemplateToDir } = await import("./baseline.js");
+  const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { writeTemplateToDir } = await import('./baseline.js');
 
   const config = await readProjxConfig(cwd);
   const rootPinned: string[] = Array.isArray(config.skip)
@@ -298,7 +298,7 @@ export async function findPinnedFilesWithUpdates(
   }
   if (rootPinned.length === 0 && componentPinned.length === 0) return [];
 
-  const tmpTemplate = await mkdtemp(join(tmpdir(), "projx-pinned-"));
+  const tmpTemplate = await mkdtemp(join(tmpdir(), 'projx-pinned-'));
 
   void componentSkips;
   void rootSkip;
@@ -324,20 +324,20 @@ export async function findPinnedFilesWithUpdates(
       const tmplPath = join(tmpTemplate, file);
       const userPath = join(cwd, file);
       if (!existsSync(tmplPath) || !existsSync(userPath)) continue;
-      const tmplContent = await readFile(tmplPath, "utf-8");
-      const userContent = await readFile(userPath, "utf-8");
+      const tmplContent = await readFile(tmplPath, 'utf-8');
+      const userContent = await readFile(userPath, 'utf-8');
       if (tmplContent !== userContent) updates.push(file);
     }
 
     for (const { dir, patterns } of componentPinned) {
       for (const pattern of patterns) {
-        if (pattern.includes("*")) continue;
+        if (pattern.includes('*')) continue;
         const rel = `${dir}/${pattern}`;
         const tmplPath = join(tmpTemplate, rel);
         const userPath = join(cwd, rel);
         if (!existsSync(tmplPath) || !existsSync(userPath)) continue;
-        const tmplContent = await readFile(tmplPath, "utf-8");
-        const userContent = await readFile(userPath, "utf-8");
+        const tmplContent = await readFile(tmplPath, 'utf-8');
+        const userContent = await readFile(userPath, 'utf-8');
         if (tmplContent !== userContent) updates.push(rel);
       }
     }
@@ -352,12 +352,12 @@ export function findFilesWithConflictMarkers(cwd: string): string[] {
   try {
     const out = execSync(
       `git -c core.quotepath=off grep -lE '^<<<<<<< (your changes|HEAD)'`,
-      { cwd, stdio: "pipe" },
+      { cwd, stdio: 'pipe' },
     )
       .toString()
       .trim();
     if (!out) return [];
-    return out.split("\n").filter(Boolean);
+    return out.split('\n').filter(Boolean);
   } catch {
     return [];
   }
@@ -370,8 +370,8 @@ async function promptSkipLearning(
   conflictedFiles: string[],
 ): Promise<boolean> {
   const changedFiles = conflictedFiles.filter((f) => {
-    const base = f.split("/").pop()!;
-    if (base === ".projx" || base === COMPONENT_MARKER) return false;
+    const base = f.split('/').pop()!;
+    if (base === '.projx' || base === COMPONENT_MARKER) return false;
     return true;
   });
 
@@ -379,22 +379,22 @@ async function promptSkipLearning(
 
   if (!process.stdin.isTTY) {
     p.log.info(
-      "Non-interactive: skipping prompt. Resolve conflicts manually with `git diff` then `git add`.",
+      'Non-interactive: skipping prompt. Resolve conflicts manually with `git diff` then `git add`.',
     );
     p.log.info(
-      "Re-run `npx create-projx update` later to interactively decide which files to keep.",
+      'Re-run `npx create-projx update` later to interactively decide which files to keep.',
     );
     return false;
   }
 
-  const statusOutput = execSync("git status --porcelain", {
+  const statusOutput = execSync('git status --porcelain', {
     cwd,
-    stdio: "pipe",
+    stdio: 'pipe',
   })
     .toString()
     .trim();
   const entries = statusOutput
-    .split("\n")
+    .split('\n')
     .filter(Boolean)
     .map((line) => ({
       status: line.slice(0, 2).trim(),
@@ -403,26 +403,26 @@ async function promptSkipLearning(
 
   p.log.warn(`${changedFiles.length} file(s) have conflicts to resolve.`);
   p.log.info(
-    "Each file is currently in your working tree with conflict markers.",
+    'Each file is currently in your working tree with conflict markers.',
   );
-  p.log.info("");
+  p.log.info('');
   p.log.info(
-    "CHECKED  = keep your version, resolve markers manually, commit when ready",
+    'CHECKED  = keep your version, resolve markers manually, commit when ready',
   );
   p.log.info(
     "UNCHECKED = discard template's changes AND skip this file on future updates",
   );
-  p.log.info("");
+  p.log.info('');
 
   const selected = (await p.multiselect({
-    message: "Which files do you want to KEEP?",
+    message: 'Which files do you want to KEEP?',
     options: changedFiles.map((f) => ({ value: f, label: f })),
     required: false,
   })) as string[] | symbol;
 
   if (p.isCancel(selected)) {
-    p.log.warn("Cancelled. Conflict markers remain in the working tree.");
-    p.log.info("Re-run `npx create-projx update` later to resume the prompt.");
+    p.log.warn('Cancelled. Conflict markers remain in the working tree.');
+    p.log.info('Re-run `npx create-projx update` later to resume the prompt.');
     return false;
   }
 
@@ -433,10 +433,10 @@ async function promptSkipLearning(
     for (const file of discarded) {
       const entry = entries.find((e) => e.file === file);
       try {
-        if (entry?.status === "??") {
+        if (entry?.status === '??') {
           await unlink(join(cwd, file));
         } else {
-          execSync(`git checkout -- "${file}"`, { cwd, stdio: "pipe" });
+          execSync(`git checkout -- "${file}"`, { cwd, stdio: 'pipe' });
         }
       } catch {
         // best effort
@@ -456,7 +456,7 @@ async function promptSkipLearning(
     p.log.info(`  git add . && git commit -m "projx: update to v${version}"`);
     p.outro(`Template v${version} applied.`);
   } else {
-    p.outro("All template changes discarded. Skip list updated.");
+    p.outro('All template changes discarded. Skip list updated.');
   }
 
   return true;
@@ -478,7 +478,7 @@ export async function learnSkips(
   for (const file of files) {
     let matched = false;
     for (const [dir, component] of Object.entries(dirToComponent)) {
-      if (file.startsWith(dir + "/")) {
+      if (file.startsWith(dir + '/')) {
         const relative = file.slice(dir.length + 1);
         if (!componentSkipAdds[component]) componentSkipAdds[component] = [];
         componentSkipAdds[component].push(relative);

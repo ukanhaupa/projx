@@ -3,7 +3,10 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { errorHandler, notFoundHandler } from '../../src/errors.js';
-import { registerEntityRoutes, type EntityConfig } from '../../src/modules/_base/index.js';
+import {
+  registerEntityRoutes,
+  type EntityConfig,
+} from '../../src/modules/_base/index.js';
 
 const WidgetSchema = z.object({
   id: z.string(),
@@ -30,74 +33,94 @@ function makeMockPrisma() {
     widget: {
       findMany: vi
         .fn()
-        .mockImplementation(async () => Object.values(records).map((r) => ({ ...r }))),
+        .mockImplementation(async () =>
+          Object.values(records).map((r) => ({ ...r })),
+        ),
       findUnique: vi
         .fn()
         .mockImplementation(async (args: { where: { id: string } }) =>
           records[args.where.id] ? { ...records[args.where.id] } : null,
         ),
-      count: vi.fn().mockImplementation(async () => Object.keys(records).length),
-      create: vi.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
-        if (
-          Object.values(records).some(
-            (record) => record.code === args.data.code && args.data.code !== undefined,
-          )
-        ) {
-          const error = new Error('Unique constraint failed') as Error & {
-            code: string;
-            meta: { target: string[] };
+      count: vi
+        .fn()
+        .mockImplementation(async () => Object.keys(records).length),
+      create: vi
+        .fn()
+        .mockImplementation(async (args: { data: Record<string, unknown> }) => {
+          if (
+            Object.values(records).some(
+              (record) =>
+                record.code === args.data.code && args.data.code !== undefined,
+            )
+          ) {
+            const error = new Error('Unique constraint failed') as Error & {
+              code: string;
+              meta: { target: string[] };
+            };
+            error.code = 'P2002';
+            error.meta = { target: ['code'] };
+            throw error;
+          }
+          const id = crypto.randomUUID();
+          const record = {
+            id,
+            ...args.data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           };
-          error.code = 'P2002';
-          error.meta = { target: ['code'] };
-          throw error;
-        }
-        const id = crypto.randomUUID();
-        const record = {
-          id,
-          ...args.data,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        records[id] = record;
-        return record;
-      }),
+          records[id] = record;
+          return record;
+        }),
       update: vi
         .fn()
         .mockImplementation(
-          async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          async (args: {
+            where: { id: string };
+            data: Record<string, unknown>;
+          }) => {
             const record = records[args.where.id];
             if (!record) throw new Error('Record not found');
             Object.assign(record, args.data);
             return record;
           },
         ),
-      delete: vi.fn().mockImplementation(async (args: { where: { id: string } }) => {
-        const record = records[args.where.id];
-        delete records[args.where.id];
-        return record;
-      }),
-      createMany: vi.fn().mockImplementation(async (args: { data: Record<string, unknown>[] }) => {
-        for (const item of args.data) {
-          const id = crypto.randomUUID();
-          records[id] = {
-            id,
-            ...item,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-        }
-        return { count: args.data.length };
-      }),
-      deleteMany: vi.fn().mockImplementation(async (args: { where: { id: { in: string[] } } }) => {
-        let count = 0;
-        for (const id of args.where.id.in) {
-          if (records[id]) {
-            delete records[id];
-            count++;
-          }
-        }
-        return { count };
-      }),
+      delete: vi
+        .fn()
+        .mockImplementation(async (args: { where: { id: string } }) => {
+          const record = records[args.where.id];
+          delete records[args.where.id];
+          return record;
+        }),
+      createMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { data: Record<string, unknown>[] }) => {
+            for (const item of args.data) {
+              const id = crypto.randomUUID();
+              records[id] = {
+                id,
+                ...item,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+            }
+            return { count: args.data.length };
+          },
+        ),
+      deleteMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { where: { id: { in: string[] } } }) => {
+            let count = 0;
+            for (const id of args.where.id.in) {
+              if (records[id]) {
+                delete records[id];
+                count++;
+              }
+            }
+            return { count };
+          },
+        ),
     },
     _records: records,
   };
@@ -140,12 +163,16 @@ describe('Express registerEntityRoutes', () => {
   it('creates, lists, updates, and deletes records', async () => {
     const { app } = buildRouteApp();
 
-    const created = await request(app).post('/api/v1/widgets').send({ name: 'first' });
+    const created = await request(app)
+      .post('/api/v1/widgets')
+      .send({ name: 'first' });
     expect(created.status).toBe(201);
     expect(created.body.name).toBe('first');
     expect(created.body.code).toBeDefined();
 
-    const list = await request(app).get('/api/v1/widgets?page=1&page_size=5&search=first');
+    const list = await request(app).get(
+      '/api/v1/widgets?page=1&page_size=5&search=first',
+    );
     expect(list.status).toBe(200);
     expect(list.body.data).toHaveLength(1);
     expect(list.body.pagination.total_records).toBe(1);
@@ -156,7 +183,9 @@ describe('Express registerEntityRoutes', () => {
     expect(updated.status).toBe(200);
     expect(updated.body.name).toBe('updated');
 
-    const removed = await request(app).delete(`/api/v1/widgets/${created.body.id}`);
+    const removed = await request(app).delete(
+      `/api/v1/widgets/${created.body.id}`,
+    );
     expect(removed.status).toBe(204);
   });
 
@@ -179,14 +208,21 @@ describe('Express registerEntityRoutes', () => {
     const { app } = buildRouteApp(config);
 
     expect(
-      (await request(app).post('/api/v1/widgets').send({ name: 'first', code: 'W1' })).status,
+      (
+        await request(app)
+          .post('/api/v1/widgets')
+          .send({ name: 'first', code: 'W1' })
+      ).status,
     ).toBe(201);
     const duplicate = await request(app)
       .post('/api/v1/widgets')
       .send({ name: 'second', code: 'W1' });
 
     expect(duplicate.status).toBe(409);
-    expect(duplicate.body.error).toMatchObject({ code: 'conflict', target: ['code'] });
+    expect(duplicate.body.error).toMatchObject({
+      code: 'conflict',
+      target: ['code'],
+    });
   });
 
   it('supports bulk operations', async () => {
@@ -210,7 +246,9 @@ describe('Express registerEntityRoutes', () => {
         }),
       );
 
-      const res = await request(app).post('/api/v1/widgets').send({ name: 'AfterHook' });
+      const res = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'AfterHook' });
       expect(res.status).toBe(201);
       expect(calls).toHaveLength(1);
       expect((calls[0].payload as { name: string }).name).toBe('AfterHook');
@@ -225,7 +263,9 @@ describe('Express registerEntityRoutes', () => {
         }),
       );
 
-      const res = await request(app).post('/api/v1/widgets').send({ name: 'AfterThrows' });
+      const res = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'AfterThrows' });
       expect(res.status).toBe(201);
       expect(res.body.name).toBe('AfterThrows');
     });
@@ -235,13 +275,17 @@ describe('Express registerEntityRoutes', () => {
         entityConfig({
           beforeUpdate: (_req, res, data) => {
             if ((data as { name?: string }).name === 'BLOCKED') {
-              res.status(409).json({ error: { code: 'name_blocked', message: 'name is blocked' } });
+              res.status(409).json({
+                error: { code: 'name_blocked', message: 'name is blocked' },
+              });
             }
           },
         }),
       );
 
-      const created = await request(app).post('/api/v1/widgets').send({ name: 'Original' });
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Original' });
       expect(created.status).toBe(201);
 
       const res = await request(app)
@@ -261,7 +305,9 @@ describe('Express registerEntityRoutes', () => {
         }),
       );
 
-      const created = await request(app).post('/api/v1/widgets').send({ name: 'Before' });
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Before' });
       expect(created.status).toBe(201);
 
       const res = await request(app)
@@ -282,10 +328,14 @@ describe('Express registerEntityRoutes', () => {
         }),
       );
 
-      const created = await request(app).post('/api/v1/widgets').send({ name: 'KeepMe' });
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'KeepMe' });
       expect(created.status).toBe(201);
 
-      const res = await request(app).delete(`/api/v1/widgets/${created.body.id}`);
+      const res = await request(app).delete(
+        `/api/v1/widgets/${created.body.id}`,
+      );
       expect(res.status).toBe(500);
       expect(prisma.widget.delete).not.toHaveBeenCalled();
     });

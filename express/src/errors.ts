@@ -18,7 +18,13 @@ export class NotFoundError extends ApiError {
 }
 
 export const notFoundHandler: RequestHandler = (req, _res, next) => {
-  next(new ApiError(404, `Route not found: ${req.method} ${req.path}`, 'not_found'));
+  next(
+    new ApiError(
+      404,
+      `Route not found: ${req.method} ${req.path}`,
+      'not_found',
+    ),
+  );
 };
 
 type ErrorWithCode = Error & {
@@ -31,8 +37,16 @@ type ErrorWithCode = Error & {
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const coded = err as ErrorWithCode;
   const isConflict = coded.code === 'P2002';
-  const statusCode = isConflict ? 409 : err instanceof ApiError ? err.statusCode : 500;
-  const code = isConflict ? 'conflict' : err instanceof ApiError ? err.code : 'internal_error';
+  const statusCode = isConflict
+    ? 409
+    : err instanceof ApiError
+      ? err.statusCode
+      : 500;
+  const code = isConflict
+    ? 'conflict'
+    : err instanceof ApiError
+      ? err.code
+      : 'internal_error';
   const message = err instanceof Error ? err.message : 'Internal server error';
 
   res.status(statusCode).json({

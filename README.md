@@ -321,7 +321,20 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 
 No migrations — run `alembic revision --autogenerate` or `prisma migrate dev` (via your package manager) when ready.
 
-For Drizzle-backed Node projects, `gen entity` appends a typed `pgTable` to `src/db/schema.ts`; run `drizzle-kit generate` and `drizzle-kit migrate` when ready.
+### ORM choice (Node backends)
+
+Pick an ORM at create-time with `--orm <provider>`. Default: **prisma**. Supported: `prisma`, `drizzle`, `sequelize`, `typeorm`.
+
+| ORM         | Schema home              | `gen entity` produces                                                               | Sync schema to DB                              |
+| ----------- | ------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `prisma`    | `prisma/schema.prisma`   | Prisma model + Fastify/Express module (`schemas.ts`, `index.ts`) + integration test | `prisma migrate dev`                           |
+| `drizzle`   | `src/db/schema.ts`       | Typed `pgTable` + Fastify/Express router wired via `_base/` + CRUD test             | `drizzle-kit push --force`                     |
+| `sequelize` | `src/models/<name>.ts`   | Sequelize `Model` class + aggregator entry + Fastify/Express router + CRUD test     | `pnpm db:sync` (uses `sequelize.sync`)         |
+| `typeorm`   | `src/entities/<name>.ts` | Decorated `@Entity` class + aggregator entry + Fastify/Express router + CRUD test   | `pnpm db:sync` (uses `dataSource.synchronize`) |
+
+All four ORMs scaffold equivalent runtime behavior: `_base/auto-routes.ts` wires POST/GET/PATCH/DELETE/bulk routes with pagination, equality filters, `ILIKE` search, and the lifecycle hook contract (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`).
+
+ORM-specific scaffolding lives in [cli/src/addons/orms/](cli/src/addons/orms/) — each ORM is a self-contained folder with a `manifest.json` (deps, file removals, scripts), `shared/` files, per-framework overlays, and `gen-entity/` templates. Adding a new ORM means adding a new folder there; no CLI core changes.
 
 ### Sync Types
 

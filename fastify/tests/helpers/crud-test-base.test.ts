@@ -41,13 +41,14 @@ describe('crud-test-base helpers', () => {
 
   it('supports uniqueField and uniqueFields while preserving order', () => {
     expect(resolveUniqueFields({ uniqueField: 'slug' })).toEqual(['slug']);
-    expect(resolveUniqueFields({ uniqueFields: ['slug', 'external_id'] })).toEqual([
-      'slug',
-      'external_id',
-    ]);
-    expect(resolveUniqueFields({ uniqueField: 'slug', uniqueFields: ['slug', 'sku'] })).toEqual([
-      'slug',
-      'sku',
-    ]);
+    expect(
+      resolveUniqueFields({ uniqueFields: ['slug', 'external_id'] }),
+    ).toEqual(['slug', 'external_id']);
+    expect(
+      resolveUniqueFields({
+        uniqueField: 'slug',
+        uniqueFields: ['slug', 'sku'],
+      }),
+    ).toEqual(['slug', 'sku']);
   });
 });

@@ -18,7 +18,10 @@ describe('migration checksum guard', () => {
   it('detects edited migration files before tests hit runtime failures', async () => {
     dir = await mkdtemp(join(tmpdir(), 'projx-migrations-'));
     await mkdir(join(dir, '20260512000000_init'));
-    await writeFile(join(dir, '20260512000000_init/migration.sql'), 'CREATE TABLE users();\n');
+    await writeFile(
+      join(dir, '20260512000000_init/migration.sql'),
+      'CREATE TABLE users();\n',
+    );
 
     const checksums = await calculateMigrationChecksums(dir);
     const drift = await findMigrationChecksumDrift(dir, [
@@ -33,6 +36,8 @@ describe('migration checksum guard', () => {
         actual: checksums[0].checksum,
       },
     ]);
-    expect(formatMigrationDriftError(drift)).toContain('TEST DB MIGRATION DRIFT DETECTED');
+    expect(formatMigrationDriftError(drift)).toContain(
+      'TEST DB MIGRATION DRIFT DETECTED',
+    );
   });
 });

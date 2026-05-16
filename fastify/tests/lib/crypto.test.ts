@@ -26,7 +26,9 @@ describe('crypto', () => {
   });
 
   it('rejects ciphertext that is too short', () => {
-    expect(() => decryptString(Buffer.alloc(10).toString('base64'))).toThrow(/too short/);
+    expect(() => decryptString(Buffer.alloc(10).toString('base64'))).toThrow(
+      /too short/,
+    );
   });
 });
 
@@ -44,7 +46,10 @@ describe('crypto key resolution', () => {
   });
 
   it('rejects a CRED_ENCRYPTION_KEY that does not decode to 32 bytes', async () => {
-    vi.stubEnv('CRED_ENCRYPTION_KEY', Buffer.from('too-short').toString('base64'));
+    vi.stubEnv(
+      'CRED_ENCRYPTION_KEY',
+      Buffer.from('too-short').toString('base64'),
+    );
     const mod = await import('../../src/lib/crypto.js');
     expect(() => mod.encryptString('x')).toThrow(/32 bytes/);
     vi.unstubAllEnvs();

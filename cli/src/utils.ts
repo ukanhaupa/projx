@@ -1,5 +1,5 @@
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   chmod,
   cp,
@@ -9,30 +9,35 @@ import {
   readFile,
   rm,
   writeFile,
-} from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+} from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
-export const REPO = "ukanhaupa/projx";
+export const REPO = 'ukanhaupa/projx';
 export const REPO_URL = `https://github.com/${REPO}`;
 
 export const COMPONENTS = [
-  "fastapi",
-  "fastify",
-  "express",
-  "frontend",
-  "mobile",
-  "e2e",
-  "infra",
+  'fastapi',
+  'fastify',
+  'express',
+  'frontend',
+  'mobile',
+  'e2e',
+  'infra',
 ] as const;
 
 export type Component = (typeof COMPONENTS)[number];
 
-export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
+export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 
-export const ORM_PROVIDERS = ["prisma", "drizzle"] as const;
+export const ORM_PROVIDERS = [
+  'prisma',
+  'drizzle',
+  'sequelize',
+  'typeorm',
+] as const;
 export type OrmProvider = (typeof ORM_PROVIDERS)[number];
 
 export interface PmCommands {
@@ -50,66 +55,66 @@ export interface PmCommands {
 
 export function pmCommands(pm: PackageManager): PmCommands {
   switch (pm) {
-    case "npm":
+    case 'npm':
       return {
-        name: "npm",
-        install: "npm install",
-        ci: "npm ci",
-        run: "npm run",
-        exec: "npx",
-        dlx: "npx",
-        lockfile: "package-lock.json",
-        prismaExec: "npx prisma",
-        runDev: "npm run dev",
-        audit: "npm audit --omit=dev",
+        name: 'npm',
+        install: 'npm install',
+        ci: 'npm ci',
+        run: 'npm run',
+        exec: 'npx',
+        dlx: 'npx',
+        lockfile: 'package-lock.json',
+        prismaExec: 'npx prisma',
+        runDev: 'npm run dev',
+        audit: 'npm audit --omit=dev',
       };
-    case "pnpm":
+    case 'pnpm':
       return {
-        name: "pnpm",
-        install: "pnpm install",
-        ci: "pnpm install --frozen-lockfile",
-        run: "pnpm",
-        exec: "pnpm exec",
-        dlx: "pnpm dlx",
-        lockfile: "pnpm-lock.yaml",
-        prismaExec: "pnpm prisma",
-        runDev: "pnpm dev",
-        audit: "pnpm audit --prod",
+        name: 'pnpm',
+        install: 'pnpm install',
+        ci: 'pnpm install --frozen-lockfile',
+        run: 'pnpm',
+        exec: 'pnpm exec',
+        dlx: 'pnpm dlx',
+        lockfile: 'pnpm-lock.yaml',
+        prismaExec: 'pnpm prisma',
+        runDev: 'pnpm dev',
+        audit: 'pnpm audit --prod',
       };
-    case "yarn":
+    case 'yarn':
       return {
-        name: "yarn",
-        install: "yarn",
-        ci: "yarn --frozen-lockfile",
-        run: "yarn",
-        exec: "yarn",
-        dlx: "yarn dlx",
-        lockfile: "yarn.lock",
-        prismaExec: "yarn prisma",
-        runDev: "yarn dev",
-        audit: "yarn npm audit --environment production",
+        name: 'yarn',
+        install: 'yarn',
+        ci: 'yarn --frozen-lockfile',
+        run: 'yarn',
+        exec: 'yarn',
+        dlx: 'yarn dlx',
+        lockfile: 'yarn.lock',
+        prismaExec: 'yarn prisma',
+        runDev: 'yarn dev',
+        audit: 'yarn npm audit --environment production',
       };
-    case "bun":
+    case 'bun':
       return {
-        name: "bun",
-        install: "bun install",
-        ci: "bun install --frozen-lockfile",
-        run: "bun run",
-        exec: "bunx",
-        dlx: "bunx",
-        lockfile: "bun.lockb",
-        prismaExec: "bunx prisma",
-        runDev: "bun run dev",
-        audit: "bun audit --prod",
+        name: 'bun',
+        install: 'bun install',
+        ci: 'bun install --frozen-lockfile',
+        run: 'bun run',
+        exec: 'bunx',
+        dlx: 'bunx',
+        lockfile: 'bun.lockb',
+        prismaExec: 'bunx prisma',
+        runDev: 'bun run dev',
+        audit: 'bun audit --prod',
       };
   }
 }
 
 export function detectPackageManager(cwd: string): PackageManager | null {
-  if (existsSync(join(cwd, "bun.lockb"))) return "bun";
-  if (existsSync(join(cwd, "pnpm-lock.yaml"))) return "pnpm";
-  if (existsSync(join(cwd, "yarn.lock"))) return "yarn";
-  if (existsSync(join(cwd, "package-lock.json"))) return "npm";
+  if (existsSync(join(cwd, 'bun.lockb'))) return 'bun';
+  if (existsSync(join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
+  if (existsSync(join(cwd, 'yarn.lock'))) return 'yarn';
+  if (existsSync(join(cwd, 'package-lock.json'))) return 'npm';
   return null;
 }
 
@@ -117,7 +122,7 @@ export function detectPackageManagerFromComponents(
   cwd: string,
   componentPaths: Partial<Record<Component, string>>,
 ): PackageManager | null {
-  const jsComponents: Component[] = ["fastify", "express", "frontend", "e2e"];
+  const jsComponents: Component[] = ['fastify', 'express', 'frontend', 'e2e'];
   for (const component of jsComponents) {
     const dir = componentPaths[component];
     if (!dir) continue;
@@ -129,7 +134,7 @@ export function detectPackageManagerFromComponents(
   return detectPackageManager(cwd);
 }
 
-export const KNOWN_FEATURES = ["auth"] as const;
+export const KNOWN_FEATURES = ['auth'] as const;
 export type Feature = (typeof KNOWN_FEATURES)[number];
 
 export interface Options {
@@ -144,25 +149,25 @@ export interface Options {
 
 export function toKebab(s: string): string {
   return s
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/[\s_]+/g, "-")
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
     .toLowerCase();
 }
 
 export function toSnake(s: string): string {
-  return toKebab(s).replace(/-/g, "_");
+  return toKebab(s).replace(/-/g, '_');
 }
 
 export function toTitle(s: string): string {
   return s
     .split(/[-_\s]+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+    .join(' ');
 }
 
 export function hasCommand(cmd: string): boolean {
   try {
-    execSync(`command -v ${cmd}`, { stdio: "ignore" });
+    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -170,12 +175,12 @@ export function hasCommand(cmd: string): boolean {
 }
 
 export function exec(cmd: string, cwd: string): void {
-  execSync(cmd, { cwd, stdio: "pipe" });
+  execSync(cmd, { cwd, stdio: 'pipe' });
 }
 
 export function sharedTemplateDir(): string {
   const thisFile = fileURLToPath(import.meta.url);
-  return join(thisFile, "../../src/templates");
+  return join(thisFile, '../../src/templates');
 }
 
 export async function downloadRepo(localPath?: string): Promise<string> {
@@ -183,21 +188,21 @@ export async function downloadRepo(localPath?: string): Promise<string> {
     return localPath;
   }
 
-  const dest = await mkdtemp(join(tmpdir(), "projx-"));
+  const dest = await mkdtemp(join(tmpdir(), 'projx-'));
 
-  if (hasCommand("git")) {
+  if (hasCommand('git')) {
     execSync(`git clone --depth 1 ${REPO_URL}.git "${dest}/repo"`, {
-      stdio: "pipe",
+      stdio: 'pipe',
     });
-    return join(dest, "repo");
+    return join(dest, 'repo');
   }
 
   const tarUrl = `${REPO_URL}/archive/refs/heads/main.tar.gz`;
-  execSync(`curl -sL "${tarUrl}" | tar xz -C "${dest}"`, { stdio: "pipe" });
+  execSync(`curl -sL "${tarUrl}" | tar xz -C "${dest}"`, { stdio: 'pipe' });
 
   const entries = await readdir(dest);
-  const extracted = entries.find((e: string) => e.startsWith("projx-"));
-  if (!extracted) throw new Error("Failed to extract repo archive.");
+  const extracted = entries.find((e: string) => e.startsWith('projx-'));
+  if (!extracted) throw new Error('Failed to extract repo archive.');
   return join(dest, extracted);
 }
 
@@ -206,42 +211,42 @@ export async function cleanupRepo(
   isLocal: boolean,
 ): Promise<void> {
   if (isLocal) return;
-  const parent = resolve(repoDir, "..");
+  const parent = resolve(repoDir, '..');
   if (parent.startsWith(tmpdir())) {
     await rm(parent, { recursive: true, force: true });
   }
 }
 
 export const EXCLUDE = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "coverage",
-  "__pycache__",
-  ".dart_tool",
-  ".flutter-plugins",
-  ".flutter-plugins-dependencies",
-  ".venv",
-  ".pytest_cache",
-  ".ruff_cache",
-  ".mypy_cache",
-  "playwright-report",
-  "test-results",
-  ".terraform",
-  "cli",
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+  '__pycache__',
+  '.dart_tool',
+  '.flutter-plugins',
+  '.flutter-plugins-dependencies',
+  '.venv',
+  '.pytest_cache',
+  '.ruff_cache',
+  '.mypy_cache',
+  'playwright-report',
+  'test-results',
+  '.terraform',
+  'cli',
 ]);
 
 const EXCLUDE_FILES = new Set([
-  "uv.lock",
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "pubspec.lock",
-  ".env",
-  ".env.dev",
-  ".env.staging",
-  ".env.prod",
-  "dev.tfplan",
-  ".coverage",
+  'uv.lock',
+  'pnpm-lock.yaml',
+  'package-lock.json',
+  'pubspec.lock',
+  '.env',
+  '.env.dev',
+  '.env.staging',
+  '.env.prod',
+  'dev.tfplan',
+  '.coverage',
 ]);
 
 export async function copyComponent(
@@ -256,10 +261,10 @@ export async function copyComponent(
   await cp(src, out, {
     recursive: true,
     filter: (source: string) => {
-      const base = source.split("/").pop()!;
+      const base = source.split('/').pop()!;
       if (EXCLUDE.has(base)) return false;
       if (EXCLUDE_FILES.has(base)) return false;
-      if (base.endsWith(".pyc")) return false;
+      if (base.endsWith('.pyc')) return false;
       return true;
     },
   });
@@ -275,7 +280,7 @@ export async function copyStaticFiles(
   const manifest: string[] = [];
   const tpl = repoDir;
 
-  const statics = [".editorconfig"];
+  const statics = ['.editorconfig'];
   for (const file of statics) {
     const src = join(tpl, file);
     if (existsSync(src)) {
@@ -284,25 +289,25 @@ export async function copyStaticFiles(
     }
   }
 
-  const extensionsJson = join(tpl, ".vscode/extensions.json");
+  const extensionsJson = join(tpl, '.vscode/extensions.json');
   if (existsSync(extensionsJson)) {
-    await mkdir(join(dest, ".vscode"), { recursive: true });
-    await cp(extensionsJson, join(dest, ".vscode/extensions.json"));
-    manifest.push(".vscode/extensions.json");
+    await mkdir(join(dest, '.vscode'), { recursive: true });
+    await cp(extensionsJson, join(dest, '.vscode/extensions.json'));
+    manifest.push('.vscode/extensions.json');
   }
 
   const staticScripts = [
-    "ci-local.sh",
-    "setup-docker.sh",
-    "setup-ssl.sh",
-    "style-check.py",
+    'ci-local.sh',
+    'setup-docker.sh',
+    'setup-ssl.sh',
+    'style-check.py',
   ];
-  const scriptsSrc = join(tpl, "scripts");
+  const scriptsSrc = join(tpl, 'scripts');
   if (existsSync(scriptsSrc)) {
-    await mkdir(join(dest, "scripts"), { recursive: true });
+    await mkdir(join(dest, 'scripts'), { recursive: true });
     for (const file of staticScripts) {
       const src = join(scriptsSrc, file);
-      const dst = join(dest, "scripts", file);
+      const dst = join(dest, 'scripts', file);
       if (existsSync(src) && !existsSync(dst)) {
         await cp(src, dst);
         await chmod(dst, 0o755);
@@ -336,7 +341,7 @@ export async function replaceInFile(
   replace: string,
 ): Promise<void> {
   if (!existsSync(filePath)) return;
-  const content = await readFile(filePath, "utf-8");
+  const content = await readFile(filePath, 'utf-8');
   if (!content.includes(find)) return;
   await writeFile(filePath, content.replaceAll(find, replace));
 }
@@ -359,11 +364,11 @@ export async function replaceInDir(
   }
 }
 
-export const COMPONENT_MARKER = ".projx-component";
+export const COMPONENT_MARKER = '.projx-component';
 
 export async function readFileOrNull(path: string): Promise<string | null> {
   try {
-    return await readFile(path, "utf-8");
+    return await readFile(path, 'utf-8');
   } catch {
     return null;
   }
@@ -386,14 +391,14 @@ function parseMarker(raw: string): ComponentMarkerData | null {
     const data = JSON.parse(raw);
     let component: Component | undefined;
     if (
-      typeof data.component === "string" &&
+      typeof data.component === 'string' &&
       COMPONENTS.includes(data.component as Component)
     ) {
       component = data.component as Component;
     } else if (Array.isArray(data.components) && data.components.length > 0) {
       const first = data.components[0];
       if (
-        typeof first === "string" &&
+        typeof first === 'string' &&
         COMPONENTS.includes(first as Component)
       ) {
         component = first as Component;
@@ -426,7 +431,7 @@ export async function writeComponentMarker(
     component: data.component,
     skip: Array.isArray(data.skip) ? data.skip : [],
   };
-  await writeFile(markerPath, JSON.stringify(out, null, 2) + "\n");
+  await writeFile(markerPath, JSON.stringify(out, null, 2) + '\n');
 }
 
 export async function upsertComponentMarker(
@@ -444,10 +449,10 @@ export async function upsertComponentMarker(
 export async function readProjxConfig(
   cwd: string,
 ): Promise<Record<string, unknown>> {
-  const path = join(cwd, ".projx");
+  const path = join(cwd, '.projx');
   if (!existsSync(path)) return {};
   try {
-    return JSON.parse(await readFile(path, "utf-8"));
+    return JSON.parse(await readFile(path, 'utf-8'));
   } catch {
     return {};
   }
@@ -457,34 +462,34 @@ export async function writeProjxConfig(
   cwd: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  const path = join(cwd, ".projx");
-  const today = new Date().toISOString().split("T")[0];
+  const path = join(cwd, '.projx');
+  const today = new Date().toISOString().split('T')[0];
   const out: Record<string, unknown> = { ...data };
-  if (typeof out.createdAt !== "string") out.createdAt = today;
+  if (typeof out.createdAt !== 'string') out.createdAt = today;
   if (!Array.isArray(out.skip)) out.skip = [];
-  await writeFile(path, JSON.stringify(out, null, 2) + "\n");
+  await writeFile(path, JSON.stringify(out, null, 2) + '\n');
 }
 
 export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
-  "docker-compose.yml",
-  "README.md",
-  ".githooks/pre-commit",
-  ".github/workflows/ci.yml",
-  "scripts/ci-local.sh",
-  "scripts/setup.sh",
-  "scripts/setup-docker.sh",
-  "scripts/setup-ssl.sh",
+  'docker-compose.yml',
+  'README.md',
+  '.githooks/pre-commit',
+  '.github/workflows/ci.yml',
+  'scripts/ci-local.sh',
+  'scripts/setup.sh',
+  'scripts/setup-docker.sh',
+  'scripts/setup-ssl.sh',
 ];
 
 export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
   Record<Component, string[]>
 > = {
-  fastapi: ["pyproject.toml"],
-  fastify: ["package.json"],
-  express: ["package.json"],
-  frontend: ["package.json"],
-  e2e: ["package.json"],
-  mobile: ["pubspec.yaml"],
+  fastapi: ['pyproject.toml'],
+  fastify: ['package.json'],
+  express: ['package.json'],
+  frontend: ['package.json'],
+  e2e: ['package.json'],
+  mobile: ['pubspec.yaml'],
 };
 
 export async function discoverComponentPaths(
@@ -515,7 +520,7 @@ export async function discoverComponentsFromMarkers(cwd: string): Promise<{
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (EXCLUDE.has(entry.name)) continue;
-    if (entry.name.startsWith(".")) continue;
+    if (entry.name.startsWith('.')) continue;
 
     const marker = await readComponentMarker(join(cwd, entry.name));
     if (!marker) continue;
@@ -537,19 +542,19 @@ export function render(
   template: string,
   vars: Record<string, unknown>,
 ): string {
-  const lines = template.split("\n");
-  return renderLines(lines, vars).replace(/\n{3,}/g, "\n\n");
+  const lines = template.split('\n');
+  return renderLines(lines, vars).replace(/\n{3,}/g, '\n\n');
 }
 
 function evalExpr(expr: string, vars: Record<string, unknown>): unknown {
   const components = vars.components as string[];
   const projectName = vars.projectName as string;
-  const pmName = (vars.pm as { name?: string })?.name ?? "npm";
-  const orm = (vars.orm as string | undefined) ?? "prisma";
-  const argNames = ["components", "projectName", "pm", "orm"];
+  const pmName = (vars.pm as { name?: string })?.name ?? 'npm';
+  const orm = (vars.orm as string | undefined) ?? 'prisma';
+  const argNames = ['components', 'projectName', 'pm', 'orm'];
   const argValues: unknown[] = [components, projectName, pmName, orm];
   for (const [k, v] of Object.entries(vars)) {
-    if (["components", "projectName", "pm", "orm"].includes(k)) continue;
+    if (['components', 'projectName', 'pm', 'orm'].includes(k)) continue;
     if (!/^[a-zA-Z_$][\w$]*$/.test(k)) continue;
     argNames.push(k);
     argValues.push(v);
@@ -572,7 +577,7 @@ function findBlockEnd(lines: string[], startIdx: number): number {
       if (depth === 0) return i;
     }
   }
-  throw new Error("Unmatched template block");
+  throw new Error('Unmatched template block');
 }
 
 function renderLines(lines: string[], vars: Record<string, unknown>): string {
@@ -645,20 +650,20 @@ function renderLines(lines: string[], vars: Record<string, unknown>): string {
     const replaced = line.replace(/<%=\s*(.+?)\s*%>/g, (_, expr: string) => {
       const trimmed = expr.trim();
       if (/^[\w.]+$/.test(trimmed)) {
-        const parts = trimmed.split(".");
+        const parts = trimmed.split('.');
         let val: unknown = vars;
         for (const p of parts) {
           val = (val as Record<string, unknown>)?.[p];
         }
-        return String(val ?? "");
+        return String(val ?? '');
       }
       const val = evalExpr(trimmed, vars);
-      return String(val ?? "");
+      return String(val ?? '');
     });
     output.push(replaced);
   }
 
-  return output.join("\n");
+  return output.join('\n');
 }
 
 export async function renderEjsInDir(
@@ -671,10 +676,10 @@ export async function renderEjsInDir(
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       await renderEjsInDir(full, vars);
-    } else if (entry.name.endsWith(".ejs")) {
-      const content = await readFile(full, "utf-8");
+    } else if (entry.name.endsWith('.ejs')) {
+      const content = await readFile(full, 'utf-8');
       const rendered = render(content, vars);
-      const out = full.slice(0, -".ejs".length);
+      const out = full.slice(0, -'.ejs'.length);
       await writeFile(out, rendered);
       await rm(full);
     }
@@ -688,18 +693,18 @@ export function detectProjectName(
 ): string {
   for (const component of components) {
     const dir = componentPaths[component] ?? component;
-    const pkgPath = join(cwd, dir, "package.json");
+    const pkgPath = join(cwd, dir, 'package.json');
     if (existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
         const n = pkg.name as string;
-        if (n && n.includes("-")) {
-          return n.substring(0, n.lastIndexOf("-"));
+        if (n && n.includes('-')) {
+          return n.substring(0, n.lastIndexOf('-'));
         }
       } catch {
         // continue
       }
     }
   }
-  return toKebab(cwd.split("/").pop()!);
+  return toKebab(cwd.split('/').pop()!);
 }
