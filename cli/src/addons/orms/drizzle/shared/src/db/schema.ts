@@ -8,5 +8,7 @@ export const auditLogs = pgTable('audit_logs', {
   oldValue: jsonb('old_value'),
   newValue: jsonb('new_value'),
   performedBy: text('performed_by').notNull().default('system'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

@@ -16,10 +16,13 @@ export interface BuildAppOptions {
   logger?: boolean | object;
 }
 
-export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? { level: config.LOG_LEVEL },
-    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    genReqId: (req) =>
+      (req.headers['x-request-id'] as string) || crypto.randomUUID(),
   });
 
   app.decorate('db', db);
@@ -31,7 +34,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
     timeWindow: config.RATE_LIMIT_WINDOW,
-    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
+    keyGenerator: (request: FastifyRequest) =>
+      request.authUser?.sub ?? request.ip,
   });
 
   await app.register(swaggerPlugin);

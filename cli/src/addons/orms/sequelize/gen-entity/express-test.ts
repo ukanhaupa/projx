@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
-import { buildApp } from '../../src/app.js';
-import { __ENTITY_PASCAL__ } from '../../src/models/__ENTITY_KEBAB__.js';
-import { sequelize, closeDatabase } from '../../src/db/client.js';
+import { buildApp } from '../src/app.js';
+import { __ENTITY_PASCAL__ } from '../src/models/__ENTITY_KEBAB__.js';
+import { sequelize, closeDatabase } from '../src/db/client.js';
 
 const app = buildApp();
 

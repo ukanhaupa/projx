@@ -58,7 +58,9 @@ function pkColumn(config: DrizzleEntityConfig): unknown {
   const key = config.primaryKey ?? 'id';
   const col = column(config.table, key);
   if (!col) {
-    throw new Error(`Primary key column "${key}" not found on table ${config.name}`);
+    throw new Error(
+      `Primary key column "${key}" not found on table ${config.name}`,
+    );
   }
   return col;
 }
@@ -84,11 +86,20 @@ export function registerEntityRoutes(
     const offset = (query.page - 1) * query.page_size;
 
     const baseSelect = app.db.select().from(config.table);
-    const baseCount = app.db.select({ count: sql<number>`count(*)::int` }).from(config.table);
+    const baseCount = app.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(config.table);
 
     const rows = await (where
-      ? baseSelect.where(where).orderBy(...order).limit(query.page_size).offset(offset)
-      : baseSelect.orderBy(...order).limit(query.page_size).offset(offset));
+      ? baseSelect
+          .where(where)
+          .orderBy(...order)
+          .limit(query.page_size)
+          .offset(offset)
+      : baseSelect
+          .orderBy(...order)
+          .limit(query.page_size)
+          .offset(offset));
     const [{ count }] = await (where ? baseCount.where(where) : baseCount);
 
     return reply.send({
@@ -97,12 +108,23 @@ export function registerEntityRoutes(
     });
   });
 
-  app.get('/:id', { schema: { tags: [config.tag] } }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const [record] = await app.db.select().from(config.table).where(eq(pk, id)).limit(1);
-    if (!record) return reply.status(404).send({ detail: 'Not found', request_id: request.id });
-    return reply.send(record);
-  });
+  app.get(
+    '/:id',
+    { schema: { tags: [config.tag] } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const [record] = await app.db
+        .select()
+        .from(config.table)
+        .where(eq(pk, id))
+        .limit(1);
+      if (!record)
+        return reply
+          .status(404)
+          .send({ detail: 'Not found', request_id: request.id });
+      return reply.send(record);
+    },
+  );
 
   if (config.readonly) return;
 
@@ -118,7 +140,11 @@ export function registerEntityRoutes(
         await config.afterCreate(request, record as Record<string, unknown>);
       } catch (err) {
         request.log.error(
-          { err, entity: config.name, record_id: (record as { id?: string }).id },
+          {
+            err,
+            entity: config.name,
+            record_id: (record as { id?: string }).id,
+          },
           'afterCreate hook failed (record persisted; hook is best-effort)',
         );
       }
@@ -126,81 +152,117 @@ export function registerEntityRoutes(
     return reply.status(201).send(record);
   });
 
-  app.patch('/:id', { schema: { tags: [config.tag] } }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const data = request.body as Record<string, unknown>;
-    if (!data || Object.keys(data).length === 0) {
-      return reply
-        .status(400)
-        .send({ detail: 'Request body cannot be empty', request_id: request.id });
-    }
-    if (config.beforeUpdate) {
-      await config.beforeUpdate(request, reply, data);
-      if (reply.sent) return;
-    }
-    let before: Record<string, unknown> | null = null;
-    if (config.afterUpdate) {
-      const [existing] = await app.db.select().from(config.table).where(eq(pk, id)).limit(1);
-      before = (existing as Record<string, unknown>) ?? null;
-    }
-    const [record] = await app.db
-      .update(config.table)
-      .set(data as never)
-      .where(eq(pk, id))
-      .returning();
-    if (!record) {
-      return reply.status(404).send({ detail: 'Not found', request_id: request.id });
-    }
-    if (config.afterUpdate && before) {
-      try {
-        await config.afterUpdate(request, before, record as Record<string, unknown>);
-      } catch (err) {
-        request.log.error(
-          { err, entity: config.name, record_id: id },
-          'afterUpdate hook failed (record persisted; hook is best-effort)',
-        );
+  app.patch(
+    '/:id',
+    { schema: { tags: [config.tag] } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const data = request.body as Record<string, unknown>;
+      if (!data || Object.keys(data).length === 0) {
+        return reply.status(400).send({
+          detail: 'Request body cannot be empty',
+          request_id: request.id,
+        });
       }
-    }
-    return reply.send(record);
-  });
+      if (config.beforeUpdate) {
+        await config.beforeUpdate(request, reply, data);
+        if (reply.sent) return;
+      }
+      let before: Record<string, unknown> | null = null;
+      if (config.afterUpdate) {
+        const [existing] = await app.db
+          .select()
+          .from(config.table)
+          .where(eq(pk, id))
+          .limit(1);
+        before = (existing as Record<string, unknown>) ?? null;
+      }
+      const [record] = await app.db
+        .update(config.table)
+        .set(data as never)
+        .where(eq(pk, id))
+        .returning();
+      if (!record) {
+        return reply
+          .status(404)
+          .send({ detail: 'Not found', request_id: request.id });
+      }
+      if (config.afterUpdate && before) {
+        try {
+          await config.afterUpdate(
+            request,
+            before,
+            record as Record<string, unknown>,
+          );
+        } catch (err) {
+          request.log.error(
+            { err, entity: config.name, record_id: id },
+            'afterUpdate hook failed (record persisted; hook is best-effort)',
+          );
+        }
+      }
+      return reply.send(record);
+    },
+  );
 
-  app.delete('/:id', { schema: { tags: [config.tag] } }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    if (config.beforeDelete) await config.beforeDelete(request, id);
-    const deleted = await app.db.delete(config.table).where(eq(pk, id)).returning();
-    if (deleted.length === 0) {
-      return reply.status(404).send({ detail: 'Not found', request_id: request.id });
-    }
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/:id',
+    { schema: { tags: [config.tag] } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (config.beforeDelete) await config.beforeDelete(request, id);
+      const deleted = await app.db
+        .delete(config.table)
+        .where(eq(pk, id))
+        .returning();
+      if (deleted.length === 0) {
+        return reply
+          .status(404)
+          .send({ detail: 'Not found', request_id: request.id });
+      }
+      return reply.status(204).send();
+    },
+  );
 
   if (!config.bulkOperations) return;
 
-  app.post('/bulk', { schema: { tags: [config.tag] } }, async (request, reply) => {
-    const { items } = request.body as { items: Record<string, unknown>[] };
-    if (!Array.isArray(items) || items.length === 0) {
-      return reply
-        .status(400)
-        .send({ detail: 'items must be a non-empty array', request_id: request.id });
-    }
-    for (const item of items) {
-      await config.beforeCreate?.(request, item);
-    }
-    const rows = await app.db
-      .insert(config.table)
-      .values(items as never)
-      .returning();
-    return reply.status(201).send({ data: rows, count: rows.length });
-  });
+  app.post(
+    '/bulk',
+    { schema: { tags: [config.tag] } },
+    async (request, reply) => {
+      const { items } = request.body as { items: Record<string, unknown>[] };
+      if (!Array.isArray(items) || items.length === 0) {
+        return reply.status(400).send({
+          detail: 'items must be a non-empty array',
+          request_id: request.id,
+        });
+      }
+      for (const item of items) {
+        await config.beforeCreate?.(request, item);
+      }
+      const rows = await app.db
+        .insert(config.table)
+        .values(items as never)
+        .returning();
+      return reply.status(201).send({ data: rows, count: rows.length });
+    },
+  );
 
-  app.delete('/bulk', { schema: { tags: [config.tag] } }, async (request, reply) => {
-    const { ids } = request.body as { ids: string[] };
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return reply
-        .status(400)
-        .send({ detail: 'ids must be a non-empty array', request_id: request.id });
-    }
-    await app.db.delete(config.table).where(inArray(pk as Parameters<typeof inArray>[0], ids));
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/bulk',
+    { schema: { tags: [config.tag] } },
+    async (request, reply) => {
+      const { ids } = request.body as { ids: string[] };
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return reply.status(400).send({
+          detail: 'ids must be a non-empty array',
+          request_id: request.id,
+        });
+      }
+      await app.db
+        .delete(config.table)
+        .where(inArray(pk as Parameters<typeof inArray>[0], ids));
+      return reply.status(204).send();
+    },
+  );
 }

@@ -11,7 +11,9 @@ describe('Express Sequelize app', () => {
   });
 
   it('returns structured errors with request id', async () => {
-    const res = await request(buildApp()).get('/missing').set('x-request-id', 'req-missing');
+    const res = await request(buildApp())
+      .get('/missing')
+      .set('x-request-id', 'req-missing');
 
     expect(res.status).toBe(404);
     expect(res.body.error).toMatchObject({

@@ -11,7 +11,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/app.ts', 'src/config.ts', 'src/plugins/swagger.ts'],
+      exclude: [
+        'src/server.ts',
+        'src/app.ts',
+        'src/config.ts',
+        'src/plugins/swagger.ts',
+      ],
       thresholds: {
         statements: 80,
         branches: 80,

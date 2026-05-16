@@ -571,6 +571,34 @@ function generateDrizzleTable(config: EntityConfig): string {
   return lines.join('\n');
 }
 
+function drizzleImports(config: EntityConfig): string[] {
+  const used = new Set<string>(['pgTable', 'uuid', 'timestamp']);
+  for (const field of config.fields) {
+    switch (field.type) {
+      case 'number':
+        used.add('integer');
+        break;
+      case 'boolean':
+        used.add('boolean');
+        break;
+      case 'date':
+        used.add('date');
+        break;
+      case 'datetime':
+        used.add('timestamp');
+        break;
+      case 'json':
+        used.add('jsonb');
+        break;
+      case 'text':
+      case 'string':
+        used.add('text');
+        break;
+    }
+  }
+  return [...used].sort();
+}
+
 // --- Express generation ---
 
 function zodType(type: FieldType, required: boolean): string {
@@ -1666,18 +1694,18 @@ async function appendDrizzleEntity(
   const tableSource = generateDrizzleTable(config);
   await mkdir(schemaDir, { recursive: true });
 
+  const usedImports = drizzleImports(config);
   if (!existsSync(schemaPath)) {
     await writeFile(
       schemaPath,
-      `import { boolean, date, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';\n\n${tableSource}\n`,
+      `import { ${usedImports.join(', ')} } from 'drizzle-orm/pg-core';\n\n${tableSource}\n`,
     );
     generated.push(`${dir}/src/db/schema.ts`);
   } else {
     const content = await readFile(schemaPath, 'utf-8');
     if (!content.includes(`export const ${tableConst} = pgTable(`)) {
       let updated = content;
-      const importLine =
-        "import { boolean, date, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';";
+      const importLine = `import { ${usedImports.join(', ')} } from 'drizzle-orm/pg-core';`;
       if (!updated.includes('drizzle-orm/pg-core')) {
         updated = importLine + '\n\n' + updated;
       } else {
@@ -1690,16 +1718,7 @@ async function appendDrizzleEntity(
                 .map((item) => item.trim())
                 .filter(Boolean),
             );
-            for (const name of [
-              'boolean',
-              'date',
-              'integer',
-              'jsonb',
-              'pgTable',
-              'text',
-              'timestamp',
-              'uuid',
-            ]) {
+            for (const name of usedImports) {
               names.add(name);
             }
             return `import { ${[...names].sort().join(', ')} } from 'drizzle-orm/pg-core';`;

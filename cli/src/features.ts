@@ -158,7 +158,15 @@ export async function applyFeatures(opts: ApplyFeaturesOptions): Promise<void> {
     }
     const manifest = JSON.parse(
       await readFile(join(featureDir, 'feature.json'), 'utf-8'),
-    ) as { supports: Component[] };
+    ) as { supports: Component[]; requiresOrm?: string[] };
+    if (manifest.requiresOrm && manifest.requiresOrm.length > 0) {
+      const orm = (opts.vars.orm as string | undefined) ?? 'prisma';
+      if (!manifest.requiresOrm.includes(orm)) {
+        throw new Error(
+          `Feature "${name}" requires --orm ${manifest.requiresOrm.join(' or ')} (got "${orm}").`,
+        );
+      }
+    }
     const resolved = validateFeatureTargets(
       targets,
       opts.instances,

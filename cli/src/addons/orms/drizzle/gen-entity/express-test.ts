@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
-import { buildApp } from '../../src/app.js';
-import { db, closeDatabase } from '../../src/db/client.js';
-import { __TABLE_CAMEL__ } from '../../src/db/schema.js';
+import { buildApp } from '../src/app.js';
+import { db, closeDatabase } from '../src/db/client.js';
+import { __TABLE_CAMEL__ } from '../src/db/schema.js';
 
 const app = buildApp();
 

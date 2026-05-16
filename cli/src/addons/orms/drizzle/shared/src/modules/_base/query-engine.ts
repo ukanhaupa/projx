@@ -14,7 +14,10 @@ const RESERVED = new Set(['page', 'page_size', 'order_by', 'search']);
 export function parseRawQuery(rawQs: string): ParsedQuery {
   const params = new URLSearchParams(rawQs);
   const page = Math.max(1, Number(params.get('page')) || 1);
-  const page_size = Math.min(100, Math.max(1, Number(params.get('page_size')) || 10));
+  const page_size = Math.min(
+    100,
+    Math.max(1, Number(params.get('page_size')) || 10),
+  );
   const filters: Record<string, string> = {};
   for (const [key, value] of params.entries()) {
     if (RESERVED.has(key)) continue;
@@ -33,7 +36,10 @@ function column(table: PgTable, key: string): unknown {
   return (table as unknown as Record<string, unknown>)[key];
 }
 
-export function buildWhere(table: PgTable, filters: Record<string, string>): SQL | undefined {
+export function buildWhere(
+  table: PgTable,
+  filters: Record<string, string>,
+): SQL | undefined {
   const clauses: SQL[] = [];
   for (const [key, value] of Object.entries(filters)) {
     const col = column(table, key);
@@ -65,7 +71,10 @@ export function buildSearchWhere(
   return or(...clauses);
 }
 
-export function buildOrderBy(table: PgTable, orderBy: string | undefined): SQL[] {
+export function buildOrderBy(
+  table: PgTable,
+  orderBy: string | undefined,
+): SQL[] {
   if (!orderBy) return [];
   const out: SQL[] = [];
   for (const raw of orderBy.split(',')) {
@@ -92,7 +101,11 @@ export interface PaginationMeta {
   total_pages: number;
 }
 
-export function buildPagination(page: number, page_size: number, total: number): PaginationMeta {
+export function buildPagination(
+  page: number,
+  page_size: number,
+  total: number,
+): PaginationMeta {
   return {
     current_page: page,
     page_size,

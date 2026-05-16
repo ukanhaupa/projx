@@ -13,7 +13,10 @@ const RESERVED = new Set(['page', 'page_size', 'order_by', 'search']);
 export function parseRawQuery(rawQs: string): ParsedQuery {
   const params = new URLSearchParams(rawQs);
   const page = Math.max(1, Number(params.get('page')) || 1);
-  const page_size = Math.min(100, Math.max(1, Number(params.get('page_size')) || 10));
+  const page_size = Math.min(
+    100,
+    Math.max(1, Number(params.get('page_size')) || 10),
+  );
   const filters: Record<string, string> = {};
   for (const [key, value] of params.entries()) {
     if (RESERVED.has(key)) continue;
@@ -49,7 +52,9 @@ export function buildSearchWhere(
   if (!trimmed || searchableFields.length === 0) return undefined;
   const pattern = `%${trimmed}%`;
   return {
-    [Op.or]: searchableFields.map((field) => ({ [field]: { [Op.iLike]: pattern } })),
+    [Op.or]: searchableFields.map((field) => ({
+      [field]: { [Op.iLike]: pattern },
+    })),
   } as WhereOptions;
 }
 
@@ -82,7 +87,11 @@ export interface PaginationMeta {
   total_pages: number;
 }
 
-export function buildPagination(page: number, page_size: number, total: number): PaginationMeta {
+export function buildPagination(
+  page: number,
+  page_size: number,
+  total: number,
+): PaginationMeta {
   return {
     current_page: page,
     page_size,

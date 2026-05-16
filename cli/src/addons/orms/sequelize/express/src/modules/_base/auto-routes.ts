@@ -1,4 +1,8 @@
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
 import type { Model, ModelStatic } from 'sequelize';
 import { ApiError } from '../../errors.js';
 import { registerInRegistry } from './registry.js';
@@ -50,7 +54,11 @@ export interface SequelizeEntityConfig {
   beforeDelete?: BeforeDeleteHook;
 }
 
-type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+type AsyncHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => Promise<void>;
 
 function asyncHandler(handler: AsyncHandler) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -62,7 +70,9 @@ function attributes(model: ModelStatic<Model>): Set<string> {
   return new Set(Object.keys(model.getAttributes()));
 }
 
-export function registerEntityRoutes(config: SequelizeEntityConfig): express.Router {
+export function registerEntityRoutes(
+  config: SequelizeEntityConfig,
+): express.Router {
   registerInRegistry({ name: config.name, apiPrefix: config.apiPrefix });
   const router = express.Router();
   const pk = config.primaryKey ?? 'id';
@@ -74,7 +84,10 @@ export function registerEntityRoutes(config: SequelizeEntityConfig): express.Rou
       const rawQs = req.originalUrl.split('?')[1] ?? '';
       const query = parseRawQuery(rawQs);
       const filterWhere = buildWhere(attrs, query.filters);
-      const searchWhere = buildSearchWhere(config.searchableFields ?? [], query.search);
+      const searchWhere = buildSearchWhere(
+        config.searchableFields ?? [],
+        query.search,
+      );
       const where = combineWhere(filterWhere, searchWhere);
       const order = buildOrder(attrs, query.order_by);
       const { rows, count } = await config.model.findAndCountAll({
@@ -93,7 +106,9 @@ export function registerEntityRoutes(config: SequelizeEntityConfig): express.Rou
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {
-      const record = await config.model.findOne({ where: { [pk]: String(req.params.id) } });
+      const record = await config.model.findOne({
+        where: { [pk]: String(req.params.id) },
+      });
       if (!record) throw new ApiError(404, 'Not found', 'not_found');
       res.json(record.toJSON());
     }),
@@ -113,7 +128,11 @@ export function registerEntityRoutes(config: SequelizeEntityConfig): express.Rou
           await config.afterCreate(req, record);
         } catch (err) {
           req.log?.error?.(
-            { err, entity: config.name, record_id: (record as { id?: string }).id },
+            {
+              err,
+              entity: config.name,
+              record_id: (record as { id?: string }).id,
+            },
             'afterCreate hook failed (record persisted; hook is best-effort)',
           );
         }
@@ -171,13 +190,19 @@ export function registerEntityRoutes(config: SequelizeEntityConfig): express.Rou
     asyncHandler(async (req, res) => {
       const { items } = req.body as { items: Record<string, unknown>[] };
       if (!Array.isArray(items) || items.length === 0) {
-        throw new ApiError(400, 'items must be a non-empty array', 'validation_error');
+        throw new ApiError(
+          400,
+          'items must be a non-empty array',
+          'validation_error',
+        );
       }
       for (const item of items) {
         await config.beforeCreate?.(req, item);
       }
       const rows = await config.model.bulkCreate(items);
-      res.status(201).json({ data: rows.map((r) => r.toJSON()), count: rows.length });
+      res
+        .status(201)
+        .json({ data: rows.map((r) => r.toJSON()), count: rows.length });
     }),
   );
 
@@ -186,7 +211,11 @@ export function registerEntityRoutes(config: SequelizeEntityConfig): express.Rou
     asyncHandler(async (req, res) => {
       const { ids } = req.body as { ids: string[] };
       if (!Array.isArray(ids) || ids.length === 0) {
-        throw new ApiError(400, 'ids must be a non-empty array', 'validation_error');
+        throw new ApiError(
+          400,
+          'ids must be a non-empty array',
+          'validation_error',
+        );
       }
       await config.model.destroy({ where: { [pk]: ids } });
       res.status(204).send();

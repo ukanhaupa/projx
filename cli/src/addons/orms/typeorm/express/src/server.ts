@@ -10,7 +10,9 @@ async function main(): Promise<void> {
   const server = createServer(app);
 
   server.listen(config.PORT, config.HOST, () => {
-    console.log(`Express API listening on http://${config.HOST}:${config.PORT}`);
+    console.log(
+      `Express API listening on http://${config.HOST}:${config.PORT}`,
+    );
   });
 
   const shutdown = (signal: string): void => {
