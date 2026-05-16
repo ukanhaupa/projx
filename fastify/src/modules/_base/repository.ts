@@ -40,9 +40,13 @@ export class BaseRepository {
   ) {
     this.modelName = modelName;
     const prismaModel = modelName.charAt(0).toLowerCase() + modelName.slice(1);
-    this.delegate = (prisma as unknown as Record<string, PrismaDelegate>)[prismaModel];
+    this.delegate = (prisma as unknown as Record<string, PrismaDelegate>)[
+      prismaModel
+    ];
     if (!this.delegate) {
-      throw new Error(`Prisma model "${modelName}" not found. Check your schema.prisma.`);
+      throw new Error(
+        `Prisma model "${modelName}" not found. Check your schema.prisma.`,
+      );
     }
     this.columnNames = new Set(options.columnNames);
     this.searchableFields = options.searchableFields ?? [];
@@ -51,7 +55,8 @@ export class BaseRepository {
   }
 
   protected stripHidden<T>(record: T): T {
-    if (!this.hiddenFields.size || !record || typeof record !== 'object') return record;
+    if (!this.hiddenFields.size || !record || typeof record !== 'object')
+      return record;
     const obj = record as Record<string, unknown>;
     for (const field of this.hiddenFields) {
       delete obj[field];
@@ -97,7 +102,10 @@ export class BaseRepository {
     return { data: rawData.map((r) => this.stripHidden(r)), total };
   }
 
-  async findById(id: string, includeRelations?: Record<string, boolean>): Promise<unknown> {
+  async findById(
+    id: string,
+    includeRelations?: Record<string, boolean>,
+  ): Promise<unknown> {
     const findArgs: Record<string, unknown> = {
       where: { id, ...this.softDeleteWhere() },
     };
@@ -134,8 +142,12 @@ export class BaseRepository {
     }
   }
 
-  async bulkCreate(items: Record<string, unknown>[]): Promise<{ count: number }> {
-    return this.delegate.createMany({ data: items as unknown as Record<string, unknown> });
+  async bulkCreate(
+    items: Record<string, unknown>[],
+  ): Promise<{ count: number }> {
+    return this.delegate.createMany({
+      data: items as unknown as Record<string, unknown>,
+    });
   }
 
   async bulkDelete(ids: string[]): Promise<void> {

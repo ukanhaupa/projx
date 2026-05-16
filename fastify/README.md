@@ -5,14 +5,13 @@ Fastify + TypeScript backend template with automatic entity discovery, CRUD rout
 ## Prerequisites
 
 - Node.js >= 20
-- pnpm 9.x (`corepack enable && corepack prepare pnpm@9.15.0 --activate`)
-- PostgreSQL 16 (or use the provided Docker Compose file)
+- pnpm 10.x (`corepack enable && corepack prepare pnpm@10.33.0 --activate`)
+- PostgreSQL 16 running locally
 
 ## Quick Start
 
 ```bash
-# 1. Start PostgreSQL (skip if you already have one running)
-docker compose -f docker-compose.dev.yml up db -d
+# 1. Ensure PostgreSQL is running locally and reachable via DATABASE_URL
 
 # 2. Install dependencies
 pnpm install --frozen-lockfile
@@ -145,7 +144,11 @@ export const UpdateTaskSchema = Type.Object({
 Create `src/modules/tasks/index.ts`:
 
 ```typescript
-import { EntityRegistry, type EntityConfig, type FieldMeta } from '../_base/index.js';
+import {
+  EntityRegistry,
+  type EntityConfig,
+  type FieldMeta,
+} from '../_base/index.js';
 import { TaskSchema, CreateTaskSchema, UpdateTaskSchema } from './schemas.js';
 
 const fields: FieldMeta[] = [
@@ -226,7 +229,14 @@ export const taskConfig: EntityConfig = {
   readonly: false,
   softDelete: false,
   bulkOperations: true,
-  columnNames: ['id', 'title', 'status', 'assigned_to', 'created_at', 'updated_at'],
+  columnNames: [
+    'id',
+    'title',
+    'status',
+    'assigned_to',
+    'created_at',
+    'updated_at',
+  ],
   searchableFields: ['title', 'assigned_to'],
   fields,
   schema: TaskSchema,
@@ -400,19 +410,13 @@ The test suite covers: auto-routes, query engine, repository, service, entity va
 
 ## Docker
 
-**Full development stack** (PostgreSQL + migrations + backend with hot reload):
-
-```bash
-docker compose -f docker-compose.dev.yml up
-```
-
-This starts PostgreSQL 16, runs pending migrations, then starts the backend with `pnpm dev`. Source code is bind-mounted for live reloading.
-
 **Production build:**
 
 ```bash
 docker build -t fastify-backend .
 ```
+
+The image runs under `pm2-runtime` in cluster mode (see `ecosystem.config.cjs`). The named `migrate` build target runs `prisma migrate deploy` and is invoked by the root `docker-compose.yml`.
 
 ## Available Scripts
 

@@ -12,12 +12,15 @@ import swaggerPlugin from './plugins/swagger.js';
 import { EntityRegistry, registerEntityRoutes } from './modules/_base/index.js';
 
 import './modules/audit-logs/index.js';
+// projx-anchor: imports
 
 export interface BuildAppOptions {
   logger?: boolean | object;
 }
 
-export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? {
       level: config.LOG_LEVEL,
@@ -29,7 +32,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
             }
           : undefined,
     },
-    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    genReqId: (req) =>
+      (req.headers['x-request-id'] as string) || crypto.randomUUID(),
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -40,7 +44,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
     timeWindow: config.RATE_LIMIT_WINDOW,
-    keyGenerator: (request: FastifyRequest) => request.authUser?.sub ?? request.ip,
+    keyGenerator: (request: FastifyRequest) =>
+      request.authUser?.sub ?? request.ip,
   });
 
   await app.register(swaggerPlugin);
@@ -49,6 +54,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
   await app.register(authzPlugin);
+  // projx-anchor: plugins
 
   app.get(
     '/api/health',
@@ -57,6 +63,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       schema: {
         tags: ['health'],
       },
+      logLevel: 'debug',
     },
     async (_request, reply) => {
       const checks: Record<string, string> = { app: 'ok' };
@@ -74,16 +81,27 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(
     async (instance) => {
       const entities = EntityRegistry.getAll();
+      const skipped = EntityRegistry.getSkipped();
+
+      if (skipped.length > 0) {
+        app.log.warn(
+          { entities: skipped },
+          'EntityRegistry skipped auto-route registration',
+        );
+      }
 
       for (const entityConfig of entities) {
-        const routeRegistrar = entityConfig.customRoutes ?? registerEntityRoutes;
+        const routeRegistrar =
+          entityConfig.customRoutes ?? registerEntityRoutes;
         await instance.register(
           async (entityInstance) => {
             routeRegistrar(entityInstance, entityConfig);
           },
           { prefix: entityConfig.apiPrefix },
         );
-        app.log.debug(`Mounted ${entityConfig.name} at /api/v1${entityConfig.apiPrefix}`);
+        app.log.debug(
+          `Mounted ${entityConfig.name} at /api/v1${entityConfig.apiPrefix}`,
+        );
       }
 
       instance.get(

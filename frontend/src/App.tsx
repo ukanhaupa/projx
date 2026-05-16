@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { initAuth } from './auth';
+import { ErrorScaffold } from './components/ErrorScaffold';
 import { Layout } from './components/Layout';
 import { loadEntities, resetEntityCache } from './entities';
 import { Dashboard } from './pages/Dashboard';
@@ -77,15 +78,15 @@ export function App() {
 
   if (loadError) {
     return (
-      <div className='full-page-state' role='alert'>
-        <div>
-          <h2>Unable to Load</h2>
-          <p>{loadError}</p>
-          <button onClick={handleRetry} disabled={retrying}>
-            {retrying ? 'Retrying...' : 'Retry'}
-          </button>
-        </div>
-      </div>
+      <ErrorScaffold
+        variant='server-error'
+        message={loadError}
+        primaryAction={{
+          label: retrying ? 'Retrying...' : 'Retry',
+          onClick: handleRetry,
+          disabled: retrying,
+        }}
+      />
     );
   }
 

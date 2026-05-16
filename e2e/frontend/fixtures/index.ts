@@ -1,5 +1,6 @@
 export { test, expect } from './entity';
 export type { MetaEntity, MetaField } from './entity';
+export { allowPageErrors } from './page-errors';
 export {
   fetchEntities,
   createEntityViaApi,

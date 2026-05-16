@@ -17,12 +17,21 @@ export interface PaginatedResponse<T> {
   };
 }
 
-const RESERVED_PARAMS = new Set(['page', 'page_size', 'order_by', 'search', 'expand']);
+const RESERVED_PARAMS = new Set([
+  'page',
+  'page_size',
+  'order_by',
+  'search',
+  'expand',
+]);
 
-export function extractFilters(query: Record<string, unknown>): Record<string, unknown> {
+export function extractFilters(
+  query: Record<string, unknown>,
+): Record<string, unknown> {
   const filters: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(query)) {
-    if (RESERVED_PARAMS.has(key) || value === undefined || value === '') continue;
+    if (RESERVED_PARAMS.has(key) || value === undefined || value === '')
+      continue;
     filters[key] = value;
   }
   return filters;

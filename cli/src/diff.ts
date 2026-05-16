@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { readFile, mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import * as p from "@clack/prompts";
+import { existsSync } from 'node:fs';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import * as p from '@clack/prompts';
 import {
   type ComponentPaths,
   cleanupRepo,
@@ -12,7 +12,7 @@ import {
   pmCommands,
   readComponentMarker,
   readProjxConfig,
-} from "./utils.js";
+} from './utils.js';
 import {
   collectAllFiles,
   getBaselineRef,
@@ -20,15 +20,15 @@ import {
   matchesSkip,
   writeTemplateToDir,
   type GeneratorVars,
-} from "./baseline.js";
+} from './baseline.js';
 
 type FileStatus =
-  | "new"
-  | "unchanged"
-  | "clean-update"
-  | "user-only"
-  | "needs-merge"
-  | "skipped";
+  | 'new'
+  | 'unchanged'
+  | 'clean-update'
+  | 'user-only'
+  | 'needs-merge'
+  | 'skipped';
 
 interface FileAnalysis {
   file: string;
@@ -43,14 +43,14 @@ function isSkipped(
   rootSkip: string[],
 ): boolean {
   for (const [component, dir] of Object.entries(componentPaths)) {
-    if (file.startsWith(dir + "/")) {
+    if (file.startsWith(dir + '/')) {
       const relative = file.slice(dir.length + 1);
       const skips = componentSkips[component] ?? [];
       if (matchesSkip(relative, skips)) return true;
     }
   }
-  const base = file.split("/").pop()!;
-  if (base === ".projx" || base === ".projx-component") return false;
+  const base = file.split('/').pop()!;
+  if (base === '.projx' || base === '.projx-component') return false;
   return matchesSkip(file, rootSkip);
 }
 
@@ -59,16 +59,16 @@ function fileComponent(
   componentPaths: ComponentPaths,
 ): string | undefined {
   for (const [component, dir] of Object.entries(componentPaths)) {
-    if (file.startsWith(dir + "/")) return component;
+    if (file.startsWith(dir + '/')) return component;
   }
   return undefined;
 }
 
 export async function diff(cwd: string, localRepo?: string): Promise<void> {
-  p.intro("projx diff");
+  p.intro('projx diff');
   const isLocal = !!localRepo;
 
-  if (!existsSync(join(cwd, ".projx"))) {
+  if (!existsSync(join(cwd, '.projx'))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
@@ -91,36 +91,36 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     p.log.error(String(err));
     process.exit(1);
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
 
-    p.log.info(`Current: v${raw.version ?? "unknown"} → Template: v${version}`);
+    p.log.info(`Current: v${raw.version ?? 'unknown'} → Template: v${version}`);
 
     const name = detectProjectName(cwd, components, componentPaths);
     const vars: GeneratorVars = {
       projectName: name,
       components,
       paths: componentPaths,
-      pm: pmCommands((raw.packageManager ?? "npm") as "npm"),
+      pm: pmCommands((raw.packageManager ?? 'npm') as 'npm'),
+      orm: raw.orm ?? 'prisma',
     };
 
     const spinner = p.spinner();
-    spinner.start("Analyzing changes");
+    spinner.start('Analyzing changes');
 
-    const tmpTemplate = join(tmpdir(), `projx-diff-${Date.now()}`);
-    await mkdir(tmpTemplate, { recursive: true });
+    const tmpTemplate = await mkdtemp(join(tmpdir(), 'projx-diff-'));
     await writeTemplateToDir(
       tmpTemplate,
       repoDir,
@@ -144,59 +144,59 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
       const component = fileComponent(file, componentPaths);
 
       if (isSkipped(file, componentPaths, componentSkips, rootSkip)) {
-        analyses.push({ file, status: "skipped", component });
+        analyses.push({ file, status: 'skipped', component });
         continue;
       }
 
       const oursPath = join(cwd, file);
       if (!existsSync(oursPath)) {
-        analyses.push({ file, status: "new", component });
+        analyses.push({ file, status: 'new', component });
         continue;
       }
 
       let oursContent: string;
       let theirsContent: string;
       try {
-        oursContent = await readFile(oursPath, "utf-8");
-        theirsContent = await readFile(join(tmpTemplate, file), "utf-8");
+        oursContent = await readFile(oursPath, 'utf-8');
+        theirsContent = await readFile(join(tmpTemplate, file), 'utf-8');
       } catch {
         continue;
       }
 
       if (oursContent === theirsContent) {
-        analyses.push({ file, status: "unchanged", component });
+        analyses.push({ file, status: 'unchanged', component });
         continue;
       }
 
       if (!baselineRef) {
-        analyses.push({ file, status: "needs-merge", component });
+        analyses.push({ file, status: 'needs-merge', component });
         continue;
       }
 
       const baseContent = getFileAtRef(cwd, baselineRef, file);
       if (!baseContent) {
-        analyses.push({ file, status: "needs-merge", component });
+        analyses.push({ file, status: 'needs-merge', component });
         continue;
       }
 
       if (oursContent === baseContent) {
-        analyses.push({ file, status: "clean-update", component });
+        analyses.push({ file, status: 'clean-update', component });
       } else if (theirsContent === baseContent) {
-        analyses.push({ file, status: "user-only", component });
+        analyses.push({ file, status: 'user-only', component });
       } else {
-        analyses.push({ file, status: "needs-merge", component });
+        analyses.push({ file, status: 'needs-merge', component });
       }
     }
 
     await rm(tmpTemplate, { recursive: true, force: true });
-    spinner.stop("Analysis complete.");
+    spinner.stop('Analysis complete.');
 
     // Print results
     const groups: Record<FileStatus, FileAnalysis[]> = {
       new: [],
-      "clean-update": [],
-      "needs-merge": [],
-      "user-only": [],
+      'clean-update': [],
+      'needs-merge': [],
+      'user-only': [],
       unchanged: [],
       skipped: [],
     };
@@ -205,45 +205,45 @@ export async function diff(cwd: string, localRepo?: string): Promise<void> {
       groups[a.status].push(a);
     }
 
-    if (groups["new"].length > 0) {
-      p.log.info(`New files (${groups["new"].length}):`);
-      for (const a of groups["new"]) p.log.info(`  + ${a.file}`);
+    if (groups['new'].length > 0) {
+      p.log.info(`New files (${groups['new'].length}):`);
+      for (const a of groups['new']) p.log.info(`  + ${a.file}`);
     }
 
-    if (groups["clean-update"].length > 0) {
+    if (groups['clean-update'].length > 0) {
       p.log.success(
-        `Clean updates — auto-merged (${groups["clean-update"].length}):`,
+        `Clean updates — auto-merged (${groups['clean-update'].length}):`,
       );
-      for (const a of groups["clean-update"]) p.log.info(`  ~ ${a.file}`);
+      for (const a of groups['clean-update']) p.log.info(`  ~ ${a.file}`);
     }
 
-    if (groups["needs-merge"].length > 0) {
+    if (groups['needs-merge'].length > 0) {
       p.log.warn(
-        `Needs merge — both sides changed (${groups["needs-merge"].length}):`,
+        `Needs merge — both sides changed (${groups['needs-merge'].length}):`,
       );
-      for (const a of groups["needs-merge"]) p.log.info(`  ! ${a.file}`);
+      for (const a of groups['needs-merge']) p.log.info(`  ! ${a.file}`);
     }
 
-    if (groups["user-only"].length > 0) {
+    if (groups['user-only'].length > 0) {
       p.log.info(
-        `User-modified only — no template change (${groups["user-only"].length}):`,
+        `User-modified only — no template change (${groups['user-only'].length}):`,
       );
-      for (const a of groups["user-only"]) p.log.info(`  = ${a.file}`);
+      for (const a of groups['user-only']) p.log.info(`  = ${a.file}`);
     }
 
-    if (groups["skipped"].length > 0) {
-      p.log.info(`Skipped (${groups["skipped"].length}):`);
-      for (const a of groups["skipped"]) p.log.info(`  - ${a.file}`);
+    if (groups['skipped'].length > 0) {
+      p.log.info(`Skipped (${groups['skipped'].length}):`);
+      for (const a of groups['skipped']) p.log.info(`  - ${a.file}`);
     }
 
-    const unchanged = groups["unchanged"].length;
+    const unchanged = groups['unchanged'].length;
     if (unchanged > 0) {
       p.log.info(`${unchanged} file(s) unchanged.`);
     }
 
     const total = analyses.length - unchanged;
     if (total === 0) {
-      p.outro("Everything is up to date.");
+      p.outro('Everything is up to date.');
     } else {
       p.outro(`${total} file(s) would be affected by update.`);
     }

@@ -1,18 +1,21 @@
 {
   "name": "create-projx",
   "version": "1.6.5",
-  "description": "Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.",
+  "description": "Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, Express, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.",
   "type": "module",
   "bin": {
     "create-projx": "dist/index.js"
   },
   "files": [
     "dist",
-    "src/templates"
+    "src/templates",
+    "src/addons"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node18 --clean",
     "dev": "tsup src/index.ts --format esm --target node18 --watch",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
@@ -27,6 +30,7 @@
     "fullstack",
     "fastapi",
     "fastify",
+    "express",
     "react",
     "flutter",
     "terraform",
@@ -58,6 +62,7 @@
     "@types/node": "^25.5.2",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^10.2.0",
+    "prettier": "^3.8.3",
     "tsup": "^8",
     "typescript": "^5",
     "typescript-eslint": "^8.59.0",

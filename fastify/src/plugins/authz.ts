@@ -41,7 +41,9 @@ export class OidcPermissionResolver implements PermissionResolver {
 
     const resourceAccess = payload.resource_access;
     if (resourceAccess && typeof resourceAccess === 'object') {
-      for (const info of Object.values(resourceAccess as Record<string, unknown>)) {
+      for (const info of Object.values(
+        resourceAccess as Record<string, unknown>,
+      )) {
         if (!info || typeof info !== 'object') continue;
         const roles = (info as Record<string, unknown>).roles;
         if (Array.isArray(roles)) list.push(...roles.map(String));
@@ -126,7 +128,9 @@ function extractPermissions(
     for (const [resource, methods] of Object.entries(mapSource)) {
       const key = normalizeResource(resource);
       if (Array.isArray(methods)) {
-        permissionsMap[key] = methods.map((m) => String(m).trim().toLowerCase());
+        permissionsMap[key] = methods.map((m) =>
+          String(m).trim().toLowerCase(),
+        );
       }
     }
   }
@@ -195,33 +199,49 @@ function createResolver(): PermissionResolver {
 export default fp(async (fastify) => {
   const resolver = createResolver();
 
-  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    const url = request.url.split('?')[0];
+  fastify.addHook(
+    'onRequest',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const url = request.url.split('?')[0];
 
-    if (request.routeOptions.config?.public || isPublicPath(url)) return;
-    if (isAuthnOnlyPath(url)) return;
+      if (request.routeOptions.config?.public || isPublicPath(url)) return;
+      if (isAuthnOnlyPath(url)) return;
 
-    const required = buildRequiredPermission(url, request.method);
-    if (!required) {
-      if (url.startsWith('/api/v1/')) {
-        return reply.status(405).send({ detail: 'Method not allowed' });
+      const required = buildRequiredPermission(url, request.method);
+      if (!required) {
+        if (url.startsWith('/api/v1/')) {
+          return reply.status(405).send({ detail: 'Method not allowed' });
+        }
+        return;
       }
-      return;
-    }
 
-    const user = request.authUser;
-    if (!user) {
-      return reply.status(401).send({ detail: 'Authentication required' });
-    }
+      const user = request.authUser;
+      if (!user) {
+        return reply.status(401).send({ detail: 'Authentication required' });
+      }
 
-    const payload = (user as Record<string, unknown>) ?? {};
-    const { permissions, permissionsMap } = extractPermissions(payload, resolver);
-    const candidates = buildPermissionCandidates(required.action, required.scope);
+      const payload = (user as Record<string, unknown>) ?? {};
+      const { permissions, permissionsMap } = extractPermissions(
+        payload,
+        resolver,
+      );
+      const candidates = buildPermissionCandidates(
+        required.action,
+        required.scope,
+      );
 
-    if (!hasPermission(required.resource, candidates, permissions, permissionsMap)) {
-      return reply.status(403).send({
-        detail: `Insufficient permissions: ${required.resource}:${required.action}.${required.scope} required`,
-      });
-    }
-  });
+      if (
+        !hasPermission(
+          required.resource,
+          candidates,
+          permissions,
+          permissionsMap,
+        )
+      ) {
+        return reply.status(403).send({
+          detail: `Insufficient permissions: ${required.resource}:${required.action}.${required.scope} required`,
+        });
+      }
+    },
+  );
 });

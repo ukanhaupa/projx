@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { execSync } from "node:child_process";
-import { join } from "node:path";
-import * as p from "@clack/prompts";
+import { existsSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import {
   COMPONENT_MARKER,
   type Component,
@@ -10,12 +10,12 @@ import {
   discoverComponentsFromMarkers,
   readComponentMarker,
   readProjxConfig,
-} from "./utils.js";
-import { BASELINE_REF, matchesSkip, saveBaselineRef } from "./baseline.js";
+} from './utils.js';
+import { BASELINE_REF, matchesSkip, saveBaselineRef } from './baseline.js';
 
 interface CheckResult {
   name: string;
-  status: "pass" | "warn" | "fail";
+  status: 'pass' | 'warn' | 'fail';
   message: string;
   fix?: string;
   autoFixable?: boolean;
@@ -26,13 +26,13 @@ async function checkConfig(cwd: string): Promise<{
   rootConfig?: Record<string, unknown>;
 }> {
   const results: CheckResult[] = [];
-  const configPath = join(cwd, ".projx");
+  const configPath = join(cwd, '.projx');
 
   if (!existsSync(configPath)) {
     results.push({
-      name: ".projx exists",
-      status: "fail",
-      message: "No .projx file found.",
+      name: '.projx exists',
+      status: 'fail',
+      message: 'No .projx file found.',
       fix: "Run 'npx create-projx init' to initialize.",
     });
     return { results };
@@ -41,24 +41,24 @@ async function checkConfig(cwd: string): Promise<{
   const rootConfig = await readProjxConfig(cwd);
   if (Object.keys(rootConfig).length === 0) {
     results.push({
-      name: ".projx valid JSON",
-      status: "fail",
-      message: ".projx contains invalid JSON or is empty.",
+      name: '.projx valid JSON',
+      status: 'fail',
+      message: '.projx contains invalid JSON or is empty.',
     });
     return { results };
   }
 
   results.push({
-    name: ".projx exists",
-    status: "pass",
-    message: `v${rootConfig.version ?? "unknown"}`,
+    name: '.projx exists',
+    status: 'pass',
+    message: `v${rootConfig.version ?? 'unknown'}`,
   });
 
   if (!rootConfig.version) {
     results.push({
-      name: ".projx fields",
-      status: "warn",
-      message: "Missing version field.",
+      name: '.projx fields',
+      status: 'warn',
+      message: 'Missing version field.',
     });
   }
 
@@ -74,8 +74,8 @@ async function checkComponents(
 
   if (components.length === 0) {
     results.push({
-      name: "components",
-      status: "fail",
+      name: 'components',
+      status: 'fail',
       message: `No ${COMPONENT_MARKER} files found in any directory.`,
       fix: "Run 'npx create-projx init' to detect and mark components.",
     });
@@ -83,8 +83,8 @@ async function checkComponents(
   }
 
   results.push({
-    name: "components",
-    status: "pass",
+    name: 'components',
+    status: 'pass',
     message: `${components.length} discovered from markers`,
   });
 
@@ -95,7 +95,7 @@ async function checkComponents(
     if (!existsSync(fullDir)) {
       results.push({
         name: `${component} directory`,
-        status: "fail",
+        status: 'fail',
         message: `Directory ${dir}/ not found.`,
       });
       continue;
@@ -105,7 +105,7 @@ async function checkComponents(
     if (!marker) {
       results.push({
         name: `${component} marker`,
-        status: "fail",
+        status: 'fail',
         message: `No ${COMPONENT_MARKER} in ${dir}/.`,
         fix: `Run 'npx create-projx update' to regenerate markers.`,
       });
@@ -116,7 +116,7 @@ async function checkComponents(
       dir !== component ? `${dir}/ (${component})` : `${component}/`;
     results.push({
       name: `${component} marker`,
-      status: "pass",
+      status: 'pass',
       message: label,
     });
   }
@@ -128,13 +128,13 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
   const results: CheckResult[] = [];
 
   try {
-    execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" });
-    results.push({ name: "git repo", status: "pass", message: "OK" });
+    execSync('git rev-parse --is-inside-work-tree', { cwd, stdio: 'pipe' });
+    results.push({ name: 'git repo', status: 'pass', message: 'OK' });
   } catch {
     results.push({
-      name: "git repo",
-      status: "fail",
-      message: "Not a git repository.",
+      name: 'git repo',
+      status: 'fail',
+      message: 'Not a git repository.',
     });
     return results;
   }
@@ -143,13 +143,13 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
   try {
     const ref = execSync(`git rev-parse --verify ${BASELINE_REF}`, {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     })
       .toString()
       .trim();
     results.push({
-      name: "baseline ref",
-      status: "pass",
+      name: 'baseline ref',
+      status: 'pass',
       message: ref.slice(0, 8),
     });
   } catch {
@@ -158,25 +158,25 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
       try {
         execSync(`git rev-parse --verify ${BASELINE_REF}`, {
           cwd,
-          stdio: "pipe",
+          stdio: 'pipe',
         });
         results.push({
-          name: "baseline ref",
-          status: "pass",
-          message: "Created from git history.",
+          name: 'baseline ref',
+          status: 'pass',
+          message: 'Created from git history.',
         });
       } catch {
         results.push({
-          name: "baseline ref",
-          status: "warn",
-          message: "Missing. Could not auto-create.",
+          name: 'baseline ref',
+          status: 'warn',
+          message: 'Missing. Could not auto-create.',
           fix: "Run 'npx create-projx update' to establish baseline.",
         });
       }
     } else {
       results.push({
-        name: "baseline ref",
-        status: "warn",
+        name: 'baseline ref',
+        status: 'warn',
         message: "Missing. Run 'projx doctor --fix' to create.",
         autoFixable: true,
       });
@@ -185,51 +185,51 @@ function checkGit(cwd: string, fix: boolean): CheckResult[] {
 
   // Stale worktrees
   try {
-    const worktrees = execSync("git worktree list --porcelain", {
+    const worktrees = execSync('git worktree list --porcelain', {
       cwd,
-      stdio: "pipe",
+      stdio: 'pipe',
     }).toString();
     const stale = worktrees
-      .split("\n")
-      .filter((l) => l.includes("projx-wt-") || l.includes("projx/tmp-"));
+      .split('\n')
+      .filter((l) => l.includes('projx-wt-') || l.includes('projx/tmp-'));
     if (stale.length > 0) {
       if (fix) {
-        execSync("git worktree prune", { cwd, stdio: "pipe" });
+        execSync('git worktree prune', { cwd, stdio: 'pipe' });
         results.push({
-          name: "worktrees",
-          status: "pass",
-          message: "Pruned stale worktrees.",
+          name: 'worktrees',
+          status: 'pass',
+          message: 'Pruned stale worktrees.',
         });
       } else {
         results.push({
-          name: "worktrees",
-          status: "warn",
-          message: "Stale projx worktrees found.",
+          name: 'worktrees',
+          status: 'warn',
+          message: 'Stale projx worktrees found.',
           fix: "Run 'projx doctor --fix' to prune.",
           autoFixable: true,
         });
       }
     } else {
-      results.push({ name: "worktrees", status: "pass", message: "Clean" });
+      results.push({ name: 'worktrees', status: 'pass', message: 'Clean' });
     }
   } catch {
-    results.push({ name: "worktrees", status: "pass", message: "OK" });
+    results.push({ name: 'worktrees', status: 'pass', message: 'OK' });
   }
 
   // Working tree status
   try {
-    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+    const status = execSync('git status --porcelain', { cwd, stdio: 'pipe' })
       .toString()
       .trim();
     if (status) {
-      const count = status.split("\n").length;
+      const count = status.split('\n').length;
       results.push({
-        name: "working tree",
-        status: "warn",
+        name: 'working tree',
+        status: 'warn',
         message: `${count} uncommitted change(s).`,
       });
     } else {
-      results.push({ name: "working tree", status: "pass", message: "Clean" });
+      results.push({ name: 'working tree', status: 'pass', message: 'Clean' });
     }
   } catch {
     // non-critical
@@ -253,8 +253,8 @@ async function checkSkipPatterns(
     const matches = await patternMatchesAnything(cwd, pattern);
     if (!matches) {
       results.push({
-        name: "root skip",
-        status: "warn",
+        name: 'root skip',
+        status: 'warn',
         message: `"${pattern}" matches no files — stale?`,
       });
     }
@@ -269,7 +269,7 @@ async function checkSkipPatterns(
         if (!matches) {
           results.push({
             name: `${component} skip`,
-            status: "warn",
+            status: 'warn',
             message: `"${pattern}" matches no files — stale?`,
           });
         }
@@ -279,9 +279,9 @@ async function checkSkipPatterns(
 
   if (results.length === 0 && (rootSkip.length > 0 || components.length > 0)) {
     results.push({
-      name: "skip patterns",
-      status: "pass",
-      message: "All patterns match files.",
+      name: 'skip patterns',
+      status: 'pass',
+      message: 'All patterns match files.',
     });
   }
 
@@ -292,7 +292,7 @@ async function patternMatchesAnything(
   dir: string,
   pattern: string,
 ): Promise<boolean> {
-  if (pattern === "**") return true;
+  if (pattern === '**') return true;
   if (!existsSync(dir)) return false;
 
   const walk = async (current: string, base: string): Promise<boolean> => {
@@ -319,7 +319,7 @@ async function patternMatchesAnything(
 }
 
 export async function doctor(cwd: string, fix = false): Promise<void> {
-  p.intro("projx doctor");
+  p.intro('projx doctor');
 
   const allResults: CheckResult[] = [];
 
@@ -343,9 +343,9 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
 
   printReport(allResults);
 
-  const passed = allResults.filter((r) => r.status === "pass").length;
-  const warns = allResults.filter((r) => r.status === "warn").length;
-  const fails = allResults.filter((r) => r.status === "fail").length;
+  const passed = allResults.filter((r) => r.status === 'pass').length;
+  const warns = allResults.filter((r) => r.status === 'warn').length;
+  const fails = allResults.filter((r) => r.status === 'fail').length;
 
   const fixable = allResults.filter((r) => r.autoFixable);
   if (fixable.length > 0 && !fix) {
@@ -360,15 +360,15 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
 function printReport(results: CheckResult[]): void {
   for (const r of results) {
     const icon =
-      r.status === "pass"
-        ? "\u2713"
-        : r.status === "warn"
-          ? "\u26A0"
-          : "\u2717";
+      r.status === 'pass'
+        ? '\u2713'
+        : r.status === 'warn'
+          ? '\u26A0'
+          : '\u2717';
     const msg = `${icon} ${r.name} \u2014 ${r.message}`;
 
-    if (r.status === "pass") p.log.success(msg);
-    else if (r.status === "warn") p.log.warn(msg);
+    if (r.status === 'pass') p.log.success(msg);
+    else if (r.status === 'warn') p.log.warn(msg);
     else p.log.error(msg);
 
     if (r.fix) p.log.info(`  ${r.fix}`);

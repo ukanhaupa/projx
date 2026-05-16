@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import * as p from "@clack/prompts";
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import {
   COMPONENT_MARKER,
   type Component,
@@ -11,34 +11,34 @@ import {
   readProjxConfig,
   writeComponentMarker,
   writeProjxConfig,
-} from "./utils.js";
+} from './utils.js';
 
 function classifyPattern(
   pattern: string,
   componentPaths: ComponentPaths,
-): { scope: "root" | "component"; component?: string; relative: string } {
+): { scope: 'root' | 'component'; component?: string; relative: string } {
   const dirToComponent: Record<string, string> = {};
   for (const [component, dir] of Object.entries(componentPaths)) {
     dirToComponent[dir] = component;
   }
 
   for (const [dir, component] of Object.entries(dirToComponent)) {
-    if (pattern.startsWith(dir + "/")) {
+    if (pattern.startsWith(dir + '/')) {
       return {
-        scope: "component",
+        scope: 'component',
         component,
         relative: pattern.slice(dir.length + 1),
       };
     }
   }
 
-  return { scope: "root", relative: pattern };
+  return { scope: 'root', relative: pattern };
 }
 
 export async function pin(cwd: string, patterns: string[]): Promise<void> {
-  p.intro("projx pin");
+  p.intro('projx pin');
 
-  if (!existsSync(join(cwd, ".projx"))) {
+  if (!existsSync(join(cwd, '.projx'))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
@@ -50,7 +50,7 @@ export async function pin(cwd: string, patterns: string[]): Promise<void> {
   const componentAdds: Record<string, string[]> = {};
 
   for (const pattern of patterns) {
-    if (pattern === ".projx" || pattern.endsWith(COMPONENT_MARKER)) {
+    if (pattern === '.projx' || pattern.endsWith(COMPONENT_MARKER)) {
       p.log.warn(`Cannot pin ${pattern} — config files are managed by projx.`);
       continue;
     }
@@ -60,7 +60,7 @@ export async function pin(cwd: string, patterns: string[]): Promise<void> {
       componentPaths,
     );
 
-    if (scope === "component" && component) {
+    if (scope === 'component' && component) {
       if (!componentAdds[component]) componentAdds[component] = [];
       componentAdds[component].push(relative);
     } else {
@@ -80,7 +80,7 @@ export async function pin(cwd: string, patterns: string[]): Promise<void> {
     if (added > 0) {
       const next: ComponentMarkerData = { ...marker, skip: merged };
       await writeComponentMarker(join(cwd, dir), next);
-      p.log.success(`${component}: pinned ${additions.join(", ")}`);
+      p.log.success(`${component}: pinned ${additions.join(', ')}`);
     } else {
       p.log.info(`${component}: already pinned.`);
     }
@@ -94,19 +94,19 @@ export async function pin(cwd: string, patterns: string[]): Promise<void> {
     const added = merged.length - existing.length;
     if (added > 0) {
       await writeProjxConfig(cwd, { ...config, skip: merged });
-      p.log.success(`root: pinned ${rootAdds.join(", ")}`);
+      p.log.success(`root: pinned ${rootAdds.join(', ')}`);
     } else {
-      p.log.info("root: already pinned.");
+      p.log.info('root: already pinned.');
     }
   }
 
-  p.outro("Skip list updated.");
+  p.outro('Skip list updated.');
 }
 
 export async function unpin(cwd: string, patterns: string[]): Promise<void> {
-  p.intro("projx unpin");
+  p.intro('projx unpin');
 
-  if (!existsSync(join(cwd, ".projx"))) {
+  if (!existsSync(join(cwd, '.projx'))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
@@ -122,7 +122,7 @@ export async function unpin(cwd: string, patterns: string[]): Promise<void> {
       pattern,
       componentPaths,
     );
-    if (scope === "component" && component) {
+    if (scope === 'component' && component) {
       if (!componentRemoves[component]) componentRemoves[component] = [];
       componentRemoves[component].push(relative);
     } else {
@@ -142,7 +142,7 @@ export async function unpin(cwd: string, patterns: string[]): Promise<void> {
     if (removed > 0) {
       const next: ComponentMarkerData = { ...marker, skip: filtered };
       await writeComponentMarker(join(cwd, dir), next);
-      p.log.success(`${component}: unpinned ${removals.join(", ")}`);
+      p.log.success(`${component}: unpinned ${removals.join(', ')}`);
     } else {
       p.log.info(`${component}: not found in skip list.`);
     }
@@ -156,19 +156,19 @@ export async function unpin(cwd: string, patterns: string[]): Promise<void> {
     const removed = existing.length - filtered.length;
     if (removed > 0) {
       await writeProjxConfig(cwd, { ...config, skip: filtered });
-      p.log.success(`root: unpinned ${rootRemoves.join(", ")}`);
+      p.log.success(`root: unpinned ${rootRemoves.join(', ')}`);
     } else {
-      p.log.info("root: not found in skip list.");
+      p.log.info('root: not found in skip list.');
     }
   }
 
-  p.outro("Skip list updated.");
+  p.outro('Skip list updated.');
 }
 
 export async function listPins(cwd: string): Promise<void> {
-  p.intro("projx pin --list");
+  p.intro('projx pin --list');
 
-  if (!existsSync(join(cwd, ".projx"))) {
+  if (!existsSync(join(cwd, '.projx'))) {
     p.log.error("No .projx file found. Run 'npx create-projx init' first.");
     process.exit(1);
   }
@@ -184,7 +184,7 @@ export async function listPins(cwd: string): Promise<void> {
     : [];
   if (rootSkip.length > 0) {
     hasAny = true;
-    p.log.info("root:");
+    p.log.info('root:');
     for (const s of rootSkip) {
       p.log.info(`  ${s}`);
     }
@@ -206,8 +206,8 @@ export async function listPins(cwd: string): Promise<void> {
   }
 
   if (!hasAny) {
-    p.log.info("No pinned files. All template files will be updated.");
+    p.log.info('No pinned files. All template files will be updated.');
   }
 
-  p.outro("");
+  p.outro('');
 }

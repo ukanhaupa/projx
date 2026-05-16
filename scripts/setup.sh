@@ -27,4 +27,4 @@ cd cli && pnpm install --frozen-lockfile && cd ..
 echo "CLI dependencies installed."
 
 echo ""
-echo "Done. Run 'docker compose -f docker-compose.dev.yml up' to start."
+echo "Done. Ensure PostgreSQL is running locally, then run 'pnpm dev' (or 'uv run main.py') in each service."

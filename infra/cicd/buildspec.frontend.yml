@@ -3,16 +3,16 @@ version: 0.2
 phases:
   install:
     commands:
-      # kubectl only used in k8s mode — harmless to install for compose
       - curl -sSL -o kubectl "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
       - install -m 0755 kubectl /usr/local/bin/kubectl
+      - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
   pre_build:
     commands:
       - IMAGE_TAG="$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)"
       - if [ -z "$IMAGE_TAG" ]; then IMAGE_TAG="latest"; fi
-
-      # Skip deploy if no files changed under frontend/
+      - SERVICE_NAME="frontend"
+      - DEFAULT_HEALTH_URL="http://localhost/"
       - LAST_DEPLOYED_COMMIT="$(aws ssm get-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --query 'Parameter.Value' --output text 2>/dev/null || true)"
       - SHOULD_DEPLOY="true"
       - |
@@ -28,6 +28,7 @@ phases:
         if [ "$SHOULD_DEPLOY" = "true" ]; then
           aws ecr get-login-password --region "$TARGET_AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)"
+          docker pull "$ECR_REPOSITORY_URL:latest" || true
         else
           echo "No changes in ${FOLDER_PATH}/. Skipping frontend deploy."
         fi
@@ -36,10 +37,16 @@ phases:
     commands:
       - |
         if [ "$(cat /tmp/should_deploy)" = "true" ]; then
-          docker build -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" frontend
-          docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+          export DOCKER_BUILDKIT=1
+          DOCKER_STEP_TIMEOUT="${DOCKER_STEP_TIMEOUT:-10m}"
+          timeout "$DOCKER_STEP_TIMEOUT" docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from "$ECR_REPOSITORY_URL:latest" \
+            -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" frontend
+          trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+          timeout "$DOCKER_STEP_TIMEOUT" docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
           docker tag "$ECR_REPOSITORY_URL:$IMAGE_TAG" "$ECR_REPOSITORY_URL:latest"
-          docker push "$ECR_REPOSITORY_URL:latest"
+          timeout "$DOCKER_STEP_TIMEOUT" docker push "$ECR_REPOSITORY_URL:latest"
         else
           echo "Skipping build phase."
         fi
@@ -47,18 +54,64 @@ phases:
   post_build:
     commands:
       - |
+        set -Eeuo pipefail
+        SERVICE_NAME="frontend"
+        DEFAULT_HEALTH_URL="http://localhost/"
+
+        json_escape() {
+          printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+        }
+
+        notify_deploy() {
+          local status="$1"
+          if [ -z "${SLACK_DEPLOY_WEBHOOK:-}" ]; then
+            return 0
+          fi
+          local message
+          message="$SERVICE_NAME deploy $status for ${CODECOMMIT_REPO_NAME:-app} (${IMAGE_TAG:-unknown})"
+          curl -fsS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"$(json_escape "$message")\"}" \
+            "$SLACK_DEPLOY_WEBHOOK" >/dev/null || true
+        }
+
+        health_check_url() {
+          if [ -n "${DEPLOY_HEALTH_URL:-}" ]; then
+            printf '%s' "$DEPLOY_HEALTH_URL"
+          else
+            printf '%s' "$DEFAULT_HEALTH_URL"
+          fi
+        }
+
+        run_health_check() {
+          local url status
+          url="$(health_check_url)"
+          for attempt in 1 2 3 4 5; do
+            status="$(curl -kfsSL -o /dev/null -w '%{http_code}' "$url" 2>/tmp/frontend-health.err || true)"
+            case "$status" in
+              2*|3*) echo "Frontend health check OK ($status)"; return 0 ;;
+            esac
+            echo "Frontend health check attempt $attempt failed: HTTP ${status:-000}"
+            sleep $((attempt * 5))
+          done
+          return 1
+        }
+
+        trap 'notify_deploy failed' ERR
+
         if [ "$(cat /tmp/should_deploy)" != "true" ]; then
           echo "Skipping deploy phase."
+          notify_deploy skipped
           exit 0
         fi
 
         if [ -n "$EKS_CLUSTER_NAME" ]; then
-          # ── k8s deploy ────────────────────────────────────────────────────────
           aws eks update-kubeconfig --region "$TARGET_AWS_REGION" --name "$EKS_CLUSTER_NAME"
           kubectl -n "$APPS_NAMESPACE" set image deployment/frontend frontend="$ECR_REPOSITORY_URL:$IMAGE_TAG"
           kubectl -n "$APPS_NAMESPACE" rollout status deployment/frontend --timeout=300s
+          if [ -n "${DEPLOY_HEALTH_URL:-}" ]; then
+            run_health_check
+          fi
         else
-          # ── compose deploy via SSM RunCommand ─────────────────────────────────
           INSTANCE_IDS="$(aws ec2 describe-instances \
             --region "$TARGET_AWS_REGION" \
             --filters "Name=tag:Name,Values=$COMPOSE_INSTANCE_TAG" "Name=instance-state-name,Values=running" \
@@ -69,14 +122,36 @@ phases:
             exit 1
           fi
           INSTANCE_ID="$(echo "$INSTANCE_IDS" | awk '{print $1}')"
+          REMOTE_HEALTH_URL="$(health_check_url)"
+          ECR_REGISTRY="$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)"
+          REMOTE_COMMAND="$(printf '%s\n' \
+            'set -Eeuo pipefail' \
+            "aws ecr get-login-password --region \"$TARGET_AWS_REGION\" | docker login --username AWS --password-stdin \"$ECR_REGISTRY\"" \
+            'docker-compose -f /opt/docker-compose.yml pull frontend' \
+            'docker-compose -f /opt/docker-compose.yml up -d --no-deps frontend' \
+            'healthy=false' \
+            'for attempt in 1 2 3 4 5; do' \
+            "  status=\$(curl -kfsSL -o /dev/null -w '%{http_code}' \"$REMOTE_HEALTH_URL\" 2>/tmp/frontend-health.err || true)" \
+            '  case "$status" in' \
+            '    2*|3*) echo "Frontend health check OK ($status)"; healthy=true; break ;;' \
+            '  esac' \
+            '  echo "Frontend health check attempt $attempt failed: HTTP ${status:-000}"' \
+            '  sleep $((attempt * 5))' \
+            'done' \
+            'if [ "$healthy" != "true" ]; then' \
+            '  exit 1' \
+            'fi' \
+            'keep_count="${COMPOSE_KEEP_IMAGE_COUNT:-5}"' \
+            "docker images \"$ECR_REPOSITORY_URL\" --format '{{.ID}}' | awk -v keep=\"\$keep_count\" 'NR > keep { print }' | sort -u | xargs -r docker rmi || true" \
+            'docker image prune --filter "until=168h" -f || true')"
           COMMAND_ID="$(aws ssm send-command \
             --region "$TARGET_AWS_REGION" \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["aws ecr get-login-password --region '"$TARGET_AWS_REGION"' | docker login --username AWS --password-stdin '"$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)"' && docker-compose -f /opt/docker-compose.yml pull frontend && docker-compose -f /opt/docker-compose.yml up -d --no-deps frontend"]' \
+            --parameters commands="$REMOTE_COMMAND" \
             --query 'Command.CommandId' \
             --output text)"
-          echo "SSM command sent: $COMMAND_ID — waiting for completion..."
+          echo "SSM command sent: $COMMAND_ID; waiting for completion..."
           aws ssm wait command-executed \
             --region "$TARGET_AWS_REGION" \
             --command-id "$COMMAND_ID" \
@@ -91,3 +166,4 @@ phases:
 
         aws ssm put-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --type String \
           --value "$CODEBUILD_RESOLVED_SOURCE_VERSION" --overwrite
+        notify_deploy succeeded

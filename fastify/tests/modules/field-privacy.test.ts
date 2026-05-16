@@ -5,7 +5,10 @@ import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
 import authzPlugin from '../../src/plugins/authz.js';
 import { registerEntityRoutes } from '../../src/modules/_base/auto-routes.js';
-import { EntityRegistry, type EntityConfig } from '../../src/modules/_base/entity-registry.js';
+import {
+  EntityRegistry,
+  type EntityConfig,
+} from '../../src/modules/_base/entity-registry.js';
 
 const secretSchema = Type.Object({
   id: Type.String(),
@@ -43,24 +46,32 @@ function makeMockPrisma() {
       findUnique: vi
         .fn()
         .mockImplementation(
-          async (args: { where: { id: string } }) => records[args.where.id] ?? null,
+          async (args: { where: { id: string } }) =>
+            records[args.where.id] ?? null,
         ),
-      count: vi.fn().mockImplementation(async () => Object.keys(records).length),
-      create: vi.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
-        const id = crypto.randomUUID();
-        const record = {
-          id,
-          ...args.data,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        records[id] = record;
-        return record;
-      }),
+      count: vi
+        .fn()
+        .mockImplementation(async () => Object.keys(records).length),
+      create: vi
+        .fn()
+        .mockImplementation(async (args: { data: Record<string, unknown> }) => {
+          const id = crypto.randomUUID();
+          const record = {
+            id,
+            ...args.data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          records[id] = record;
+          return record;
+        }),
       update: vi
         .fn()
         .mockImplementation(
-          async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          async (args: {
+            where: { id: string };
+            data: Record<string, unknown>;
+          }) => {
             const record = records[args.where.id];
             if (!record) throw new Error('Record not found');
             Object.assign(record, args.data);
@@ -85,7 +96,14 @@ function makeSecretConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
     readonly: false,
     softDelete: false,
     bulkOperations: false,
-    columnNames: ['id', 'name', 'internal_note', 'password_hash', 'created_at', 'updated_at'],
+    columnNames: [
+      'id',
+      'name',
+      'internal_note',
+      'password_hash',
+      'created_at',
+      'updated_at',
+    ],
     searchableFields: ['name'],
     hiddenFields: ['internal_note'],
     fields: [
@@ -144,7 +162,10 @@ function makeSecretConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
 async function buildPrivacyTestApp(
   entityConfig: EntityConfig,
   mockPrisma?: ReturnType<typeof makeMockPrisma>,
-): Promise<{ app: FastifyInstance; prisma: ReturnType<typeof makeMockPrisma> }> {
+): Promise<{
+  app: FastifyInstance;
+  prisma: ReturnType<typeof makeMockPrisma>;
+}> {
   const app = Fastify({ logger: false });
   const prisma = mockPrisma ?? makeMockPrisma();
 
@@ -188,7 +209,11 @@ describe('Field-level privacy', () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/secret-widgets/',
+      headers,
+    });
     expect(res.statusCode).toBe(200);
     const row = res.json().data[0];
     expect(row).not.toHaveProperty('internal_note');
@@ -237,7 +262,11 @@ describe('Field-level privacy', () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/secret-widgets/', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/secret-widgets/',
+      headers,
+    });
     const row = res.json().data[0];
     expect(row).not.toHaveProperty('password_hash');
   });
@@ -264,14 +293,19 @@ describe('Field-level privacy', () => {
 describe('Entity-level private', () => {
   it('private entity is rejected by registry', () => {
     EntityRegistry.reset();
-    const config = makeSecretConfig({ private: true, tableName: 'hidden_things' });
+    const config = makeSecretConfig({
+      private: true,
+      tableName: 'hidden_things',
+    });
     EntityRegistry.register(config);
     expect(EntityRegistry.getAll()).toHaveLength(0);
   });
 
   it('private entity not in getMeta()', () => {
     EntityRegistry.reset();
-    EntityRegistry.register(makeSecretConfig({ private: true, tableName: 'hidden_things' }));
+    EntityRegistry.register(
+      makeSecretConfig({ private: true, tableName: 'hidden_things' }),
+    );
     EntityRegistry.register(
       makeSecretConfig({ tableName: 'visible_things', name: 'VisibleThing' }),
     );
@@ -290,11 +324,12 @@ describe('Meta strips hidden fields', () => {
   it('getMeta excludes explicitly hidden fields and built-in private columns', () => {
     EntityRegistry.register(makeSecretConfig());
     const meta = EntityRegistry.getMeta();
-    const entity = meta.entities.find((e) => e.table_name === 'secret_widgets') as Record<
-      string,
-      unknown
-    >;
-    const fieldKeys = (entity.fields as Array<{ key: string }>).map((f) => f.key);
+    const entity = meta.entities.find(
+      (e) => e.table_name === 'secret_widgets',
+    ) as Record<string, unknown>;
+    const fieldKeys = (entity.fields as Array<{ key: string }>).map(
+      (f) => f.key,
+    );
     expect(fieldKeys).not.toContain('internal_note');
     expect(fieldKeys).not.toContain('password_hash');
   });

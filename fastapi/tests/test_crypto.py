@@ -35,3 +35,16 @@ def test_short_ciphertext_rejected():
     short = base64.b64encode(b"\x00" * 10).decode()
     with pytest.raises(RuntimeError, match="too short"):
         decrypt_config(short)
+
+
+def test_no_silent_jwt_secret_fallback(monkeypatch):
+    monkeypatch.delenv("CRED_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("JWT_SECRET", "any-jwt-secret-value")
+    with pytest.raises(RuntimeError, match="CRED_ENCRYPTION_KEY"):
+        encrypt_config({"k": "v"})
+
+
+def test_invalid_key_length_rejected(monkeypatch):
+    monkeypatch.setenv("CRED_ENCRYPTION_KEY", base64.b64encode(b"too-short").decode())
+    with pytest.raises(RuntimeError, match="32 bytes"):
+        encrypt_config({"k": "v"})

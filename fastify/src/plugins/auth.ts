@@ -33,16 +33,19 @@ function buildJwtOptions(): Parameters<typeof jwt>[1] {
 export default fp(async (fastify) => {
   await fastify.register(jwt, buildJwtOptions());
 
-  fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const decoded = await request.jwtVerify<AuthUser>();
-      request.authUser = decoded;
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'unknown';
-      request.log.debug(`JWT verification failed (${code})`);
-      reply.status(401).send({ detail: 'Invalid or expired token' });
-    }
-  });
+  fastify.decorate(
+    'authenticate',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const decoded = await request.jwtVerify<AuthUser>();
+        request.authUser = decoded;
+      } catch (err) {
+        const code = err instanceof Error ? err.message : 'unknown';
+        request.log.debug(`JWT verification failed (${code})`);
+        reply.status(401).send({ detail: 'Invalid or expired token' });
+      }
+    },
+  );
 
   fastify.addHook('onRequest', async (request, reply) => {
     const url = request.url.split('?')[0];
@@ -60,7 +63,10 @@ export default fp(async (fastify) => {
 
 declare module 'fastify' {
   interface FastifyInstance {
-    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticate: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
   }
   interface FastifyRequest {
     authUser?: AuthUser;

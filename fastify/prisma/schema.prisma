@@ -34,3 +34,5 @@ model AuditLog {
   @@index([record_id])
   @@map("audit_logs")
 }
+
+// projx-anchor: models

@@ -5,11 +5,14 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    testTimeout: 30000,
+    hookTimeout: 30000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: [
         'src/templates/**',
+        'src/addons/**',
         'src/index.ts',
         'src/init.ts',
         'src/update.ts',

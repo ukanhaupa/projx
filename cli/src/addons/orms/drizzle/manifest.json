@@ -1,0 +1,52 @@
+{
+  "name": "drizzle",
+  "displayName": "Drizzle",
+  "frameworks": ["fastify", "express"],
+  "removeFromBase": [
+    "prisma",
+    "src/plugins/prisma.ts",
+    "src/prisma.ts",
+    "src/lib/service-config.ts",
+    "src/modules/_base",
+    "src/modules/audit-logs",
+    "tests/modules/audit-logs.test.ts",
+    "tests/modules/audit-middleware.test.ts",
+    "tests/modules/auto-routes.test.ts",
+    "tests/modules/entity-validation.test.ts",
+    "tests/modules/expand.test.ts",
+    "tests/modules/field-privacy.test.ts",
+    "tests/modules/meta.test.ts",
+    "tests/modules/query-engine.test.ts",
+    "tests/modules/repository.test.ts",
+    "tests/modules/service.test.ts",
+    "tests/helpers/crud-test-base.ts",
+    "tests/helpers/crud-test-base.test.ts",
+    "tests/helpers/migration-checksum.ts",
+    "tests/helpers/migration-checksum.test.ts",
+    "tests/global-setup.ts",
+    "tests"
+  ],
+  "packageOverrides": {
+    "descriptionReplace": { "from": "Prisma", "to": "Drizzle" },
+    "removeDependencies": ["@prisma/client"],
+    "removeDevDependencies": ["prisma"],
+    "addDependencies": {
+      "drizzle-orm": "^0.44.5",
+      "pg": "^8.16.3"
+    },
+    "addDevDependencies": {
+      "@types/pg": "^8.15.5",
+      "drizzle-kit": "^0.31.4"
+    },
+    "removeScriptPrefixes": ["prisma:"],
+    "addScripts": {
+      "db:generate": "drizzle-kit generate",
+      "db:migrate": "drizzle-kit migrate",
+      "db:push": "drizzle-kit push"
+    }
+  },
+  "dockerfile": {
+    "extraConfigFiles": ["drizzle.config.ts"],
+    "migrateCommand": "drizzle-kit push --force"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "typeorm",
+  "displayName": "TypeORM",
+  "frameworks": ["fastify", "express"],
+  "removeFromBase": [
+    "prisma",
+    "src/plugins/prisma.ts",
+    "src/prisma.ts",
+    "src/lib/service-config.ts",
+    "src/modules/_base",
+    "src/modules/audit-logs",
+    "tsconfig.json",
+    "tests/modules/audit-logs.test.ts",
+    "tests/modules/audit-middleware.test.ts",
+    "tests/modules/auto-routes.test.ts",
+    "tests/modules/entity-validation.test.ts",
+    "tests/modules/expand.test.ts",
+    "tests/modules/field-privacy.test.ts",
+    "tests/modules/meta.test.ts",
+    "tests/modules/query-engine.test.ts",
+    "tests/modules/repository.test.ts",
+    "tests/modules/service.test.ts",
+    "tests/helpers/crud-test-base.ts",
+    "tests/helpers/crud-test-base.test.ts",
+    "tests/helpers/migration-checksum.ts",
+    "tests/helpers/migration-checksum.test.ts",
+    "tests/global-setup.ts",
+    "tests"
+  ],
+  "packageOverrides": {
+    "descriptionReplace": { "from": "Prisma", "to": "TypeORM" },
+    "removeDependencies": ["@prisma/client"],
+    "removeDevDependencies": ["prisma"],
+    "addDependencies": {
+      "typeorm": "^0.3.20",
+      "reflect-metadata": "^0.2.2",
+      "pg": "^8.16.3"
+    },
+    "addDevDependencies": {
+      "@types/pg": "^8.15.5"
+    },
+    "removeScriptPrefixes": ["prisma:"],
+    "addScripts": {
+      "db:sync": "tsx scripts/db-sync.ts",
+      "db:migrate:generate": "typeorm-ts-node-esm migration:generate -d src/db/data-source.ts",
+      "db:migrate": "typeorm-ts-node-esm migration:run -d src/db/data-source.ts"
+    }
+  },
+  "dockerfile": {
+    "extraConfigFiles": [],
+    "migrateCommand": "tsx scripts/db-sync.ts"
+  }
+}

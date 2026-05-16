@@ -59,7 +59,6 @@ infra/
 
 (project root)
 ├── docker-compose.yml                  # Production: migrate → backend → frontend (nginx)
-├── docker-compose.dev.yml              # Development: db → migrate → backend (reload) → frontend (node dev)
 ├── scripts/
 │   └── setup-ssl.sh                    # Let's Encrypt certificate issuance
 ├── fastapi/
@@ -97,28 +96,15 @@ docker compose up -d --build
 DOMAIN=example.com docker compose up -d --build
 ```
 
-## Docker Compose: Development
+## Local Development
 
-**File:** `docker-compose.dev.yml` (project root)
-
-```
-db (postgres) ──healthy──► migrate ──success──► backend (with --reload) ──started──► frontend (node dev)
-```
-
-| Service    | Image                | Ports | Notes                                                      |
-| ---------- | -------------------- | ----- | ---------------------------------------------------------- |
-| `db`       | `postgres:16-alpine` | 5432  | Local Postgres. Credentials: `dev`/`dev`, database `app`.  |
-| `migrate`  | `./fastapi`          | none  | Same migration script; connects to local db.               |
-| `backend`  | `./fastapi`          | 7860  | Gunicorn with `--reload`. Source mounted for live changes. |
-| `frontend` | `node:20-alpine`     | 3000  | Vite dev server (`npm run dev`). Source mounted.           |
-
-Backend volumes mount `./fastapi/src`, `alembic.ini`, and `migrate.py` for hot-reload. Frontend mounts the entire `./frontend` directory with a named volume for `node_modules`.
+There is no dev-mode compose. Run each service directly:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
+# Ensure PostgreSQL is running locally and reachable via DATABASE_URL / SQLALCHEMY_DATABASE_URI
+cd fastapi  && uv run main.py        # or: cd fastify && pnpm dev
+cd frontend && pnpm dev
 ```
-
-Auth is configured with `JWT_PROVIDER=shared_secret` and a static `JWT_SECRET` for development.
 
 ## SSL / HTTPS
 

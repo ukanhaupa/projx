@@ -102,10 +102,9 @@ describe('FieldMeta new fields', () => {
     );
 
     const meta = EntityRegistry.getMeta();
-    const entity = meta.entities.find((e) => e.table_name === 'fieldmeta_test') as Record<
-      string,
-      unknown
-    >;
+    const entity = meta.entities.find(
+      (e) => e.table_name === 'fieldmeta_test',
+    ) as Record<string, unknown>;
     const entityFields = entity.fields as FieldMeta[];
 
     const nameField = entityFields.find((f) => f.key === 'name')!;
@@ -155,7 +154,11 @@ describe('Custom controller support', () => {
 
     expect(customCalled).toBe(true);
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/test-entities/',
+      headers,
+    });
     expect(res.json()).toEqual({ custom: true });
 
     await app.close();
@@ -197,7 +200,11 @@ describe('Custom controller support', () => {
     await app.ready();
     const headers = superuserHeaders(app);
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/test-entities/', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/test-entities/',
+      headers,
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveProperty('data');
     expect(res.json()).toHaveProperty('pagination');

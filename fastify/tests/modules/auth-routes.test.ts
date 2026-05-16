@@ -5,7 +5,10 @@ import prismaPlugin from '../../src/plugins/prisma.js';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
 import authzPlugin from '../../src/plugins/authz.js';
-import { EntityRegistry, registerEntityRoutes } from '../../src/modules/_base/index.js';
+import {
+  EntityRegistry,
+  registerEntityRoutes,
+} from '../../src/modules/_base/index.js';
 
 describe('Auth-protected routes (global)', () => {
   let app: FastifyInstance;
@@ -83,7 +86,10 @@ describe('Auth-protected routes (global)', () => {
   });
 
   it('GET list succeeds with valid JWT and matching permission', async () => {
-    const token = app.jwt.sign({ sub: 'user-1', permissions: ['audit_logs:read.all'] });
+    const token = app.jwt.sign({
+      sub: 'user-1',
+      permissions: ['audit_logs:read.all'],
+    });
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs',
@@ -93,7 +99,10 @@ describe('Auth-protected routes (global)', () => {
   });
 
   it('GET list returns 403 with wrong resource permission', async () => {
-    const token = app.jwt.sign({ sub: 'user-1', permissions: ['users:read.all'] });
+    const token = app.jwt.sign({
+      sub: 'user-1',
+      permissions: ['users:read.all'],
+    });
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit-logs',

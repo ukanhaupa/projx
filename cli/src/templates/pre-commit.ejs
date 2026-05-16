@@ -64,6 +64,22 @@ if [ -n "$<%= inst.upper %>_ALL" ]; then
   echo "$<%= inst.upper %>_ALL" | xargs git add
 fi
 <% } %>
+<% for (const inst of expressInstances) { %>
+
+<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
+<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
+if [ -n "$<%= inst.upper %>_ALL" ]; then
+  echo "Formatting <%= inst.path %>..."
+  cd <%= inst.path %>
+  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
+  if [ -n "$<%= inst.upper %>_TS" ]; then
+    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
+    <%= pm.exec %> tsc --noEmit
+  fi
+  cd ..
+  echo "$<%= inst.upper %>_ALL" | xargs git add
+fi
+<% } %>
 <% for (const inst of frontendInstances) { %>
 
 <%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tsx\?$' || true)

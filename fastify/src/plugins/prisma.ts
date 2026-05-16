@@ -11,7 +11,9 @@ const SKIP_MODELS = new Set(['AuditLog']);
 
 let _currentUser = 'system';
 
-function serializeJson(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+function serializeJson(
+  value: unknown,
+): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
   if (value == null) return Prisma.DbNull;
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
@@ -29,7 +31,10 @@ function buildExtendedClient(base: PrismaClient, log: LogFn) {
 
         const user = _currentUser;
         const delegate = (
-          base as unknown as Record<string, Record<string, (...args: unknown[]) => unknown>>
+          base as unknown as Record<
+            string,
+            Record<string, (...args: unknown[]) => unknown>
+          >
         )[model.charAt(0).toLowerCase() + model.slice(1)];
 
         if (operation === 'update' || operation === 'delete') {
@@ -47,15 +52,20 @@ function buildExtendedClient(base: PrismaClient, log: LogFn) {
           const result = await query(args);
 
           try {
-            const where = (args as Record<string, unknown>).where as Record<string, unknown>;
-            const recordId = where?.id ?? (result as Record<string, unknown>)?.id ?? '';
+            const where = (args as Record<string, unknown>).where as Record<
+              string,
+              unknown
+            >;
+            const recordId =
+              where?.id ?? (result as Record<string, unknown>)?.id ?? '';
             await base.auditLog.create({
               data: {
                 table_name: model,
                 record_id: String(recordId),
                 action,
                 old_value: serializeJson(oldValue),
-                new_value: action === 'DELETE' ? Prisma.DbNull : serializeJson(result),
+                new_value:
+                  action === 'DELETE' ? Prisma.DbNull : serializeJson(result),
                 performed_by: user,
               },
             });
@@ -73,7 +83,9 @@ function buildExtendedClient(base: PrismaClient, log: LogFn) {
             await base.auditLog.create({
               data: {
                 table_name: model,
-                record_id: String((result as Record<string, unknown>)?.id ?? ''),
+                record_id: String(
+                  (result as Record<string, unknown>)?.id ?? '',
+                ),
                 action,
                 old_value: Prisma.DbNull,
                 new_value: serializeJson(result),
@@ -105,7 +117,9 @@ export default fp(async (fastify) => {
     fastify.log.debug({ query: e.query, duration: e.duration }, 'prisma query');
   });
 
-  const prisma = buildExtendedClient(base, (msg, ...args) => fastify.log.warn({ args }, msg));
+  const prisma = buildExtendedClient(base, (msg, ...args) =>
+    fastify.log.warn({ args }, msg),
+  );
 
   await base.$connect();
   fastify.decorate('prisma', prisma);

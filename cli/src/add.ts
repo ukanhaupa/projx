@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import * as p from "@clack/prompts";
+import { copyFileSync, existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import {
   type Component,
   type ComponentInstance,
@@ -17,12 +17,12 @@ import {
   pmCommands,
   readComponentMarker,
   readProjxConfig,
-} from "./utils.js";
+} from './utils.js';
 import {
   applyTemplate,
   writeTemplateToDir,
   type GeneratorVars,
-} from "./baseline.js";
+} from './baseline.js';
 
 export async function add(
   cwd: string,
@@ -31,10 +31,10 @@ export async function add(
   skipInstall = false,
   customName?: string,
 ): Promise<void> {
-  p.intro("projx add");
+  p.intro('projx add');
   const isLocal = !!localRepo;
 
-  if (!existsSync(join(cwd, ".projx"))) {
+  if (!existsSync(join(cwd, '.projx'))) {
     p.log.error(
       "No .projx file found. Run 'npx create-projx <name>' to create a project first.",
     );
@@ -47,7 +47,7 @@ export async function add(
   if (customName) {
     if (newComponents.length !== 1) {
       throw new Error(
-        "--name can only be used when adding a single component type.",
+        '--name can only be used when adding a single component type.',
       );
     }
     const targetDir = join(cwd, customName);
@@ -68,27 +68,27 @@ export async function add(
 
   const alreadyExists = newComponents.filter((c) => existing.includes(c));
   if (alreadyExists.length > 0) {
-    p.log.warn(`Already present: ${alreadyExists.join(", ")}. Skipping those.`);
+    p.log.warn(`Already present: ${alreadyExists.join(', ')}. Skipping those.`);
   }
 
   const toAdd = newComponents.filter((c) => !existing.includes(c));
   if (toAdd.length === 0) {
-    p.log.info("Nothing new to add.");
+    p.log.info('Nothing new to add.');
     process.exit(0);
   }
 
-  p.log.info(`Adding: ${toAdd.join(", ")}`);
+  p.log.info(`Adding: ${toAdd.join(', ')}`);
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     p.log.error(String(err));
     process.exit(1);
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const allComponents = [...existing, ...toAdd] as Component[];
@@ -104,7 +104,7 @@ export async function add(
     ];
 
     const pm: PackageManager =
-      (config.packageManager as PackageManager) ?? "npm";
+      (config.packageManager as PackageManager) ?? 'npm';
     const name = detectProjectName(cwd, existing, paths);
     const vars: GeneratorVars = {
       projectName: name,
@@ -112,15 +112,16 @@ export async function add(
       paths,
       instances,
       pm: pmCommands(pm),
+      orm: config.orm ?? 'prisma',
     };
 
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
 
     const spinner = p.spinner();
-    spinner.start("Adding components");
+    spinner.start('Adding components');
     await writeTemplateToDir(
       cwd,
       repoDir,
@@ -130,7 +131,7 @@ export async function add(
       version,
       { realCwd: cwd },
     );
-    spinner.stop("Components added.");
+    spinner.stop('Components added.');
 
     if (!skipInstall) {
       await installDeps(
@@ -141,8 +142,8 @@ export async function add(
     }
 
     for (const component of toAdd) {
-      const example = join(cwd, component, ".env.example");
-      const env = join(cwd, component, ".env");
+      const example = join(cwd, component, '.env.example');
+      const env = join(cwd, component, '.env');
       if (existsSync(example) && !existsSync(env)) {
         try {
           copyFileSync(example, env);
@@ -153,7 +154,7 @@ export async function add(
     }
 
     p.outro(
-      `Added ${toAdd.join(", ")}.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
+      `Added ${toAdd.join(', ')}.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
     );
   } finally {
     await cleanupRepo(repoDir, isLocal);
@@ -174,13 +175,13 @@ async function addInstance(
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     throw err;
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const existingPaths = await discoverComponentPaths(cwd, existing);
@@ -192,7 +193,7 @@ async function addInstance(
     const instances: ComponentInstance[] = [...existingInstances, newInstance];
 
     const pm: PackageManager =
-      (config.packageManager as PackageManager) ?? "npm";
+      (config.packageManager as PackageManager) ?? 'npm';
     const name = detectProjectName(cwd, existing, existingPaths);
     const vars: GeneratorVars = {
       projectName: name,
@@ -200,18 +201,18 @@ async function addInstance(
       paths,
       instances,
       pm: pmCommands(pm),
+      orm: config.orm ?? 'prisma',
     };
 
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
     const INSTANCE_AWARE_ROOT = new Set([
-      ".github/workflows/ci.yml",
-      ".githooks/pre-commit",
-      "scripts/setup.sh",
-      "docker-compose.yml",
-      "docker-compose.dev.yml",
+      '.github/workflows/ci.yml',
+      '.githooks/pre-commit',
+      'scripts/setup.sh',
+      'docker-compose.yml',
     ]);
     const rawSkip: string[] = Array.isArray(config.skip)
       ? (config.skip as string[])
@@ -240,18 +241,18 @@ async function addInstance(
     );
     spinner.stop(`Scaffolded ${customName}/.`);
 
-    if (result.status === "merged") {
+    if (result.status === 'merged') {
       p.log.success(
         `${result.mergedFiles?.length ?? 0} root file(s) merged cleanly.`,
       );
-    } else if (result.status === "conflicts") {
+    } else if (result.status === 'conflicts') {
       const conflictCount = result.conflictedFiles?.length ?? 0;
       if (conflictCount > 0) {
         p.log.warn(`${conflictCount} root file(s) need manual review:`);
         for (const f of result.conflictedFiles!) p.log.info(`  ${f}`);
-        p.log.info("Review:  git diff");
-        p.log.info("Keep:    git add <file>");
-        p.log.info("Discard: git checkout -- <file>");
+        p.log.info('Review:  git diff');
+        p.log.info('Keep:    git add <file>');
+        p.log.info('Discard: git checkout -- <file>');
       }
     }
 
@@ -259,8 +260,8 @@ async function addInstance(
       await installDeps(cwd, [{ type, path: customName }], pm);
     }
 
-    const example = join(cwd, customName, ".env.example");
-    const env = join(cwd, customName, ".env");
+    const example = join(cwd, customName, '.env.example');
+    const env = join(cwd, customName, '.env');
     if (existsSync(example) && !existsSync(env)) {
       try {
         copyFileSync(example, env);
@@ -281,23 +282,23 @@ async function installDeps(
   pm: PackageManager,
 ): Promise<void> {
   const cmds = pmCommands(pm);
-  const pmBin = pm === "bun" ? "bun" : pm;
+  const pmBin = pm === 'bun' ? 'bun' : pm;
 
   for (const { type, path } of instances) {
     const dir = join(dest, path);
     const spinner = p.spinner();
     try {
       switch (type) {
-        case "fastapi":
-          if (hasCommand("uv")) {
+        case 'fastapi':
+          if (hasCommand('uv')) {
             spinner.start(`Installing FastAPI dependencies (${path}/)`);
-            exec("uv sync --all-extras", dir);
+            exec('uv sync --all-extras', dir);
             spinner.stop(`FastAPI dependencies installed (${path}/).`);
           } else {
             p.log.warn(`uv not found — run 'cd ${path} && uv sync' manually.`);
           }
           break;
-        case "fastify":
+        case 'fastify':
           if (hasCommand(pmBin)) {
             spinner.start(
               `Installing Fastify dependencies (${path}/, ${cmds.install})`,
@@ -310,7 +311,20 @@ async function installDeps(
             );
           }
           break;
-        case "frontend":
+        case 'express':
+          if (hasCommand(pmBin)) {
+            spinner.start(
+              `Installing Express dependencies (${path}/, ${cmds.install})`,
+            );
+            exec(cmds.install, dir);
+            spinner.stop(`Express dependencies installed (${path}/).`);
+          } else {
+            p.log.warn(
+              `${pm} not found — run 'cd ${path} && ${cmds.install}' manually.`,
+            );
+          }
+          break;
+        case 'frontend':
           if (hasCommand(pmBin)) {
             spinner.start(
               `Installing Frontend dependencies (${path}/, ${cmds.install})`,
@@ -323,7 +337,7 @@ async function installDeps(
             );
           }
           break;
-        case "e2e":
+        case 'e2e':
           if (hasCommand(pmBin)) {
             spinner.start(
               `Installing E2E dependencies (${path}/, ${cmds.install})`,
@@ -336,10 +350,10 @@ async function installDeps(
             );
           }
           break;
-        case "mobile":
-          if (hasCommand("flutter")) {
+        case 'mobile':
+          if (hasCommand('flutter')) {
             spinner.start(`Installing Flutter dependencies (${path}/)`);
-            exec("flutter pub get", dir);
+            exec('flutter pub get', dir);
             spinner.stop(`Flutter dependencies installed (${path}/).`);
           } else {
             p.log.warn(
@@ -347,7 +361,7 @@ async function installDeps(
             );
           }
           break;
-        case "infra":
+        case 'infra':
           break;
       }
     } catch {

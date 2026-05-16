@@ -82,3 +82,8 @@ output "compose_instance_id" {
   value       = try(module.compose[0].instance_id, null)
   description = "EC2 instance ID for compose host (null when deployment_mode != compose)."
 }
+
+output "rollback_codebuild_project_name" {
+  value       = try(aws_codebuild_project.rollback[0].name, null)
+  description = "Manual rollback CodeBuild project. Start with ROLLBACK_SERVICE and ROLLBACK_IMAGE_TAG environment overrides."
+}
