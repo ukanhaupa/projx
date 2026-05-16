@@ -225,22 +225,47 @@ fi
 log "plan: ${SECTIONS[*]}"
 log "logs: $LOGS_DIR"
 
+# Wave split: cli has to run AFTER fastapi when both are planned. The cli's
+# vitest suite recursively copies the live fastapi/ tree as a scaffold source,
+# and fastapi/tests/test_scaffold.py mutates fastapi/tests/ for its duration.
+# Parallel execution races and ENOENTs mid-copy.
+declare -a WAVE1=()
+declare -a WAVE2=()
+has_fastapi=0
+for s in "${SECTIONS[@]}"; do
+  [[ "$s" == "fastapi" ]] && has_fastapi=1
+done
+for s in "${SECTIONS[@]}"; do
+  if [[ "$s" == "cli" && $has_fastapi -eq 1 ]]; then
+    WAVE2+=("$s")
+  else
+    WAVE1+=("$s")
+  fi
+done
+
 OVERALL_START=$(date +%s)
 declare -a NAMES=()
 
-for s in "${SECTIONS[@]}"; do
-  fn="sec_$s"
-  if ! declare -F "$fn" >/dev/null; then
-    xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
-    exit 2
-  fi
-  start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm); $fn"
-  NAMES+=("$s")
-  printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
-done
+run_wave() {
+  local -a wave=("$@")
+  [[ ${#wave[@]} -eq 0 ]] && return 0
+  for s in "${wave[@]}"; do
+    fn="sec_$s"
+    if ! declare -F "$fn" >/dev/null; then
+      xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
+      exit 2
+    fi
+    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm); $fn"
+    NAMES+=("$s")
+    printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
+  done
+}
+
+run_wave "${WAVE1[@]}"
 
 ANY_FAIL=0
 REMAINING=${#PIDS[@]}
+WAVE2_STARTED=0
 
 while ((REMAINING > 0)); do
   for i in "${!PIDS[@]}"; do
@@ -258,6 +283,11 @@ while ((REMAINING > 0)); do
       REMAINING=$((REMAINING - 1))
     fi
   done
+  if ((REMAINING == 0 && WAVE2_STARTED == 0 && ${#WAVE2[@]} > 0)); then
+    WAVE2_STARTED=1
+    run_wave "${WAVE2[@]}"
+    REMAINING=${#WAVE2[@]}
+  fi
   sleep 1
 done
 
