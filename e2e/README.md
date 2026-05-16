@@ -62,6 +62,18 @@ cd e2e && pnpm test:ui
 cd e2e && pnpm exec playwright test auth.spec.ts
 ```
 
+### Test Modes
+
+The default mode runs Vite's dev server + a local backend — fastest iteration loop, good for development.
+
+| Mode           | Trigger                                                             | What runs                                            | When to use                                                                        |
+| -------------- | ------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Dev (default)  | `pnpm exec playwright test`                                         | `vite` dev + `uv run main.py`                        | Local development, fast feedback                                                   |
+| Prod build     | `E2E_PROD_BUILD=1 pnpm exec playwright test`                        | `vite build && vite preview` + `uv run main.py`      | Catch build-only regressions (tree-shaking, CSS purge, bundle splits) before merge |
+| Docker compose | `E2E_DOCKER=1 BASE_URL=https://localhost pnpm exec playwright test` | `docker compose up --build` (full prod-parity stack) | Catch container/network/env regressions before deploy                              |
+
+Pick the lightest mode that catches the failure you're guarding against. Run prod-build mode in CI on every PR, docker-compose mode on main-branch / release branches only — it's slower.
+
 ## Quality Gates
 
 ```bash

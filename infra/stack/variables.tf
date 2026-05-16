@@ -431,6 +431,31 @@ variable "cicd_ecr_keep_image_count" {
   default     = 50
 }
 
+variable "compose_keep_image_count" {
+  description = "Number of locally cached compose-host images to keep per app service for rollback."
+  type        = number
+  default     = 5
+}
+
+variable "slack_deploy_webhook" {
+  description = "Optional Slack-compatible deploy notification webhook URL."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "backend_deploy_health_url" {
+  description = "Optional externally reachable backend URL used by CI/CD after deploy."
+  type        = string
+  default     = ""
+}
+
+variable "frontend_deploy_health_url" {
+  description = "Optional externally reachable frontend URL used by CI/CD after deploy."
+  type        = string
+  default     = ""
+}
+
 variable "compose_instance_type" {
   description = "EC2 instance type for the compose host (all services: backend + frontend + keycloak + nginx). Use t3.medium or larger when enable_keycloak=true."
   type        = string

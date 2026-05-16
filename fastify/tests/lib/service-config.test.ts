@@ -26,13 +26,21 @@ describe('service-config', () => {
   });
 
   it('round-trips an encrypted config', async () => {
-    await setServiceConfig(app.prisma, 'smtp', { host: 'mail.example', port: 587 });
-    const got = await getServiceConfig<{ host: string; port: number }>(app.prisma, 'smtp');
+    await setServiceConfig(app.prisma, 'smtp', {
+      host: 'mail.example',
+      port: 587,
+    });
+    const got = await getServiceConfig<{ host: string; port: number }>(
+      app.prisma,
+      'smtp',
+    );
     expect(got).toEqual({ host: 'mail.example', port: 587 });
   });
 
   it('persists ciphertext, not plaintext', async () => {
-    await setServiceConfig(app.prisma, 'smtp', { password: 'super-secret-value' });
+    await setServiceConfig(app.prisma, 'smtp', {
+      password: 'super-secret-value',
+    });
     const row = await app.prisma.serviceConfig.findFirstOrThrow({
       where: { purpose: 'smtp' },
     });
@@ -44,7 +52,9 @@ describe('service-config', () => {
     await setServiceConfig(app.prisma, 'smtp', { host: 'new' });
     const got = await getServiceConfig<{ host: string }>(app.prisma, 'smtp');
     expect(got).toEqual({ host: 'new' });
-    const count = await app.prisma.serviceConfig.count({ where: { purpose: 'smtp' } });
+    const count = await app.prisma.serviceConfig.count({
+      where: { purpose: 'smtp' },
+    });
     expect(count).toBe(1);
   });
 });

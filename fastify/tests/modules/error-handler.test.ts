@@ -12,19 +12,25 @@ describe('Error Handler Plugin', () => {
     await app.register(errorHandler);
 
     app.get('/p2002', async () => {
-      throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-        code: 'P2002',
-        clientVersion: '6.0.0',
-        meta: { target: ['email'] },
-      });
+      throw new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        {
+          code: 'P2002',
+          clientVersion: '6.0.0',
+          meta: { target: ['email'] },
+        },
+      );
     });
 
     app.get('/p2003', async () => {
-      throw new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed', {
-        code: 'P2003',
-        clientVersion: '6.0.0',
-        meta: { field_name: 'category_id' },
-      });
+      throw new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint failed',
+        {
+          code: 'P2003',
+          clientVersion: '6.0.0',
+          meta: { field_name: 'category_id' },
+        },
+      );
     });
 
     app.get('/p2025', async () => {
@@ -112,7 +118,11 @@ describe('Error Handler Plugin', () => {
   });
 
   it('schema validation → 400 with detail/request_id shape', async () => {
-    const res = await app.inject({ method: 'POST', url: '/validation', payload: {} });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/validation',
+      payload: {},
+    });
     expect(res.statusCode).toBe(400);
     const body = res.json();
     expect(body.detail).toBeDefined();

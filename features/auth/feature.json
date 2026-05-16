@@ -1,0 +1,14 @@
+{
+  "name": "auth",
+  "summary": "Password + JWT auth with email verification, MFA, password reset, sessions",
+  "supports": ["fastify"],
+  "requires": { "fastify": [] },
+  "requiresOrm": ["prisma"],
+  "env": {
+    "fastify": [
+      "JWT_SECRET",
+      "FRONTEND_URL",
+      "AUTH_BACKGROUND_JOBS"
+    ]
+  }
+}

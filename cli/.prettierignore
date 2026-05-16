@@ -1,0 +1,6 @@
+dist
+coverage
+node_modules
+pnpm-lock.yaml
+src/addons
+src/templates

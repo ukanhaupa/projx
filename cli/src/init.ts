@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { execSync } from "node:child_process";
-import { join } from "node:path";
-import * as p from "@clack/prompts";
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import {
   type Component,
   type ComponentPaths,
@@ -15,20 +15,20 @@ import {
   pmCommands,
   toKebab,
   writeProjxConfig,
-} from "./utils.js";
-import { LABELS } from "./prompts.js";
-import { detectComponents, type DetectedComponent } from "./detect.js";
+} from './utils.js';
+import { LABELS } from './prompts.js';
+import { detectComponents, type DetectedComponent } from './detect.js';
 import {
   applyTemplate,
   saveBaselineRef,
   type GeneratorVars,
-} from "./baseline.js";
+} from './baseline.js';
 
 export async function init(cwd: string, localRepo?: string): Promise<void> {
-  p.intro("projx init");
+  p.intro('projx init');
   const isLocal = !!localRepo;
 
-  if (existsSync(join(cwd, ".projx"))) {
+  if (existsSync(join(cwd, '.projx'))) {
     p.log.error(
       "This project is already initialized. Use 'npx create-projx update' or 'npx create-projx add' instead.",
     );
@@ -37,23 +37,23 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
 
   if (!isGitRepo(cwd)) {
     p.log.error(
-      "projx init requires a git repo. Run 'git init && git add -A && git commit -m \"initial\"' first.",
+      'projx init requires a git repo. Run \'git init && git add -A && git commit -m "initial"\' first.',
     );
     process.exit(1);
   }
 
   if (hasUncommittedChanges(cwd)) {
-    p.log.error("You have uncommitted changes. Commit or stash them first.");
+    p.log.error('You have uncommitted changes. Commit or stash them first.');
     process.exit(1);
   }
 
   const spinner = p.spinner();
-  spinner.start("Scanning for components");
+  spinner.start('Scanning for components');
   const detected = await detectComponents(cwd);
   spinner.stop(
     detected.length > 0
       ? `Found ${detected.length} component(s).`
-      : "No components detected.",
+      : 'No components detected.',
   );
 
   if (detected.length === 0) {
@@ -67,7 +67,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   const confirmed = await confirmDetections(detected);
 
   if (confirmed.length === 0) {
-    p.log.warn("No components selected. Nothing to do.");
+    p.log.warn('No components selected. Nothing to do.');
     process.exit(0);
   }
 
@@ -77,9 +77,9 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   ) as ComponentPaths;
 
   const hasJs = components.some((c) =>
-    ["fastify", "frontend", "e2e"].includes(c),
+    ['fastify', 'express', 'frontend', 'e2e'].includes(c),
   );
-  let pm: PackageManager = "npm";
+  let pm: PackageManager = 'npm';
 
   if (hasJs) {
     const detected = detectPackageManager(cwd);
@@ -88,42 +88,43 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
       p.log.info(`Detected package manager: ${pm}`);
     } else if (process.stdin.isTTY) {
       const choice = (await p.select({
-        message: "Package manager",
+        message: 'Package manager',
         options: PACKAGE_MANAGERS.map((v) => ({ value: v, label: v })),
-        initialValue: "npm" as PackageManager,
+        initialValue: 'npm' as PackageManager,
       })) as PackageManager | symbol;
       if (p.isCancel(choice)) process.exit(0);
       pm = choice as PackageManager;
     }
   }
 
-  const projectName = toKebab(cwd.split("/").pop()!);
+  const projectName = toKebab(cwd.split('/').pop()!);
   const vars: GeneratorVars = {
     projectName,
     components,
     paths,
     pm: pmCommands(pm),
+    orm: 'prisma',
   };
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     p.log.error(String(err));
     process.exit(1);
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
 
     const applySpinner = p.spinner();
-    applySpinner.start("Applying template");
+    applySpinner.start('Applying template');
     const result = await applyTemplate(
       cwd,
       repoDir,
@@ -135,41 +136,41 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
       undefined,
       true,
     );
-    applySpinner.stop("Template applied.");
+    applySpinner.stop('Template applied.');
 
-    if (existsSync(join(cwd, ".githooks"))) {
+    if (existsSync(join(cwd, '.githooks'))) {
       try {
-        execSync("git config core.hooksPath .githooks", { cwd, stdio: "pipe" });
+        execSync('git config core.hooksPath .githooks', { cwd, stdio: 'pipe' });
       } catch {
         // non-critical
       }
     }
 
-    if (result.status === "clean" || result.status === "merged") {
+    if (result.status === 'clean' || result.status === 'merged') {
       saveBaselineRef(cwd);
     }
 
-    if (result.status === "conflicts") {
+    if (result.status === 'conflicts') {
       p.log.warn(
-        "Some template files differ from your code. Changes written directly.",
+        'Some template files differ from your code. Changes written directly.',
       );
-      p.log.info("Review changes:");
-      p.log.info("  git diff");
-      p.log.info("");
-      p.log.info("Keep a change:  git add <file>");
-      p.log.info("Discard a change:  git checkout -- <file>");
+      p.log.info('Review changes:');
+      p.log.info('  git diff');
+      p.log.info('');
+      p.log.info('Keep a change:  git add <file>');
+      p.log.info('Discard a change:  git checkout -- <file>');
       p.log.info(
         'Commit when ready:  git add . && git commit -m "projx: init"',
       );
-      p.log.info("");
-      p.log.info("To skip files on future updates, add to .projx-component:");
+      p.log.info('');
+      p.log.info('To skip files on future updates, add to .projx-component:');
       p.log.info('  { "skip": ["src/**", "tests/**"] }');
       p.outro(
-        "Template applied. Review with git diff.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx",
+        'Template applied. Review with git diff.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx',
       );
     } else {
       p.outro(
-        "Project initialized.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx",
+        'Project initialized.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx',
       );
     }
   } finally {
@@ -185,20 +186,20 @@ async function writeBareProjx(
 ): Promise<void> {
   const dlSpinner = p.spinner();
   dlSpinner.start(
-    isLocal ? "Using local templates" : "Downloading latest templates",
+    isLocal ? 'Using local templates' : 'Downloading latest templates',
   );
   const repoDir = await downloadRepo(localRepo).catch((err) => {
-    dlSpinner.stop("Failed.");
+    dlSpinner.stop('Failed.');
     p.log.error(String(err));
     process.exit(1);
   });
-  dlSpinner.stop(isLocal ? "Local templates loaded." : "Templates downloaded.");
+  dlSpinner.stop(isLocal ? 'Local templates loaded.' : 'Templates downloaded.');
 
   try {
     const pkg = JSON.parse(
-      await readFile(join(repoDir, "cli/package.json"), "utf-8"),
+      await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     const config: Record<string, unknown> = {
       version: pkg.version,
       createdAt: today,
@@ -236,7 +237,7 @@ async function confirmDetections(
 
 function isGitRepo(cwd: string): boolean {
   try {
-    execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" });
+    execSync('git rev-parse --is-inside-work-tree', { cwd, stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -245,7 +246,7 @@ function isGitRepo(cwd: string): boolean {
 
 function hasUncommittedChanges(cwd: string): boolean {
   try {
-    const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
+    const status = execSync('git status --porcelain', { cwd, stdio: 'pipe' })
       .toString()
       .trim();
     return status.length > 0;

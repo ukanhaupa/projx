@@ -425,7 +425,7 @@ pre {
   flex-direction: column;
 }
 
-.sidebar-nav a {
+.sidebar-nav :where(a) {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -441,12 +441,12 @@ pre {
     border-color var(--transition-fast);
 }
 
-.sidebar-nav a:hover {
+.sidebar-nav :where(a:hover) {
   color: var(--color-sidebar-text-active);
   background: var(--color-sidebar-hover);
 }
 
-.sidebar-nav a.active {
+.sidebar-nav :where(a.active) {
   color: var(--color-sidebar-text-active);
   background: var(--color-sidebar-active);
   border-left-color: var(--color-primary);
@@ -465,7 +465,7 @@ pre {
   color: var(--color-text-muted);
 }
 
-.sidebar-footer button {
+.sidebar-footer :where(button) {
   background: none;
   border: var(--border-width) solid var(--color-sidebar-border);
   color: var(--color-sidebar-text);
@@ -476,7 +476,7 @@ pre {
   transition: all var(--transition-fast);
 }
 
-.sidebar-footer button:hover {
+.sidebar-footer :where(button:hover) {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
@@ -740,7 +740,7 @@ pre {
   margin-bottom: var(--space-4);
 }
 
-.page-header button {
+.page-header :where(button) {
   background: var(--color-primary);
   color: var(--color-text-inverse);
   border: none;
@@ -752,7 +752,7 @@ pre {
   transition: background var(--transition-fast);
 }
 
-.page-header button:hover {
+.page-header :where(button:hover) {
   background: var(--color-primary-hover);
 }
 
@@ -940,7 +940,7 @@ tr:last-child td {
   gap: var(--space-2);
 }
 
-.actions button {
+.actions :where(button) {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
   border: var(--border-width) solid var(--color-border);
@@ -952,17 +952,17 @@ tr:last-child td {
   transition: all var(--transition-fast);
 }
 
-.actions button:hover {
+.actions :where(button:hover) {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
-.actions button.danger {
+.actions :where(button.danger) {
   color: var(--color-danger);
   border-color: var(--color-danger);
 }
 
-.actions button.danger:hover {
+.actions :where(button.danger:hover) {
   background: var(--color-danger-light);
 }
 
@@ -987,7 +987,7 @@ tr:last-child td {
   gap: var(--space-2);
 }
 
-.pagination button {
+.pagination :where(button) {
   padding: var(--space-1) var(--space-3);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-md);
@@ -998,12 +998,12 @@ tr:last-child td {
   transition: all var(--transition-fast);
 }
 
-.pagination button:hover:not(:disabled) {
+.pagination :where(button:hover:not(:disabled)) {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
-.pagination button:disabled {
+.pagination :where(button:disabled) {
   opacity: 0.4;
   cursor: default;
 }
@@ -1169,7 +1169,7 @@ tr:last-child td {
   margin-top: var(--space-5);
 }
 
-.form-actions button {
+.form-actions :where(button) {
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
   border: var(--border-width) solid var(--color-border);
@@ -1181,22 +1181,22 @@ tr:last-child td {
   transition: all var(--transition-fast);
 }
 
-.form-actions button:hover {
+.form-actions :where(button:hover) {
   border-color: var(--color-border-hover);
 }
 
-.form-actions button[type='submit'] {
+.form-actions :where(button[type='submit']) {
   background: var(--color-primary);
   color: var(--color-text-inverse);
   border-color: var(--color-primary);
 }
 
-.form-actions button[type='submit']:hover {
+.form-actions :where(button[type='submit']:hover) {
   background: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
 }
 
-.form-actions button[type='submit']:disabled {
+.form-actions :where(button[type='submit']:disabled) {
   opacity: 0.6;
   cursor: default;
 }
@@ -1241,35 +1241,83 @@ tr:last-child td {
   padding: var(--space-6);
 }
 
+.error-scaffold {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+.error-scaffold__body {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  max-width: 480px;
+}
+
+.error-scaffold__code {
+  color: var(--color-text-muted);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+}
+
 .full-page-state h2 {
   font-size: var(--text-2xl);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .full-page-state p {
   color: var(--color-text-muted);
-  margin-bottom: var(--space-6);
   max-width: 400px;
 }
 
-.full-page-state button,
-.full-page-state a {
-  display: inline-block;
+.error-scaffold__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.error-scaffold__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--space-2) var(--space-5);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
   border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   cursor: pointer;
   text-decoration: none;
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-.full-page-state button:hover,
-.full-page-state a:hover {
+.error-scaffold__action--primary {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+.error-scaffold__action--primary:hover {
   background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.error-scaffold__action--secondary {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.error-scaffold__action--secondary:hover {
+  background: var(--color-row-hover);
+  color: var(--color-text);
+}
+
+.error-scaffold__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1434,7 +1482,7 @@ tr:last-child td {
   outline: none;
 }
 
-.login-form button[type='submit'] {
+.login-form :where(button[type='submit']) {
   width: 100%;
   padding: var(--space-3);
   background: var(--color-primary);
@@ -1448,11 +1496,11 @@ tr:last-child td {
   transition: background var(--transition-fast);
 }
 
-.login-form button[type='submit']:hover {
+.login-form :where(button[type='submit']:hover) {
   background: var(--color-primary-hover);
 }
 
-.login-form button[type='submit']:disabled {
+.login-form :where(button[type='submit']:disabled) {
   opacity: 0.6;
   cursor: default;
 }

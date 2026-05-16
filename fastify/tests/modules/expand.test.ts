@@ -69,26 +69,36 @@ describe('buildIncludeFromExpand', () => {
   });
 
   it('returns undefined when entity has no relations', () => {
-    expect(buildIncludeFromExpand(['category'], entityWithoutRelations)).toBeUndefined();
+    expect(
+      buildIncludeFromExpand(['category'], entityWithoutRelations),
+    ).toBeUndefined();
   });
 
   it('builds include map for valid relations', () => {
-    expect(buildIncludeFromExpand(['category'], entityWithRelations)).toEqual({ category: true });
+    expect(buildIncludeFromExpand(['category'], entityWithRelations)).toEqual({
+      category: true,
+    });
   });
 
   it('builds include map for multiple relations', () => {
-    expect(buildIncludeFromExpand(['category', 'tags'], entityWithRelations)).toEqual({
+    expect(
+      buildIncludeFromExpand(['category', 'tags'], entityWithRelations),
+    ).toEqual({
       category: true,
       tags: true,
     });
   });
 
   it('ignores unknown relation names', () => {
-    expect(buildIncludeFromExpand(['unknown'], entityWithRelations)).toBeUndefined();
+    expect(
+      buildIncludeFromExpand(['unknown'], entityWithRelations),
+    ).toBeUndefined();
   });
 
   it('includes valid and ignores invalid', () => {
-    expect(buildIncludeFromExpand(['category', 'unknown'], entityWithRelations)).toEqual({
+    expect(
+      buildIncludeFromExpand(['category', 'unknown'], entityWithRelations),
+    ).toEqual({
       category: true,
     });
   });
@@ -96,7 +106,10 @@ describe('buildIncludeFromExpand', () => {
 
 describe('getExpandableFieldNames', () => {
   it('returns relation keys', () => {
-    expect(getExpandableFieldNames(entityWithRelations)).toEqual(['category', 'tags']);
+    expect(getExpandableFieldNames(entityWithRelations)).toEqual([
+      'category',
+      'tags',
+    ]);
   });
 
   it('returns empty array when no relations', () => {

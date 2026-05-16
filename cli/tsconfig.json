@@ -10,5 +10,6 @@
     "declaration": false,
     "types": ["node"]
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "exclude": ["src/addons", "node_modules", "dist"]
 }

@@ -1,0 +1,53 @@
+{
+  "name": "sequelize",
+  "displayName": "Sequelize",
+  "frameworks": ["fastify", "express"],
+  "removeFromBase": [
+    "prisma",
+    "src/plugins/prisma.ts",
+    "src/prisma.ts",
+    "src/lib/service-config.ts",
+    "src/modules/_base",
+    "src/modules/audit-logs",
+    "tests/modules/audit-logs.test.ts",
+    "tests/modules/audit-middleware.test.ts",
+    "tests/modules/auto-routes.test.ts",
+    "tests/modules/entity-validation.test.ts",
+    "tests/modules/expand.test.ts",
+    "tests/modules/field-privacy.test.ts",
+    "tests/modules/meta.test.ts",
+    "tests/modules/query-engine.test.ts",
+    "tests/modules/repository.test.ts",
+    "tests/modules/service.test.ts",
+    "tests/helpers/crud-test-base.ts",
+    "tests/helpers/crud-test-base.test.ts",
+    "tests/helpers/migration-checksum.ts",
+    "tests/helpers/migration-checksum.test.ts",
+    "tests/global-setup.ts",
+    "tests"
+  ],
+  "packageOverrides": {
+    "descriptionReplace": { "from": "Prisma", "to": "Sequelize" },
+    "removeDependencies": ["@prisma/client"],
+    "removeDevDependencies": ["prisma"],
+    "addDependencies": {
+      "sequelize": "^6.37.5",
+      "pg": "^8.16.3",
+      "pg-hstore": "^2.3.4"
+    },
+    "addDevDependencies": {
+      "@types/pg": "^8.15.5",
+      "sequelize-cli": "^6.6.3"
+    },
+    "removeScriptPrefixes": ["prisma:"],
+    "addScripts": {
+      "db:sync": "tsx scripts/db-sync.ts",
+      "db:migrate": "sequelize-cli db:migrate",
+      "db:migrate:undo": "sequelize-cli db:migrate:undo"
+    }
+  },
+  "dockerfile": {
+    "extraConfigFiles": [],
+    "migrateCommand": "tsx scripts/db-sync.ts"
+  }
+}

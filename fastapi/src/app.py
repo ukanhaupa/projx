@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 # ===========================
 load_dotenv()
 
+import logging
 import sys
 from contextlib import asynccontextmanager
 from typing import Any, cast
@@ -36,6 +37,21 @@ LOG_FORMAT = (
 logger.remove()
 logger.add(sys.stderr, format=LOG_FORMAT, level=os.getenv("LOG_LEVEL", "DEBUG"))
 logger.configure(extra={"request_id": "-"})
+
+
+class _UvicornInterceptHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        level: str | int = record.levelname if logger.level(record.levelname, None) else record.levelno
+        if "/health" in message:
+            level = "DEBUG"
+        logger.opt(depth=6, exception=record.exc_info).log(level, message)
+
+
+for _name in ("uvicorn.access", "uvicorn.error", "uvicorn"):
+    _logger = logging.getLogger(_name)
+    _logger.handlers = [_UvicornInterceptHandler()]
+    _logger.propagate = False
 
 
 @asynccontextmanager

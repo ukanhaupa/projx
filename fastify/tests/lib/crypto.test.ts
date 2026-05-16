@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { encryptString, decryptString } from '../../src/lib/crypto.js';
 
 describe('crypto', () => {
@@ -26,6 +26,32 @@ describe('crypto', () => {
   });
 
   it('rejects ciphertext that is too short', () => {
-    expect(() => decryptString(Buffer.alloc(10).toString('base64'))).toThrow(/too short/);
+    expect(() => decryptString(Buffer.alloc(10).toString('base64'))).toThrow(
+      /too short/,
+    );
+  });
+});
+
+describe('crypto key resolution', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('throws when CRED_ENCRYPTION_KEY is unset (no silent JWT_SECRET fallback)', async () => {
+    vi.stubEnv('CRED_ENCRYPTION_KEY', '');
+    vi.stubEnv('JWT_SECRET', 'any-jwt-secret-value');
+    const mod = await import('../../src/lib/crypto.js');
+    expect(() => mod.encryptString('x')).toThrow(/CRED_ENCRYPTION_KEY/);
+    vi.unstubAllEnvs();
+  });
+
+  it('rejects a CRED_ENCRYPTION_KEY that does not decode to 32 bytes', async () => {
+    vi.stubEnv(
+      'CRED_ENCRYPTION_KEY',
+      Buffer.from('too-short').toString('base64'),
+    );
+    const mod = await import('../../src/lib/crypto.js');
+    expect(() => mod.encryptString('x')).toThrow(/32 bytes/);
+    vi.unstubAllEnvs();
   });
 });

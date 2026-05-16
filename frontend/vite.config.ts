@@ -7,8 +7,8 @@ export default defineConfig({
   server: { port: 3000, strictPort: true },
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src/test-setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['./tests/test-setup.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
@@ -16,8 +16,6 @@ export default defineConfig({
         'src/main.tsx',
         'src/App.tsx',
         'src/vite-env.d.ts',
-        'src/test-setup.ts',
-        'src/testing/**',
         'src/pages/**',
         'src/entities/overrides.ts',
       ],

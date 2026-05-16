@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/app.ts",
+  "anchor": "// projx-anchor: plugins",
+  "insert": "  await app.register(authRoutes);\n  await initMailer(app.prisma);\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(app.prisma, app.log);\n  }\n"
+}
