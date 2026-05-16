@@ -192,6 +192,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: express/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
       - run: pnpm exec prettier --check .
       - run: pnpm exec eslint .
       - run: pnpm exec tsc --noEmit
