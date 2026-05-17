@@ -20,7 +20,6 @@ const entityWithRelations: EntityConfig = {
   bulkOperations: false,
   columnNames: ['id', 'category_id'],
   searchableFields: [],
-  fields: [],
   schema: dummySchema,
   createSchema: dummySchema,
   updateSchema: dummySchema,

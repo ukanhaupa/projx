@@ -131,7 +131,6 @@ function makeEntityConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
     bulkOperations: false,
     columnNames: ['id', 'name', 'created_at', 'updated_at'],
     searchableFields: ['name'],
-    fields: [],
     schema: dummySchema,
     createSchema,
     updateSchema,

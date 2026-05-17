@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import errorHandler from '../../src/plugins/error-handler.js';
@@ -106,52 +106,6 @@ function makeSecretConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
     ],
     searchableFields: ['name'],
     hiddenFields: ['internal_note'],
-    fields: [
-      {
-        key: 'id',
-        label: 'Id',
-        type: 'str',
-        nullable: false,
-        is_auto: true,
-        is_primary_key: true,
-        filterable: true,
-        has_foreign_key: false,
-        field_type: 'text',
-      },
-      {
-        key: 'name',
-        label: 'Name',
-        type: 'str',
-        nullable: false,
-        is_auto: false,
-        is_primary_key: false,
-        filterable: true,
-        has_foreign_key: false,
-        field_type: 'text',
-      },
-      {
-        key: 'internal_note',
-        label: 'Internal Note',
-        type: 'str',
-        nullable: true,
-        is_auto: false,
-        is_primary_key: false,
-        filterable: true,
-        has_foreign_key: false,
-        field_type: 'text',
-      },
-      {
-        key: 'password_hash',
-        label: 'Password Hash',
-        type: 'str',
-        nullable: true,
-        is_auto: false,
-        is_primary_key: false,
-        filterable: false,
-        has_foreign_key: false,
-        field_type: 'text',
-      },
-    ],
     schema: secretSchema,
     createSchema,
     updateSchema,
@@ -299,38 +253,5 @@ describe('Entity-level private', () => {
     });
     EntityRegistry.register(config);
     expect(EntityRegistry.getAll()).toHaveLength(0);
-  });
-
-  it('private entity not in getMeta()', () => {
-    EntityRegistry.reset();
-    EntityRegistry.register(
-      makeSecretConfig({ private: true, tableName: 'hidden_things' }),
-    );
-    EntityRegistry.register(
-      makeSecretConfig({ tableName: 'visible_things', name: 'VisibleThing' }),
-    );
-    const meta = EntityRegistry.getMeta();
-    const tableNames = meta.entities.map((e) => e.table_name);
-    expect(tableNames).not.toContain('hidden_things');
-    expect(tableNames).toContain('visible_things');
-  });
-});
-
-describe('Meta strips hidden fields', () => {
-  beforeEach(() => {
-    EntityRegistry.reset();
-  });
-
-  it('getMeta excludes explicitly hidden fields and built-in private columns', () => {
-    EntityRegistry.register(makeSecretConfig());
-    const meta = EntityRegistry.getMeta();
-    const entity = meta.entities.find(
-      (e) => e.table_name === 'secret_widgets',
-    ) as Record<string, unknown>;
-    const fieldKeys = (entity.fields as Array<{ key: string }>).map(
-      (f) => f.key,
-    );
-    expect(fieldKeys).not.toContain('internal_note');
-    expect(fieldKeys).not.toContain('password_hash');
   });
 });

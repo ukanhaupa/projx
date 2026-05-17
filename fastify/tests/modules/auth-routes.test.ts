@@ -44,7 +44,6 @@ describe('Auth-protected routes (global)', () => {
         'updated_at',
       ],
       searchableFields: ['table_name', 'record_id'],
-      fields: [],
       schema: Type.Object({ id: Type.String() }),
       createSchema: Type.Object({ table_name: Type.String() }),
       updateSchema: Type.Object({}),

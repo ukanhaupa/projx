@@ -11,7 +11,6 @@ import {
 } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import {
   type Component,
@@ -601,7 +600,7 @@ async function writeOneInstance(
     [type]: targetDir,
   };
   await renderEjsInDir(outDir, { ...vars, paths: instancePaths });
-  await applyOrmProviderToInstance(outDir, type, vars);
+  await applyOrmProviderToInstance(repoDir, outDir, type, vars);
 
   await upsertComponentMarker(
     join(dest, targetDir),
@@ -619,6 +618,7 @@ async function writeOneInstance(
 }
 
 async function applyOrmProviderToInstance(
+  repoDir: string,
   dir: string,
   component: Component,
   vars: GeneratorVars,
@@ -626,12 +626,7 @@ async function applyOrmProviderToInstance(
   const orm = typeof vars.orm === 'string' ? vars.orm : undefined;
   if (!orm || orm === 'prisma') return;
   if (component !== 'fastify' && component !== 'express') return;
-  await applyOrmAddon(orm, component, dir, vars);
-}
-
-function sharedAddonDir(): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  return join(thisFile, '../../src/addons');
+  await applyOrmAddon(repoDir, orm, component, dir, vars);
 }
 
 interface OrmManifest {
@@ -650,8 +645,11 @@ interface OrmManifest {
   };
 }
 
-async function loadOrmManifest(orm: string): Promise<OrmManifest> {
-  const path = join(sharedAddonDir(), 'orms', orm, 'manifest.json');
+async function loadOrmManifest(
+  repoDir: string,
+  orm: string,
+): Promise<OrmManifest> {
+  const path = join(repoDir, 'addons', 'orms', orm, 'manifest.json');
   if (!existsSync(path)) {
     throw new Error(
       `ORM "${orm}" is not yet supported. No manifest found at ${path}.`,
@@ -695,12 +693,13 @@ function applyPackageOverrides(
 }
 
 async function applyOrmAddon(
+  repoDir: string,
   orm: string,
   framework: 'fastify' | 'express',
   dir: string,
   vars: GeneratorVars,
 ): Promise<void> {
-  const manifest = await loadOrmManifest(orm);
+  const manifest = await loadOrmManifest(repoDir, orm);
   if (!manifest.frameworks.includes(framework)) {
     throw new Error(
       `ORM "${orm}" does not support framework "${framework}". Supported: ${manifest.frameworks.join(', ')}`,
@@ -716,7 +715,7 @@ async function applyOrmAddon(
   applyPackageOverrides(pkg, manifest.packageOverrides);
   await writeJsonObject(pkgPath, pkg);
 
-  const addonRoot = join(sharedAddonDir(), 'orms', orm);
+  const addonRoot = join(repoDir, 'addons', 'orms', orm);
   const sharedSrc = join(addonRoot, 'shared');
   const frameworkSrc = join(addonRoot, framework);
 
