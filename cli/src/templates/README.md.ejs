@@ -13,7 +13,7 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 | **<%= paths.fastify %>/** | Fastify, <%= orm === 'drizzle' ? 'Drizzle' : 'Prisma' %>, TypeBox, TypeScript |
 <% } %>
 <% if (components.includes('express')) { %>
-| **<%= paths.express %>/** | Express 5, TypeScript, <%= orm === 'drizzle' ? 'Drizzle' : 'Prisma, auto-entity CRUD' %> |
+| **<%= paths.express %>/** | Express 5, TypeScript, <%= orm === 'drizzle' ? 'Drizzle' : 'Prisma' %> |
 <% } %>
 <% if (components.includes('frontend')) { %>
 | **<%= paths.frontend %>/** | React 19, TypeScript, Vite, React Router |

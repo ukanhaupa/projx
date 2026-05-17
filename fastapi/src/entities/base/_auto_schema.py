@@ -127,10 +127,7 @@ def create_update_schema(model: type[BaseModel_]) -> type[BaseModel]:
 
 
 def get_field_metadata(model: type[BaseModel_]) -> list[dict]:
-    """Return field metadata for the /api/v1/_meta endpoint.
-
-    This gives the frontend everything it needs to render forms and tables.
-    """
+    """Return per-column metadata used by the auto-schema builder and registry."""
     mapper = sa_inspect(model)
     hidden: set[str] = set(getattr(model, "__hidden_fields__", set()))
     searchable = set(getattr(model, "__searchable_fields__", set()))

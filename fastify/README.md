@@ -30,7 +30,6 @@ The server starts at `http://localhost:3000` by default.
 
 - Swagger UI: `http://localhost:3000/docs`
 - Health check: `GET /api/health`
-- Entity metadata: `GET /api/v1/_meta`
 
 ## Project Structure
 

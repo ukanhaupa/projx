@@ -81,10 +81,6 @@ export function buildApp(options: BuildAppOptions = {}): express.Express {
     app.use(`/api/v1${entity.apiPrefix}`, registerEntityRoutes(entity, prisma));
   }
 
-  app.get('/api/v1/_meta', (_req, res) => {
-    res.json(EntityRegistry.getMeta());
-  });
-
   app.use(notFoundHandler);
   app.use(errorHandler);
 

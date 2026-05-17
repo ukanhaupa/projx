@@ -35,10 +35,6 @@ export async function buildTestApp(): Promise<FastifyInstance> {
           { prefix: entityConfig.apiPrefix },
         );
       }
-
-      instance.get('/_meta', async () => {
-        return EntityRegistry.getMeta();
-      });
     },
     { prefix: '/api/v1' },
   );

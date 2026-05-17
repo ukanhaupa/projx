@@ -6,9 +6,6 @@ import 'package:projx_mobile/core/routing/routes.dart';
 import 'package:projx_mobile/core/theme/app_theme.dart';
 import 'package:projx_mobile/core/theme/color_tokens.dart';
 import 'package:projx_mobile/core/theme/spacing.dart';
-import 'package:projx_mobile/entities/base/entity_config.dart';
-import 'package:projx_mobile/entities/base/entity_providers.dart';
-import 'package:projx_mobile/entities/entity_overrides.dart';
 import 'package:projx_mobile/features/offline/sync_indicator.dart';
 
 class AppScaffold extends ConsumerWidget {
@@ -19,7 +16,6 @@ class AppScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isPhone = Breakpoints.isPhone(context);
-    final entityConfigs = ref.watch(entityConfigsProvider);
     final isOnline = ref.watch(isOnlineProvider);
 
     return Scaffold(
@@ -29,16 +25,12 @@ class AppScaffold extends ConsumerWidget {
           Expanded(child: child),
         ],
       ),
-      drawer: isPhone ? _buildDrawer(context, ref, entityConfigs) : null,
+      drawer: isPhone ? _buildDrawer(context) : null,
       bottomNavigationBar: isPhone ? _buildBottomNav(context) : null,
     );
   }
 
-  Widget? _buildDrawer(
-    BuildContext context,
-    WidgetRef ref,
-    AsyncValue<List<EntityConfig>> entityConfigs,
-  ) {
+  Widget? _buildDrawer(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? ColorTokens.sidebarBgDark : ColorTokens.sidebarBg;
     final textColor =
@@ -80,34 +72,7 @@ class AppScaffold extends ConsumerWidget {
                 context.go(Routes.dashboard);
               },
             ),
-            entityConfigs.when(
-              data: (configs) => Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: configs
-                      .map(
-                        (config) => _DrawerItem(
-                          icon: EntityOverrides.getIcon(config.slug),
-                          label: config.namePlural,
-                          textColor: textColor,
-                          activeTextColor: activeTextColor,
-                          isActive: GoRouterState.of(context)
-                              .matchedLocation
-                              .startsWith('/entities/${config.slug}'),
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            context.go(Routes.entityList(config.slug));
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              loading: () => const Expanded(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
+            const Spacer(),
             const Divider(color: ColorTokens.sidebarBorder),
             _DrawerItem(
               icon: Icons.settings_outlined,
@@ -131,8 +96,7 @@ class AppScaffold extends ConsumerWidget {
   Widget _buildBottomNav(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
-    if (location.startsWith('/entities')) currentIndex = 1;
-    if (location == '/settings') currentIndex = 2;
+    if (location == '/settings') currentIndex = 1;
 
     return NavigationBar(
       selectedIndex: currentIndex,
@@ -141,8 +105,6 @@ class AppScaffold extends ConsumerWidget {
           case 0:
             context.go(Routes.dashboard);
           case 1:
-            break;
-          case 2:
             context.go(Routes.settings);
         }
       },
@@ -151,11 +113,6 @@ class AppScaffold extends ConsumerWidget {
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard),
           label: 'Dashboard',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.table_chart_outlined),
-          selectedIcon: Icon(Icons.table_chart),
-          label: 'Entities',
         ),
         NavigationDestination(
           icon: Icon(Icons.settings_outlined),

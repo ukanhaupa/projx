@@ -98,30 +98,6 @@ class TestAuthorizationMiddleware:
         assert response.status_code == 200
 
 
-class TestMetaEndpoint:
-    @pytest.mark.asyncio
-    async def test_meta_returns_entities(self, client: AsyncClient, auth_headers_admin):
-        response = await client.get("/api/v1/_meta", headers=auth_headers_admin)
-        assert response.status_code == 200
-        data = response.json()
-        assert "entities" in data
-        assert len(data["entities"]) >= 1
-
-    @pytest.mark.asyncio
-    async def test_meta_entity_fields(self, client: AsyncClient, auth_headers_admin):
-        response = await client.get("/api/v1/_meta", headers=auth_headers_admin)
-        entity = response.json()["entities"][0]
-        assert "name" in entity
-        assert "api_prefix" in entity
-        assert "fields" in entity
-        assert "readonly" in entity
-
-    @pytest.mark.asyncio
-    async def test_meta_requires_auth(self, client: AsyncClient):
-        response = await client.get("/api/v1/_meta")
-        assert response.status_code == 401
-
-
 class TestAuthnMiddlewareEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_auth_header(self, client: AsyncClient):
@@ -171,21 +147,6 @@ class TestEntityRegistry:
         EntityRegistry.auto_discover()
         assert "audit_logs" in EntityRegistry._entities
         EntityRegistry._entities = saved
-
-    @pytest.mark.asyncio
-    async def test_meta_endpoint_response_shape(self, client: AsyncClient, auth_headers_admin):
-        from src.entities.base import EntityRegistry
-
-        result = await EntityRegistry._meta_endpoint()
-        assert "entities" in result
-        entity = result["entities"][0]
-        assert "name" in entity
-        assert "table_name" in entity
-        assert "api_prefix" in entity
-        assert "readonly" in entity
-        assert "soft_delete" in entity
-        assert "bulk_operations" in entity
-        assert "fields" in entity
 
 
 class TestRegistryValidation:

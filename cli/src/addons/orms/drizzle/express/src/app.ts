@@ -8,7 +8,6 @@ import pinoHttp from 'pino-http';
 import { allowedOrigins, config } from './config.js';
 import { ApiError, errorHandler, notFoundHandler } from './errors.js';
 import { checkDatabase, db } from './db/client.js';
-import { listEntities } from './modules/_base/index.js';
 // projx-anchor: entity-imports
 
 const requestId: RequestHandler = (req, res, next) => {
@@ -66,10 +65,6 @@ export function buildApp(): express.Express {
       return;
     }
     res.json({ status: 'healthy', checks });
-  });
-
-  app.get('/api/v1/_meta', (_req, res) => {
-    res.json({ entities: listEntities(), orm: 'drizzle' });
   });
 
   // projx-anchor: entity-registrations

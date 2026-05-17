@@ -316,19 +316,11 @@ class TestAutoControllerBulkScoped:
 
 
 class TestEntityRegistryEdgeCases:
-    def test_meta_endpoint_includes_searchable_fields(self):
+    def test_entity_meta_includes_searchable_fields(self):
         entities = EntityRegistry.get_entities()
         meta = entities.get("audit_logs")
         assert meta is not None
         assert len(meta.searchable_fields) > 0
-
-    @pytest.mark.asyncio
-    async def test_meta_endpoint_returns_searchable_fields(self, http_client, auth_headers_admin):
-        resp = await http_client.get("/api/v1/_meta", headers=auth_headers_admin)
-        assert resp.status_code == 200
-        data = resp.json()
-        for entity in data["entities"]:
-            assert "searchable_fields" in entity
 
     def test_build_auto_controller(self):
         entities = EntityRegistry.get_entities()

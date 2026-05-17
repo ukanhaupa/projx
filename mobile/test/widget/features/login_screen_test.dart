@@ -3,32 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:projx_mobile/core/auth/auth_service.dart';
 import 'package:projx_mobile/core/providers/core_providers.dart';
 import 'package:projx_mobile/features/auth/login_screen.dart';
 
-class MockIsar extends Mock implements Isar {}
-
 class MockAuthService extends Mock implements AuthService {}
 
 void main() {
-  late MockIsar mockIsar;
   late SharedPreferences prefs;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
-    mockIsar = MockIsar();
   });
 
   Widget buildSubject({MockAuthService? auth}) {
     return ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        isarProvider.overrideWithValue(mockIsar),
         if (auth != null) authServiceProvider.overrideWithValue(auth),
       ],
       child: const MaterialApp(home: LoginScreen()),

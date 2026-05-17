@@ -10,11 +10,10 @@ describe('Fastify Drizzle app', () => {
     app = undefined;
   });
 
-  it('exposes empty generated metadata until entities are added', async () => {
+  it('does not expose /api/v1/_meta', async () => {
     app = await buildApp({ logger: false });
     const res = await app.inject({ method: 'GET', url: '/api/v1/_meta' });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ entities: [], orm: 'drizzle' });
+    expect(res.statusCode).toBe(404);
   });
 });

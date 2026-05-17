@@ -168,27 +168,7 @@ class EntityRegistry:
             router.include_router(ctrl.router, prefix=meta.api_prefix, tags=meta.api_tags)
             logger.debug(f"Mounted {meta.name} at {meta.api_prefix}")
 
-        router.add_api_route("/_meta", cls._meta_endpoint, methods=["GET"], tags=["meta"])
         return router
-
-    @classmethod
-    async def _meta_endpoint(cls) -> dict[str, Any]:
-        return {
-            "entities": [
-                {
-                    "name": m.name,
-                    "table_name": tn,
-                    "api_prefix": m.api_prefix,
-                    "tags": m.api_tags,
-                    "readonly": m.readonly,
-                    "soft_delete": m.soft_delete,
-                    "bulk_operations": m.bulk_operations and not m.readonly,
-                    "searchable_fields": m.searchable_fields,
-                    "fields": m.fields,
-                }
-                for tn, m in cls._entities.items()
-            ]
-        }
 
     @classmethod
     def get_entities(cls) -> dict[str, EntityMeta]:

@@ -103,26 +103,6 @@ export async function buildApp(
           `Mounted ${entityConfig.name} at /api/v1${entityConfig.apiPrefix}`,
         );
       }
-
-      instance.get(
-        '/_meta',
-        {
-          schema: {
-            tags: ['meta'],
-            response: {
-              200: {
-                type: 'object',
-                properties: {
-                  entities: { type: 'array' },
-                },
-              },
-            },
-          },
-        },
-        async () => {
-          return EntityRegistry.getMeta();
-        },
-      );
     },
     { prefix: '/api/v1' },
   );

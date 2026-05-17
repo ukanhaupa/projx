@@ -1,6 +1,6 @@
 _PUBLIC_PREFIXES = ("/docs", "/redoc", "/openapi.json")
 
-_AUTHN_ONLY_PREFIXES = ("/api/v1/_meta",)
+_AUTHN_ONLY_PREFIXES: tuple[str, ...] = ()
 _PUBLIC_EXACT = ("/api/", "/api/health")
 
 

@@ -30,18 +30,9 @@ describe('Express app', () => {
     });
   });
 
-  it('exposes entity metadata', async () => {
+  it('does not expose /api/v1/_meta', async () => {
     const res = await request(buildApp()).get('/api/v1/_meta');
 
-    expect(res.status).toBe(200);
-    expect(res.body.entities).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'AuditLog',
-          table_name: 'audit_logs',
-          api_prefix: '/audit-logs',
-        }),
-      ]),
-    );
+    expect(res.status).toBe(404);
   });
 });

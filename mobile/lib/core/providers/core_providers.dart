@@ -1,17 +1,14 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:projx_mobile/core/auth/auth_service.dart';
 import 'package:projx_mobile/core/auth/biometric_auth.dart';
 import 'package:projx_mobile/core/auth/secure_storage.dart';
 import 'package:projx_mobile/core/config/app_config.dart';
-import 'package:projx_mobile/core/network/api_client.dart';
 import 'package:projx_mobile/core/network/auth_interceptor.dart';
 import 'package:projx_mobile/core/network/logging_interceptor.dart';
 import 'package:projx_mobile/core/network/retry_interceptor.dart';
-import 'package:projx_mobile/entities/base/offline/sync_service.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) {
   return AppConfig.fromEnvironment();
@@ -21,10 +18,6 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError(
     'Must be overridden with actual SharedPreferences instance',
   );
-});
-
-final isarProvider = Provider<Isar>((ref) {
-  throw UnimplementedError('Must be overridden with actual Isar instance');
 });
 
 final secureStorageProvider = Provider<SecureStorage>((ref) {
@@ -68,10 +61,6 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(dio: ref.watch(dioProvider));
-});
-
 final authStateProvider = FutureProvider<bool>((ref) async {
   final authService = ref.watch(authServiceProvider);
   return authService.isAuthenticated();
@@ -87,13 +76,6 @@ final isOnlineProvider = Provider<bool>((ref) {
     data: (results) => !results.contains(ConnectivityResult.none),
     loading: () => true,
     error: (_, __) => true,
-  );
-});
-
-final syncServiceProvider = Provider<SyncService>((ref) {
-  return SyncService(
-    apiClient: ref.watch(apiClientProvider),
-    isar: ref.watch(isarProvider),
   );
 });
 

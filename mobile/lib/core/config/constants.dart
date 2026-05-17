@@ -1,9 +1,5 @@
 class ApiPaths {
-  static const String meta = '/api/v1/_meta';
   static const String health = '/api/health';
-  static String entityBase(String slug) => '/api/v1/$slug/';
-  static String entityById(String slug, String id) => '/api/v1/$slug/$id';
-  static String entityBulk(String slug) => '/api/v1/$slug/bulk';
 }
 
 class Pagination {
