@@ -2,34 +2,10 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { EntityConfig } from '../../src/types';
 
-// Mock dependencies
 vi.mock('../../src/auth', () => ({
   getUserInfo: vi.fn(() => ({ name: 'TestUser', email: 'test@example.com' })),
   logout: vi.fn(),
-}));
-
-vi.mock('../../src/entities', () => ({
-  getEntities: vi.fn((): EntityConfig[] => [
-    {
-      name: 'Products',
-      slug: 'products',
-      apiPrefix: '/products',
-      columns: [{ key: 'id', label: 'ID' }],
-      fields: [{ key: 'name', label: 'Name', type: 'text' as const }],
-    },
-    {
-      name: 'Orders',
-      slug: 'orders',
-      apiPrefix: '/orders',
-      columns: [{ key: 'id', label: 'ID' }],
-    },
-  ]),
-}));
-
-vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: vi.fn(),
 }));
 
 vi.mock('../../src/theme', () => ({
@@ -59,11 +35,9 @@ describe('Layout', () => {
     document.body.style.overflow = '';
   });
 
-  it('renders sidebar with entity nav links', () => {
+  it('renders Dashboard nav link', () => {
     renderLayout();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Products')).toBeInTheDocument();
-    expect(screen.getByText('Orders')).toBeInTheDocument();
   });
 
   it('renders skip-to-content link', () => {
@@ -126,7 +100,6 @@ describe('Layout', () => {
   it('escape key closes mobile sidebar', async () => {
     const user = userEvent.setup();
     renderLayout();
-    // Open sidebar first
     const menuBtn = screen.getByRole('button', {
       name: /open navigation menu/i,
     });
@@ -183,13 +156,6 @@ describe('Layout', () => {
       name: /switch to dark theme/i,
     });
     expect(themeBtn).toBeInTheDocument();
-  });
-
-  it('entity with fields shows filled icon, without shows empty icon', () => {
-    renderLayout();
-    const navIcons = document.querySelectorAll('.nav-icon');
-    // Dashboard icon + 2 entity icons = 3
-    expect(navIcons.length).toBe(3);
   });
 
   it('sidebar nav has correct aria-label', () => {

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { getUserInfo, logout } from '../auth';
-import { getEntities } from '../entities';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useTheme } from '../theme';
 
 const COLLAPSED_KEY = 'sidebar-collapsed';
@@ -21,11 +19,9 @@ function useCloseOnRouteChange(
 
 export function Layout() {
   const user = getUserInfo();
-  const entities = getEntities();
   const { theme, toggle } = useTheme();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  useKeyboardShortcuts();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(COLLAPSED_KEY) === 'true',
   );
@@ -86,7 +82,7 @@ export function Layout() {
               onClick={toggle}
               aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
             >
-              {theme === 'light' ? '\u263E' : '\u2600'}
+              {theme === 'light' ? '☾' : '☀'}
             </button>
             <button
               className='collapse-toggle'
@@ -94,7 +90,7 @@ export function Layout() {
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!collapsed}
             >
-              {collapsed ? '\u276F' : '\u276E'}
+              {collapsed ? '❯' : '❮'}
             </button>
           </div>
         </div>
@@ -102,18 +98,10 @@ export function Layout() {
         <div className='sidebar-nav' role='list'>
           <NavLink to='/' end role='listitem'>
             <span className='nav-icon' aria-hidden='true'>
-              {'\u25A0'}
+              {'■'}
             </span>
             <span className='nav-label'>Dashboard</span>
           </NavLink>
-          {entities.map((e) => (
-            <NavLink key={e.slug} to={`/${e.slug}`} role='listitem'>
-              <span className='nav-icon' aria-hidden='true'>
-                {e.fields ? '\u25A3' : '\u25A1'}
-              </span>
-              <span className='nav-label'>{e.name}</span>
-            </NavLink>
-          ))}
         </div>
 
         <div className='sidebar-footer'>

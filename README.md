@@ -90,8 +90,8 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 | `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                                 |
 | `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs (auth currently Prisma-only) |
 | `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, validation, security middleware, health checks                     |
-| `frontend` | React 19, TypeScript, Vite                                    | Auto-entity UI from `/_meta`, design tokens, light/dark mode                         |
-| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auto-entity screens, offline-first with Isar, biometric auth                         |
+| `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                        |
+| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                             |
 | `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                                |
 | `infra`    | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                  |
 
@@ -242,7 +242,6 @@ npx create-projx unpin <patterns...>
 npx create-projx pin --list
 npx create-projx doctor [--fix]
 npx create-projx gen entity <name> [--ai | --backend]
-npx create-projx sync [--url <url>]
 
 --components <list>    Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
 --name <dir>           Custom directory for `add <type>` (multi-instance)
@@ -315,7 +314,6 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 | Primary backend (fastapi) | `src/entities/<name>/_model.py` + `tests/test_<name>_entity.py` — model + 11 CRUD/auth tests |
 | Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + `tests/modules/<name>.test.ts` |
 | `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
-| `mobile`                  | `lib/entities/<name>/model.dart` — Dart class with fromJson/toJson/copyWith                  |
 
 **Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres). New entities ship green from day one — no scrambling to bolt on tests at go-live.
 
@@ -336,26 +334,6 @@ All four ORMs scaffold equivalent runtime behavior: `_base/auto-routes.ts` wires
 
 ORM-specific scaffolding lives in [cli/src/addons/orms/](cli/src/addons/orms/) — each ORM is a self-contained folder with a `manifest.json` (deps, file removals, scripts), `shared/` files, per-framework overlays, and `gen-entity/` templates. Adding a new ORM means adding a new folder there; no CLI core changes.
 
-### Sync Types
-
-Regenerate all frontend/mobile types from a running backend:
-
-```bash
-npx create-projx sync                                              # auto-detects URL
-npx create-projx sync --url http://localhost:8000/api/v1/_meta      # explicit URL
-```
-
-Fetches `/_meta` from your backend, generates typed interfaces for every entity. Run after any backend change — new field, renamed column, new entity.
-
-The generic `api.ts` client accepts type parameters:
-
-```tsx
-import type { Invoice } from "../types/invoice";
-
-const { data } = await api.list<Invoice>("/invoices"); // data: Invoice[]
-const item = await api.get<Invoice>("/invoices", id); // item: Invoice
-```
-
 ## Rename Component Directories
 
 Rename `fastapi/` to `backend/`? Just rename the folder — the `.projx-component` marker file moves with it. The `update` command auto-discovers where each component lives by scanning for these markers. No config changes needed.
@@ -373,7 +351,7 @@ CI, `scripts/setup.sh`, pre-commit hooks, and docker-compose are all regenerated
 my-app/
 ├── fastapi/                # Auto-entity CRUD backend
 │   └── .projx-component    # Identifies this as the fastapi component
-├── frontend/               # Auto-entity UI from /_meta
+├── frontend/               # React + Vite shell
 │   └── .projx-component
 ├── e2e/                    # Playwright E2E tests
 │   └── .projx-component
@@ -393,11 +371,11 @@ The core idea: define a data model, get everything else for free.
 
 **Backend** — Drop a model file. The registry auto-discovers it and generates CRUD routes, schemas, pagination, filtering, sorting, search, FK expansion, and OpenAPI docs.
 
-**Field privacy** — Sensitive columns (`password_hash`, `secret`, `api_key`, `mfa_secret`, etc.) are automatically stripped from API responses and `/_meta` via a built-in baseline. Add project-specific hidden fields per entity (`__hidden_fields__` in FastAPI, `hiddenFields` in Fastify). Mark entire entities as `__private__` / `private: true` to hide them from the API entirely — no routes registered, not listed in `/_meta`. The `/_meta` endpoint requires authentication on both backends.
+**Field privacy** — Sensitive columns (`password_hash`, `secret`, `api_key`, `mfa_secret`, etc.) are automatically stripped from API responses via a built-in baseline. Add project-specific hidden fields per entity (`__hidden_fields__` in FastAPI, `hiddenFields` in Fastify). Mark entire entities as `__private__` / `private: true` to hide them from the API entirely — no routes registered.
 
-**Frontend** — Fetches metadata from `GET /api/v1/_meta`, renders table + form UI automatically. Customize with overrides.
+**Frontend** — Ships a React shell with auth, theming, and design tokens. Build your own pages using the generated types from `gen entity`.
 
-**Mobile** — Same metadata endpoint, generates list/detail/form screens. Offline-first with local DB and sync queue.
+**Mobile** — Ships a Flutter shell with auth, biometric, and GoRouter scaffolding. Build screens using the generated Dart models from `gen entity`.
 
 ## Encrypted Service Config
 

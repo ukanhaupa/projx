@@ -32,21 +32,18 @@ class BaseModel_(Base):
     __table_args__ = {"extend_existing": True}
     __allow_unmapped__ = True
 
-    # ── Serialisation ────────────────────────────────────────────────────
     __hidden_fields__: set[str] = set()
     __searchable_fields__: set[str] = set()
 
-    # ── API configuration (set on subclasses) ────────────────────────────
-    __api_prefix__: str | None = None  # e.g. "/users" — defaults to tablename with hyphens
-    __api_tags__: list | None = None  # OpenAPI tags — defaults to [api_prefix]
-    __readonly__: bool = False  # True = only GET endpoints registered
-    __private__: bool = False  # True = entity hidden from auto-discovery (no routes, not in /_meta)
-    __soft_delete__: bool = False  # True = adds deleted_at column, filters by default
-    __bulk_operations__: bool = True  # True = registers /bulk endpoints
-    __create_fields__: set[str] | None = None  # Fields allowed on create (None = all non-base)
-    __update_fields__: set[str] | None = None  # Fields allowed on update (None = all non-base)
+    __api_prefix__: str | None = None
+    __api_tags__: list | None = None
+    __readonly__: bool = False
+    __private__: bool = False
+    __soft_delete__: bool = False
+    __bulk_operations__: bool = True
+    __create_fields__: set[str] | None = None
+    __update_fields__: set[str] | None = None
 
-    # ── Base columns ─────────────────────────────────────────────────────
     id = Column(
         BigInteger,
         primary_key=True,

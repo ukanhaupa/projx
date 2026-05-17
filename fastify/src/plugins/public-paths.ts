@@ -5,7 +5,7 @@ const PUBLIC_PREFIXES = [
   '/swagger',
 ];
 const PUBLIC_EXACT = new Set(['/api/', '/api/health']);
-const AUTHN_ONLY_PREFIXES = ['/api/v1/_meta'];
+const AUTHN_ONLY_PREFIXES: string[] = [];
 
 export function isPublicPath(path: string): boolean {
   return (

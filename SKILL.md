@@ -46,9 +46,6 @@ npx create-projx@latest update
 # Generate a new entity
 npx create-projx gen entity <name> --fields "field1:type,field2:type"
 
-# Sync frontend/mobile types from running backend
-npx create-projx sync
-
 # Health check
 npx create-projx doctor [--fix]
 ```
@@ -99,8 +96,6 @@ npx create-projx doctor [--fix]
    - new component → `npx create-projx add <component>`
    - template upgrade → `npx create-projx@latest update`
 
-5. **Sync types after backend changes** — `npx create-projx sync`.
-
 ## Anti-patterns — do not do these
 
 - Do **not** hand-write `package.json`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/`, or `setup.sh`. Projx generates all of these.
@@ -117,8 +112,8 @@ npx create-projx doctor [--fix]
 | `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                  |
 | `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth (Prisma only), typed schemas, OpenAPI docs |
 | `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, validation, security middleware, health checks      |
-| `frontend` | React 19, TypeScript, Vite                                    | Auto-entity UI from `/_meta`, design tokens, light/dark mode          |
-| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auto-entity screens, offline-first with Isar                          |
+| `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                         |
+| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                              |
 | `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                 |
 | `infra`    | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                   |
 

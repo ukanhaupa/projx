@@ -47,13 +47,6 @@ void main() {
         throwsA(isA<UnimplementedError>()));
   });
 
-  test('isarProvider throws unless overridden', () {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    expect(
-        () => container.read(isarProvider), throwsA(isA<UnimplementedError>()));
-  });
-
   group('themeModeProvider', () {
     test('defaults to light when no preference is set', () async {
       final prefs = await SharedPreferences.getInstance();

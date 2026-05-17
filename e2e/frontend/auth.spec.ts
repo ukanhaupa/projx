@@ -19,7 +19,7 @@ test.describe('Authentication Flow', () => {
   test('accessing protected route without auth redirects to login', async ({
     page,
   }) => {
-    await page.goto('/some-entity');
+    await page.goto('/some-protected-route');
     const login = new LoginPage(page);
     await expect(login.form).toBeVisible();
   });

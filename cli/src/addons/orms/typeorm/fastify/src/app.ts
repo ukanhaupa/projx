@@ -10,7 +10,6 @@ import authzPlugin from './plugins/authz.js';
 import requestIdPlugin from './plugins/request-id.js';
 import swaggerPlugin from './plugins/swagger.js';
 import { checkDatabase, closeDatabase, dataSource } from './db/data-source.js';
-import { listEntities } from './modules/_base/index.js';
 // projx-anchor: entity-imports
 
 export interface BuildAppOptions {
@@ -62,12 +61,6 @@ export async function buildApp(
       }
       return reply.send({ status: 'healthy', checks });
     },
-  );
-
-  app.get(
-    '/api/v1/_meta',
-    { config: { public: true }, schema: { tags: ['meta'] } },
-    async () => ({ entities: listEntities(), orm: 'typeorm' }),
   );
 
   // projx-anchor: entity-registrations

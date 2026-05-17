@@ -99,7 +99,6 @@ On next startup, auto-discovery registers all routes:
 - `DELETE /api/v1/my-entities/{id}` -- delete
 - `POST /api/v1/my-entities/bulk` -- bulk create
 - `DELETE /api/v1/my-entities/bulk` -- bulk delete
-- `GET /api/v1/_meta` -- entity metadata (authn-only, no authz)
 
 No controller, service, or repository files needed. The registry auto-generates an `_AutoController` with typed Pydantic schemas derived from the SQLAlchemy model columns.
 
@@ -115,13 +114,13 @@ class MyEntity(BaseModel_):
     __api_prefix__ = "/my-entities"        # default: tablename with hyphens
     __api_tags__ = ["my-entities"]          # default: [api_prefix]
     __readonly__ = False                    # True = only GET endpoints (list + get)
-    __private__ = False                    # True = entity hidden from API entirely (no routes, not in /_meta)
+    __private__ = False                    # True = entity hidden from API entirely (no routes registered)
     __soft_delete__ = False                 # True = soft delete via deleted_at timestamp
     __bulk_operations__ = True              # True = /bulk endpoints
 
     # Field config
     __searchable_fields__ = {"name"}        # full-text search fields (default: all String/Text columns)
-    __hidden_fields__ = {"secret"}          # excluded from API responses and /_meta
+    __hidden_fields__ = {"secret"}          # excluded from API responses
     __create_fields__ = {"name", "email"}   # allowed fields on POST (default: all non-auto)
     __update_fields__ = {"name"}            # allowed fields on PATCH (default: all non-auto)
 ```
@@ -183,10 +182,10 @@ Only override the methods you need to change. The naming convention `{ModelName}
 
 JWT-based authentication with three provider modes:
 
-| Provider        | Config                                       | Use Case                           |
-| --------------- | -------------------------------------------- | ---------------------------------- |
-| `shared_secret` | `JWT_SECRET`                                 | Development, simple setups         |
-| `public_key`    | `JWT_PUBLIC_KEY` (PEM)                       | Static key verification            |
+| Provider        | Config                                       | Use Case                                  |
+| --------------- | -------------------------------------------- | ----------------------------------------- |
+| `shared_secret` | `JWT_SECRET`                                 | Development, simple setups                |
+| `public_key`    | `JWT_PUBLIC_KEY` (PEM)                       | Static key verification                   |
 | `jwks`          | `JWT_JWKS_URL` or inferred from `JWT_ISSUER` | Any OIDC provider (Keycloak, Auth0, etc.) |
 
 When `JWT_PROVIDER=auto` (default), the provider is inferred: JWKS URL present -> `jwks`, public key present -> `public_key`, otherwise -> `shared_secret`.
@@ -227,7 +226,6 @@ Permissions are read from the JWT payload. Supported formats:
 ### Public and Auth-Only Paths
 
 - **Public** (no auth): `/docs`, `/redoc`, `/openapi.json`, `/api/`, `/api/health`
-- **Auth-only** (authn required, no authz): `/api/v1/_meta`
 - **All other `/api/v1/` paths**: require both authentication and authorization
 
 ## Query Features
@@ -353,27 +351,27 @@ To correlate logs across services, pass your own `X-Request-ID` header in the re
 
 ## Environment Variables
 
-| Variable                  | Default                              | Description                                                         |
-| ------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
-| `SQLALCHEMY_DATABASE_URI` | --                                   | Database connection string (async driver required)                  |
-| `CORS_ALLOW_ORIGINS`      | `http://localhost, http://127.0.0.1` | Comma-separated allowed origins                                     |
-| `LOG_LEVEL`               | `DEBUG`                              | Loguru log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)            |
-| `DB_STATEMENT_TIMEOUT`    | `5`                                  | Database statement timeout in seconds                               |
-| `DB_POOL_SIZE`            | `10`                                 | SQLAlchemy connection pool size                                     |
-| `DB_MAX_OVERFLOW`         | `20`                                 | Max overflow connections above pool size                            |
-| `JWT_PROVIDER`            | `auto`                               | `shared_secret` / `public_key` / `jwks` / `auto`                    |
-| `JWT_SECRET`              | --                                   | HMAC key (shared_secret mode)                                       |
-| `JWT_PUBLIC_KEY`          | --                                   | PEM public key (public_key mode)                                    |
-| `JWT_JWKS_URL`            | --                                   | JWKS endpoint URL (jwks mode)                                       |
-| `JWT_ALGORITHMS`          | `RS256`                              | Comma-separated allowed algorithms                                  |
-| `JWT_ISSUER`              | --                                   | Expected token issuer (also used to infer JWKS URL)                 |
-| `JWT_AUDIENCE`            | --                                   | Expected token audience                                             |
-| `JWT_REQUIRE_EXP`         | `true`                               | Require `exp` claim in token                                        |
-| `JWT_VERIFY_NBF`          | `true`                               | Verify `nbf` (not before) claim                                     |
-| `JWT_VERIFY_IAT`          | `false`                              | Verify `iat` (issued at) claim                                      |
-| `JWT_JWKS_TIMEOUT_MS`     | `3000`                               | JWKS fetch timeout in milliseconds                                  |
-| `JWT_JWKS_CACHE_TTL_SEC`  | `300`                                | JWKS cache TTL in seconds                                           |
-| `JWT_JWKS_CACHE_MAX_KEYS` | `100`                                | Max keys in JWKS cache                                              |
+| Variable                  | Default                              | Description                                              |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------- |
+| `SQLALCHEMY_DATABASE_URI` | --                                   | Database connection string (async driver required)       |
+| `CORS_ALLOW_ORIGINS`      | `http://localhost, http://127.0.0.1` | Comma-separated allowed origins                          |
+| `LOG_LEVEL`               | `DEBUG`                              | Loguru log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
+| `DB_STATEMENT_TIMEOUT`    | `5`                                  | Database statement timeout in seconds                    |
+| `DB_POOL_SIZE`            | `10`                                 | SQLAlchemy connection pool size                          |
+| `DB_MAX_OVERFLOW`         | `20`                                 | Max overflow connections above pool size                 |
+| `JWT_PROVIDER`            | `auto`                               | `shared_secret` / `public_key` / `jwks` / `auto`         |
+| `JWT_SECRET`              | --                                   | HMAC key (shared_secret mode)                            |
+| `JWT_PUBLIC_KEY`          | --                                   | PEM public key (public_key mode)                         |
+| `JWT_JWKS_URL`            | --                                   | JWKS endpoint URL (jwks mode)                            |
+| `JWT_ALGORITHMS`          | `RS256`                              | Comma-separated allowed algorithms                       |
+| `JWT_ISSUER`              | --                                   | Expected token issuer (also used to infer JWKS URL)      |
+| `JWT_AUDIENCE`            | --                                   | Expected token audience                                  |
+| `JWT_REQUIRE_EXP`         | `true`                               | Require `exp` claim in token                             |
+| `JWT_VERIFY_NBF`          | `true`                               | Verify `nbf` (not before) claim                          |
+| `JWT_VERIFY_IAT`          | `false`                              | Verify `iat` (issued at) claim                           |
+| `JWT_JWKS_TIMEOUT_MS`     | `3000`                               | JWKS fetch timeout in milliseconds                       |
+| `JWT_JWKS_CACHE_TTL_SEC`  | `300`                                | JWKS cache TTL in seconds                                |
+| `JWT_JWKS_CACHE_MAX_KEYS` | `100`                                | Max keys in JWKS cache                                   |
 
 ## Entry Points
 
@@ -389,12 +387,12 @@ To correlate logs across services, pass your own `X-Request-ID` header in the re
 
 ## Key Dependencies
 
-| Package        | Purpose                                                                      |
-| -------------- | ---------------------------------------------------------------------------- |
-| FastAPI        | Web framework                                                                |
+| Package        | Purpose                                                |
+| -------------- | ------------------------------------------------------ |
+| FastAPI        | Web framework                                          |
 | SQLAlchemy 2.x | Async ORM (asyncpg for PostgreSQL, aiomysql for MySQL) |
-| Alembic        | Database migrations                                                          |
-| Pydantic 2.x   | Runtime schema generation and validation                                     |
-| PyJWT          | JWT verification                                                             |
-| Loguru         | Structured logging with request ID correlation                               |
-| Ruff           | Linting and formatting                                                       |
+| Alembic        | Database migrations                                    |
+| Pydantic 2.x   | Runtime schema generation and validation               |
+| PyJWT          | JWT verification                                       |
+| Loguru         | Structured logging with request ID correlation         |
+| Ruff           | Linting and formatting                                 |

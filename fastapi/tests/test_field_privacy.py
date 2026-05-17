@@ -136,30 +136,6 @@ class TestEntityLevelPrivate:
         )
 
     @pytest.mark.asyncio
-    async def test_private_entity_not_in_meta(self, http_client, auth_headers_admin):
-        resp = await http_client.get("/api/v1/_meta", headers=auth_headers_admin)
-        assert resp.status_code == 200
-        names = [e["table_name"] for e in resp.json()["entities"]]
-        assert "hidden_entities" not in names
-
-    @pytest.mark.asyncio
     async def test_private_entity_routes_not_registered(self, http_client, auth_headers_admin):
         resp = await http_client.get("/api/v1/hidden-entities/", headers=auth_headers_admin)
         assert resp.status_code == 404
-
-
-class TestMetaStripsHiddenFields:
-    @pytest.mark.asyncio
-    async def test_meta_omits_explicit_hidden_field(self, http_client, auth_headers_admin):
-        EntityRegistry.reset()
-        EntityRegistry.auto_discover()
-        resp = await http_client.get("/api/v1/_meta", headers=auth_headers_admin)
-        assert resp.status_code == 200
-        secret_widget = next(
-            (e for e in resp.json()["entities"] if e["table_name"] == "secret_widgets"),
-            None,
-        )
-        assert secret_widget is not None
-        keys = [f["key"] for f in secret_widget["fields"]]
-        assert "internal_note" not in keys
-        assert "password_hash" not in keys

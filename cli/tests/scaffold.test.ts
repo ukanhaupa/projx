@@ -136,14 +136,14 @@ describe('scaffold', () => {
       join(dest, 'fastify/src/app.ts'),
       'utf-8',
     );
-    expect(fastifyApp).toContain("orm: 'drizzle'");
+    expect(fastifyApp).toContain("app.decorate('db', db)");
     expect(fastifyApp).not.toContain('EntityRegistry');
 
     const expressApp = await readFile(
       join(dest, 'express/src/app.ts'),
       'utf-8',
     );
-    expect(expressApp).toContain("orm: 'drizzle'");
+    expect(expressApp).toContain('app.locals.db = db');
     expect(expressApp).not.toContain('EntityRegistry');
 
     const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
@@ -206,7 +206,7 @@ describe('scaffold', () => {
       join(dest, 'fastify/src/app.ts'),
       'utf-8',
     );
-    expect(fastifyApp).toContain("orm: 'sequelize'");
+    expect(fastifyApp).toContain("app.decorate('sequelize', sequelize)");
     expect(fastifyApp).toContain('// projx-anchor: entity-imports');
     expect(fastifyApp).toContain('// projx-anchor: entity-registrations');
 
@@ -273,7 +273,7 @@ describe('scaffold', () => {
       join(dest, 'fastify/src/app.ts'),
       'utf-8',
     );
-    expect(fastifyApp).toContain("orm: 'typeorm'");
+    expect(fastifyApp).toContain('await dataSource.initialize()');
     expect(fastifyApp).toContain("import 'reflect-metadata'");
 
     const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
