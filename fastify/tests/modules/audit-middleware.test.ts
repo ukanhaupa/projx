@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  EntityRegistry,
-  type EntityConfig,
-  type FieldMeta,
-} from '../../src/modules/_base/entity-registry.js';
+import type { EntityConfig } from '../../src/modules/_base/entity-registry.js';
 import { Type } from '@sinclair/typebox';
 import Fastify, { type FastifyInstance } from 'fastify';
 import errorHandler from '../../src/plugins/error-handler.js';
@@ -35,94 +31,12 @@ function makeConfig(overrides: Partial<EntityConfig> = {}): EntityConfig {
     bulkOperations: false,
     columnNames: ['id', 'name', 'created_at', 'updated_at'],
     searchableFields: ['name'],
-    fields: [],
     schema: dummySchema,
     createSchema: Type.Object({ name: Type.String() }),
     updateSchema: Type.Object({ name: Type.Optional(Type.String()) }),
     ...overrides,
   };
 }
-
-describe('FieldMeta new fields', () => {
-  it('getMeta returns searchable, foreign_key_target, in_create, in_update when provided', () => {
-    EntityRegistry.reset();
-
-    const fields: FieldMeta[] = [
-      {
-        key: 'id',
-        label: 'Id',
-        type: 'str',
-        nullable: false,
-        is_auto: true,
-        is_primary_key: true,
-        filterable: true,
-        searchable: false,
-        has_foreign_key: false,
-        in_create: false,
-        in_update: false,
-        field_type: 'text',
-      },
-      {
-        key: 'name',
-        label: 'Name',
-        type: 'str',
-        nullable: false,
-        is_auto: false,
-        is_primary_key: false,
-        filterable: true,
-        searchable: true,
-        has_foreign_key: false,
-        in_create: true,
-        in_update: true,
-        field_type: 'text',
-      },
-      {
-        key: 'category_id',
-        label: 'Category',
-        type: 'str',
-        nullable: false,
-        is_auto: false,
-        is_primary_key: false,
-        filterable: true,
-        searchable: false,
-        has_foreign_key: true,
-        foreign_key_target: 'categories',
-        in_create: true,
-        in_update: false,
-        field_type: 'text',
-      },
-    ];
-
-    EntityRegistry.register(
-      makeConfig({
-        tableName: 'fieldmeta_test',
-        columnNames: ['id', 'name', 'category_id', 'created_at', 'updated_at'],
-        fields,
-      }),
-    );
-
-    const meta = EntityRegistry.getMeta();
-    const entity = meta.entities.find(
-      (e) => e.table_name === 'fieldmeta_test',
-    ) as Record<string, unknown>;
-    const entityFields = entity.fields as FieldMeta[];
-
-    const nameField = entityFields.find((f) => f.key === 'name')!;
-    expect(nameField.searchable).toBe(true);
-    expect(nameField.in_create).toBe(true);
-    expect(nameField.in_update).toBe(true);
-
-    const categoryField = entityFields.find((f) => f.key === 'category_id')!;
-    expect(categoryField.has_foreign_key).toBe(true);
-    expect(categoryField.foreign_key_target).toBe('categories');
-    expect(categoryField.in_create).toBe(true);
-    expect(categoryField.in_update).toBe(false);
-
-    const idField = entityFields.find((f) => f.key === 'id')!;
-    expect(idField.in_create).toBe(false);
-    expect(idField.in_update).toBe(false);
-  });
-});
 
 describe('Custom controller support', () => {
   it('customRoutes overrides default registerEntityRoutes', async () => {

@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import * as p from '@clack/prompts';
 import {
   type PackageManager,
+  cleanupRepo,
   discoverComponentsFromMarkers,
+  downloadRepo,
   pmCommands,
   readProjxConfig,
   toKebab,
@@ -1239,9 +1240,12 @@ function generateExpressTest(config: EntityConfig): string {
   return lines.join('\n');
 }
 
-function addonGenEntityPath(orm: string, fileName: string): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  return join(thisFile, '../../src/addons/orms', orm, 'gen-entity', fileName);
+function addonGenEntityPath(
+  repoDir: string,
+  orm: string,
+  fileName: string,
+): string {
+  return join(repoDir, 'addons', 'orms', orm, 'gen-entity', fileName);
 }
 
 function sampleValue(field: EntityField): string {
@@ -1296,11 +1300,12 @@ function insertAtAnchor(
 }
 
 async function fillTemplate(
+  repoDir: string,
   orm: string,
   fileName: string,
   vars: Record<string, string>,
 ): Promise<string> {
-  const path = addonGenEntityPath(orm, fileName);
+  const path = addonGenEntityPath(repoDir, orm, fileName);
   if (!existsSync(path)) {
     throw new Error(`Addon template not found: ${path}`);
   }
@@ -1504,6 +1509,7 @@ function buildTypeormEntityVars(config: EntityConfig): TypeormEntityVars {
 }
 
 async function appendTypeormEntity(
+  repoDir: string,
   cwd: string,
   dir: string,
   framework: 'fastify' | 'express',
@@ -1517,7 +1523,12 @@ async function appendTypeormEntity(
   await mkdir(entitiesDir, { recursive: true });
   const entityPath = join(entitiesDir, `${kebab}.ts`);
   if (!existsSync(entityPath)) {
-    const entitySource = await fillTemplate('typeorm', 'entity.ts', vars);
+    const entitySource = await fillTemplate(
+      repoDir,
+      'typeorm',
+      'entity.ts',
+      vars,
+    );
     await writeFile(entityPath, entitySource);
     generated.push(`${dir}/src/entities/${kebab}.ts`);
   }
@@ -1543,6 +1554,7 @@ async function appendTypeormEntity(
   if (!existsSync(moduleDir)) {
     await mkdir(moduleDir, { recursive: true });
     const routerSource = await fillTemplate(
+      repoDir,
       'typeorm',
       framework === 'fastify' ? 'fastify-router.ts' : 'express-router.ts',
       vars,
@@ -1579,6 +1591,7 @@ async function appendTypeormEntity(
   const testFile = join(testsDir, `${kebab}.test.ts`);
   if (!existsSync(testFile)) {
     const testSource = await fillTemplate(
+      repoDir,
       'typeorm',
       framework === 'fastify' ? 'fastify-test.ts' : 'express-test.ts',
       vars,
@@ -1593,6 +1606,7 @@ async function appendTypeormEntity(
 }
 
 async function appendSequelizeEntity(
+  repoDir: string,
   cwd: string,
   dir: string,
   framework: 'fastify' | 'express',
@@ -1606,7 +1620,12 @@ async function appendSequelizeEntity(
   await mkdir(modelsDir, { recursive: true });
   const modelPath = join(modelsDir, `${kebab}.ts`);
   if (!existsSync(modelPath)) {
-    const modelSource = await fillTemplate('sequelize', 'model.ts', vars);
+    const modelSource = await fillTemplate(
+      repoDir,
+      'sequelize',
+      'model.ts',
+      vars,
+    );
     await writeFile(modelPath, modelSource);
     generated.push(`${dir}/src/models/${kebab}.ts`);
   }
@@ -1632,6 +1651,7 @@ async function appendSequelizeEntity(
   if (!existsSync(moduleDir)) {
     await mkdir(moduleDir, { recursive: true });
     const routerSource = await fillTemplate(
+      repoDir,
       'sequelize',
       framework === 'fastify' ? 'fastify-router.ts' : 'express-router.ts',
       vars,
@@ -1668,6 +1688,7 @@ async function appendSequelizeEntity(
   const testFile = join(testsDir, `${kebab}.test.ts`);
   if (!existsSync(testFile)) {
     const testSource = await fillTemplate(
+      repoDir,
       'sequelize',
       framework === 'fastify' ? 'fastify-test.ts' : 'express-test.ts',
       vars,
@@ -1682,6 +1703,7 @@ async function appendSequelizeEntity(
 }
 
 async function appendDrizzleEntity(
+  repoDir: string,
   cwd: string,
   dir: string,
   framework: 'fastify' | 'express',
@@ -1740,6 +1762,7 @@ async function appendDrizzleEntity(
   if (!existsSync(moduleDir)) {
     await mkdir(moduleDir, { recursive: true });
     const routerSource = await fillTemplate(
+      repoDir,
       'drizzle',
       framework === 'fastify' ? 'fastify-router.ts' : 'express-router.ts',
       vars,
@@ -1776,6 +1799,7 @@ async function appendDrizzleEntity(
   const testFile = join(testsDir, `${kebab}.test.ts`);
   if (!existsSync(testFile)) {
     const testSource = await fillTemplate(
+      repoDir,
       'drizzle',
       framework === 'fastify' ? 'fastify-test.ts' : 'express-test.ts',
       vars,
@@ -1854,6 +1878,7 @@ export async function gen(
   entityName: string,
   fieldsFlag?: string,
   backendFlag?: BackendTarget,
+  localRepo?: string,
 ): Promise<void> {
   p.intro(`projx gen entity ${entityName}`);
 
@@ -1867,6 +1892,45 @@ export async function gen(
     (projxData.packageManager as PackageManager) ?? 'npm';
   const pm = pmCommands(pmName);
   const orm = (projxData.orm as string | undefined) ?? 'prisma';
+  const needsAddon =
+    orm === 'drizzle' || orm === 'sequelize' || orm === 'typeorm';
+  const repoDir = needsAddon
+    ? await downloadRepo(localRepo).catch((err) => {
+        p.cancel(`Failed to fetch templates: ${(err as Error).message}`);
+        process.exit(1);
+      })
+    : '';
+  const isLocal = Boolean(localRepo);
+
+  try {
+    return await runGen({
+      cwd,
+      entityName,
+      fieldsFlag,
+      backendFlag,
+      pm,
+      orm,
+      repoDir,
+    });
+  } finally {
+    if (needsAddon && repoDir) {
+      await cleanupRepo(repoDir, isLocal);
+    }
+  }
+}
+
+interface RunGenOpts {
+  cwd: string;
+  entityName: string;
+  fieldsFlag?: string;
+  backendFlag?: BackendTarget;
+  pm: ReturnType<typeof pmCommands>;
+  orm: string;
+  repoDir: string;
+}
+
+async function runGen(opts: RunGenOpts): Promise<void> {
+  const { cwd, entityName, fieldsFlag, backendFlag, pm, orm, repoDir } = opts;
 
   const { components: discovered, paths: componentPaths } =
     await discoverComponentsFromMarkers(cwd);
@@ -2026,6 +2090,7 @@ export async function gen(
 
   if (genFastify && orm === 'drizzle') {
     await appendDrizzleEntity(
+      repoDir,
       cwd,
       componentPaths.fastify,
       'fastify',
@@ -2034,6 +2099,7 @@ export async function gen(
     );
   } else if (genFastify && orm === 'sequelize') {
     await appendSequelizeEntity(
+      repoDir,
       cwd,
       componentPaths.fastify,
       'fastify',
@@ -2042,6 +2108,7 @@ export async function gen(
     );
   } else if (genFastify && orm === 'typeorm') {
     await appendTypeormEntity(
+      repoDir,
       cwd,
       componentPaths.fastify,
       'fastify',
@@ -2120,6 +2187,7 @@ export async function gen(
 
   if (genExpress && orm === 'drizzle') {
     await appendDrizzleEntity(
+      repoDir,
       cwd,
       componentPaths.express,
       'express',
@@ -2128,6 +2196,7 @@ export async function gen(
     );
   } else if (genExpress && orm === 'sequelize') {
     await appendSequelizeEntity(
+      repoDir,
       cwd,
       componentPaths.express,
       'express',
@@ -2136,6 +2205,7 @@ export async function gen(
     );
   } else if (genExpress && orm === 'typeorm') {
     await appendTypeormEntity(
+      repoDir,
       cwd,
       componentPaths.express,
       'express',

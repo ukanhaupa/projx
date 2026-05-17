@@ -17,24 +17,6 @@ export const BUILT_IN_PRIVATE_COLUMNS = new Set([
   'encryption_key',
 ]);
 
-export interface FieldMeta {
-  key: string;
-  label: string;
-  type: string;
-  nullable: boolean;
-  is_auto: boolean;
-  is_primary_key: boolean;
-  filterable: boolean;
-  searchable?: boolean;
-  has_foreign_key: boolean;
-  foreign_key_target?: string;
-  in_create?: boolean;
-  in_update?: boolean;
-  field_type: string;
-  max_length?: number;
-  options?: string[];
-}
-
 export type CustomRouteRegistrar = (
   fastify: import('fastify').FastifyInstance,
   entityConfig: EntityConfig,
@@ -81,8 +63,6 @@ export interface EntityConfig {
   hiddenFields?: string[];
   private?: boolean;
   skipAutoRoutes?: boolean;
-  fields?: FieldMeta[];
-  fieldOverrides?: Record<string, Partial<FieldMeta>>;
   schema: TObject<TProperties>;
   createSchema: TObject<TProperties>;
   updateSchema: TObject<TProperties>;
@@ -125,69 +105,23 @@ interface DmmfModel {
   fields: DmmfField[];
 }
 
-interface DmmfEnum {
-  name: string;
-  values: Array<{ name: string }>;
-}
-
 interface SkippedEntity {
   name: string;
   tableName: string;
   reason: string;
 }
 
-function datamodel(): { models: DmmfModel[]; enums: DmmfEnum[] } {
-  const raw = Prisma.dmmf.datamodel as unknown as {
-    models?: DmmfModel[];
-    enums?: DmmfEnum[];
-  };
-  return { models: raw.models ?? [], enums: raw.enums ?? [] };
+function models(): DmmfModel[] {
+  const raw = Prisma.dmmf.datamodel as unknown as { models?: DmmfModel[] };
+  return raw.models ?? [];
 }
 
 function findModel(modelName: string): DmmfModel | undefined {
-  return datamodel().models.find((model) => model.name === modelName);
+  return models().find((model) => model.name === modelName);
 }
 
 function scalarFields(model: DmmfModel): DmmfField[] {
   return model.fields.filter((field) => field.kind !== 'object');
-}
-
-function titleize(key: string): string {
-  return key
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function typeMeta(field: DmmfField): Pick<FieldMeta, 'type' | 'field_type'> {
-  if (field.kind === 'enum') return { type: 'str', field_type: 'select' };
-  switch (field.type) {
-    case 'Int':
-    case 'BigInt':
-      return { type: 'int', field_type: 'number' };
-    case 'Float':
-    case 'Decimal':
-      return { type: 'float', field_type: 'number' };
-    case 'Boolean':
-      return { type: 'bool', field_type: 'checkbox' };
-    case 'DateTime':
-      return { type: 'datetime', field_type: 'datetime' };
-    case 'Json':
-      return { type: 'dict', field_type: 'textarea' };
-    default:
-      return { type: 'str', field_type: 'text' };
-  }
-}
-
-function relationTargets(model: DmmfModel): Map<string, string> {
-  const targets = new Map<string, string>();
-  for (const field of model.fields) {
-    if (field.kind !== 'object') continue;
-    for (const source of field.relationFromFields ?? []) {
-      targets.set(source, field.type);
-    }
-  }
-  return targets;
 }
 
 function schemaKeys(schema: TObject<TProperties>): Set<string> {
@@ -197,53 +131,12 @@ function schemaKeys(schema: TObject<TProperties>): Set<string> {
   return new Set(Object.keys(props));
 }
 
-function deriveFields(config: EntityConfig, model: DmmfModel): FieldMeta[] {
-  const relationMap = relationTargets(model);
-  const createKeys = schemaKeys(config.createSchema);
-  const updateKeys = schemaKeys(config.updateSchema);
-  const existing = new Map(
-    (config.fields ?? []).map((field) => [field.key, field]),
-  );
-  const enumValues = new Map(
-    datamodel().enums.map((item) => [
-      item.name,
-      item.values.map((value) => value.name),
-    ]),
-  );
-
-  return scalarFields(model).map((field) => {
-    const baseType = typeMeta(field);
-    const base: FieldMeta = {
-      key: field.name,
-      label: titleize(field.name),
-      ...baseType,
-      nullable: !field.isRequired,
-      is_auto:
-        field.hasDefaultValue || field.isUpdatedAt === true || field.isId,
-      is_primary_key: field.isId,
-      filterable: field.type !== 'Json',
-      searchable: field.type === 'String' ? true : undefined,
-      has_foreign_key: relationMap.has(field.name),
-      foreign_key_target: relationMap.get(field.name),
-      in_create: createKeys.has(field.name),
-      in_update: updateKeys.has(field.name),
-      options: field.kind === 'enum' ? enumValues.get(field.type) : undefined,
-    };
-    return {
-      ...base,
-      ...(existing.get(field.name) ?? {}),
-      ...(config.fieldOverrides?.[field.name] ?? {}),
-    };
-  });
-}
-
 function normalizeConfig(config: EntityConfig): EntityConfig {
   const model = findModel(config.prismaModel);
   if (!model) return config;
   return {
     ...config,
     columnNames: scalarFields(model).map((field) => field.name),
-    fields: deriveFields(config, model),
   };
 }
 
@@ -328,24 +221,6 @@ class EntityRegistryClass {
   reset(): void {
     this.entities.clear();
     this.skipped.clear();
-  }
-
-  getMeta(): { entities: Array<Record<string, unknown>> } {
-    return {
-      entities: this.getAll().map((entity) => {
-        const hidden = entity._effectiveHiddenFields ?? new Set<string>();
-        return {
-          name: entity.name,
-          table_name: entity.tableName,
-          api_prefix: entity.apiPrefix,
-          tags: entity.tags,
-          readonly: entity.readonly,
-          soft_delete: entity.softDelete,
-          bulk_operations: entity.bulkOperations && !entity.readonly,
-          fields: (entity.fields ?? []).filter((f) => !hidden.has(f.key)),
-        };
-      }),
-    };
   }
 }
 

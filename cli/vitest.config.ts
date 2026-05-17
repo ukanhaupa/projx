@@ -12,7 +12,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/templates/**',
-        'src/addons/**',
         'src/index.ts',
         'src/init.ts',
         'src/update.ts',

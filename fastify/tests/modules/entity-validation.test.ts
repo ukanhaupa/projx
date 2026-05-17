@@ -19,7 +19,6 @@ describe('Entity Registration Validation', () => {
           bulkOperations: false,
           columnNames: ['id', 'name', 'created_at', 'updated_at'],
           searchableFields: [],
-          fields: [],
           schema: dummySchema,
           createSchema: dummySchema,
           updateSchema: dummySchema,
@@ -40,7 +39,6 @@ describe('Entity Registration Validation', () => {
           bulkOperations: false,
           columnNames: ['id', 'name', 'deleted_at', 'created_at', 'updated_at'],
           searchableFields: [],
-          fields: [],
           schema: dummySchema,
           createSchema: dummySchema,
           updateSchema: dummySchema,
@@ -64,7 +62,6 @@ describe('Entity Registration Validation', () => {
           bulkOperations: false,
           columnNames: ['id', 'name', 'created_at', 'updated_at'],
           searchableFields: ['name', 'typo_field'],
-          fields: [],
           schema: dummySchema,
           createSchema: dummySchema,
           updateSchema: dummySchema,
@@ -91,7 +88,6 @@ describe('Entity Registration Validation', () => {
             'updated_at',
           ],
           searchableFields: ['name', 'description'],
-          fields: [],
           schema: dummySchema,
           createSchema: dummySchema,
           updateSchema: dummySchema,
@@ -117,19 +113,6 @@ describe('Entity Registration Validation', () => {
       bulkOperations: true,
       columnNames: ['id', 'name', 'created_at', 'updated_at'],
       searchableFields: ['name'],
-      fields: [
-        {
-          key: 'name',
-          label: 'Name',
-          type: 'str',
-          nullable: false,
-          is_auto: false,
-          is_primary_key: false,
-          filterable: true,
-          has_foreign_key: false,
-          field_type: 'text',
-        },
-      ],
       schema: dummySchema,
       createSchema: dummySchema,
       updateSchema: dummySchema,
@@ -158,31 +141,6 @@ describe('Entity Registration Validation', () => {
       expect(EntityRegistry.getAll()).toHaveLength(1);
       EntityRegistry.reset();
       expect(EntityRegistry.getAll()).toHaveLength(0);
-    });
-
-    it('getMeta returns entity metadata', () => {
-      EntityRegistry.register(validEntity);
-      const meta = EntityRegistry.getMeta();
-      expect(meta.entities).toHaveLength(1);
-      expect(meta.entities[0].name).toBe('Item');
-      expect(meta.entities[0].table_name).toBe('items');
-      expect(meta.entities[0].api_prefix).toBe('/items');
-      expect(meta.entities[0].tags).toEqual(['items']);
-      expect(meta.entities[0].readonly).toBe(false);
-      expect(meta.entities[0].soft_delete).toBe(false);
-      expect(meta.entities[0].bulk_operations).toBe(true);
-      expect(meta.entities[0].fields).toHaveLength(1);
-    });
-
-    it('getMeta: readonly entity reports bulk_operations as false', () => {
-      EntityRegistry.register({
-        ...validEntity,
-        tableName: 'readonly_items',
-        readonly: true,
-        bulkOperations: true,
-      });
-      const meta = EntityRegistry.getMeta();
-      expect(meta.entities[0].bulk_operations).toBe(false);
     });
 
     it('derives columnNames from Prisma DMMF when omitted', () => {
@@ -217,60 +175,6 @@ describe('Entity Registration Validation', () => {
         'created_at',
         'updated_at',
       ]);
-    });
-
-    it('derives field metadata from Prisma DMMF and applies overrides', () => {
-      EntityRegistry.register({
-        ...validEntity,
-        name: 'ServiceConfig',
-        tableName: 'service_configs',
-        prismaModel: 'ServiceConfig',
-        apiPrefix: '/service-configs',
-        searchableFields: ['purpose'],
-        schema: Type.Object({
-          id: Type.String(),
-          purpose: Type.String(),
-          config: Type.String(),
-          is_active: Type.Boolean(),
-          created_at: Type.String(),
-          updated_at: Type.String(),
-        }),
-        createSchema: Type.Object({
-          purpose: Type.String(),
-          config: Type.String(),
-        }),
-        updateSchema: Type.Object({}),
-        fields: undefined,
-        fieldOverrides: {
-          config: {
-            label: 'Encrypted Config',
-            field_type: 'textarea',
-            filterable: false,
-          },
-        },
-      });
-
-      const fields = EntityRegistry.get('service_configs')?.fields ?? [];
-      expect(fields.map((field) => field.key)).toEqual([
-        'id',
-        'purpose',
-        'config',
-        'is_active',
-        'created_at',
-        'updated_at',
-      ]);
-      expect(fields.find((field) => field.key === 'id')?.is_primary_key).toBe(
-        true,
-      );
-      expect(fields.find((field) => field.key === 'is_active')?.type).toBe(
-        'bool',
-      );
-      expect(fields.find((field) => field.key === 'config')?.label).toBe(
-        'Encrypted Config',
-      );
-      expect(fields.find((field) => field.key === 'config')?.filterable).toBe(
-        false,
-      );
     });
 
     it('fails loud when a required Prisma field is neither accepted nor filled before create', () => {

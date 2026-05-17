@@ -131,7 +131,13 @@ describe('gen entity', () => {
       REPO_DIR,
     );
 
-    await gen(dest, 'invoice', 'name:string:unique,amount:number,paid:boolean');
+    await gen(
+      dest,
+      'invoice',
+      'name:string:unique,amount:number,paid:boolean',
+      undefined,
+      REPO_DIR,
+    );
 
     const schemaPath = join(dest, 'express/src/db/schema.ts');
     const schema = await readFile(schemaPath, 'utf-8');
@@ -172,7 +178,13 @@ describe('gen entity', () => {
       REPO_DIR,
     );
 
-    await gen(dest, 'invoice', 'name:string,amount:number');
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
 
     const modelSrc = await readFile(
       join(dest, 'fastify/src/models/invoice.ts'),
@@ -226,7 +238,13 @@ describe('gen entity', () => {
       REPO_DIR,
     );
 
-    await gen(dest, 'invoice', 'name:string,amount:number');
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
 
     const entitySrc = await readFile(
       join(dest, 'fastify/src/entities/invoice.ts'),

@@ -5,7 +5,6 @@ export {
   ensureEffectiveHiddenFields,
   BUILT_IN_PRIVATE_COLUMNS,
   type EntityConfig,
-  type FieldMeta,
   type CustomRouteRegistrar,
 } from './entity-registry.js';
 export { registerEntityRoutes } from './auto-routes.js';

@@ -351,7 +351,7 @@ async function main(): Promise<void> {
       : flags.backend
         ? ('fastify' as const)
         : undefined;
-    await gen(process.cwd(), entityName, fieldsFlag, backendFlag);
+    await gen(process.cwd(), entityName, fieldsFlag, backendFlag, localRepo);
     return;
   }
 
