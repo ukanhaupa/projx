@@ -63,24 +63,45 @@ features/<feature>/
 {
   "name": "auth",
   "summary": "Password + JWT auth with email verification, MFA, password reset, sessions",
-  "supports": ["fastify"],
-  "requires": { "fastify": [] },
-  "requiresOrm": ["prisma"],
+  "supports": ["fastify", "fastapi", "express"],
+  "requires": { "fastify": [], "fastapi": [], "express": [] },
+  "requiresOrm": ["prisma", "drizzle", "sequelize", "typeorm"],
   "env": {
-    "fastify": [
-      "JWT_SECRET", "JWT_ACCESS_TTL", "JWT_REFRESH_TTL",
-      "BOOTSTRAP_ADMIN_EMAIL",
-      "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM",
-      "APP_URL", "AUTH_BACKGROUND_JOBS"
+    "fastify": ["JWT_SECRET", "FRONTEND_URL", "AUTH_BACKGROUND_JOBS"],
+    "express": ["JWT_SECRET", "FRONTEND_URL", "AUTH_BACKGROUND_JOBS"],
+    "fastapi": [
+      "JWT_SECRET",
+      "JWT_ALGORITHMS",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS",
+      "AUTH_CLEANUP_INTERVAL_SECONDS"
     ]
-  },
-  "deps": { "fastify": { ... } }
+  }
 }
 ```
 
 `requires` validates compatibility — adding auth to the frontend without a backend that ships it = error.
 
-`requiresOrm` (optional) restricts the feature to specific Node ORMs. When set, `applyFeatures` errors before any file I/O if the project's `--orm` isn't in the list. The auth feature declares `["prisma"]` because its schemas, migrations, and queries are Prisma-specific. A scaffold like `--components fastify --orm drizzle --auth fastify` fails fast with `Feature "auth" requires --orm prisma (got "drizzle").` Omit `requiresOrm` (or leave it as an empty array) for ORM-agnostic features.
+`requiresOrm` (optional) restricts the feature to specific Node ORMs. When set, `applyFeatures` errors before any file I/O if the project's `--orm` isn't in the list. A scaffold mismatching the list fails fast with `Feature "auth" requires --orm <list> (got "<orm>").` Omit `requiresOrm` (or leave it as an empty array) for ORM-agnostic features. The `auth` feature itself ships on all four Node ORMs plus fastapi — see the nested layout below for how ORM-specific bits coexist with shared ones.
+
+### Nested layout: `common/` + `<orm>/`
+
+A stack that supports multiple ORMs can split its files between shared and ORM-specific subtrees:
+
+```
+features/<name>/<stack>/
+  common/
+    files/    # rendered into every ORM's scaffold
+    patches/  # applied first; overridable per-ORM
+  <orm>/      # one folder per supported ORM
+    files/    # applied on top of common/ (overwrites same-named files)
+    patches/  # applied after common/ patches; if a patch filename appears in both, the ORM one wins
+```
+
+The loader applies `common/` first, then the ORM-specific overlay. Same-named patches in `<orm>/` skip the `common/` version (so prisma-specific `03-app-plugins.patch.json` can replace a shared default cleanly). Flat `<stack>/{files,patches}` is still supported for single-ORM stacks (fastapi) or backwards compatibility.
+
+Concrete example: `features/auth/fastify/common/files/src/modules/auth/{index,password,mfa,mailer}.ts` is the shared core; `features/auth/fastify/{prisma,drizzle,sequelize,typeorm}/files/src/modules/auth/{routes,session,verification-jobs}.ts` ships the ORM-specific query layer.
 
 ### Patches
 

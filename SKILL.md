@@ -61,11 +61,11 @@ npx create-projx doctor [--fix]
 
 **Choosing a Node ORM** (`--orm <provider>`, applies to `fastify` + `express`):
 
-- Default and recommended for auto-CRUD + feature templates (auth) → `prisma`
+- Default and recommended for auto-CRUD → `prisma`
 - Explicit SQL, drizzle-kit migrations, lighter runtime → `drizzle`
 - Active-record style models, broad legacy familiarity → `sequelize`
 - Decorator-based entities, large existing TypeORM codebase → `typeorm`
-- Auth feature currently only ships with `prisma`. Picking another ORM rules out `--auth`.
+- The `auth` feature ships on all four ORMs for both `fastify` and `express`, and on `fastapi`. `--auth=<backend>` works regardless of `--orm`.
 
 **Components to include**:
 
@@ -107,15 +107,15 @@ npx create-projx doctor [--fix]
 
 ## Available components
 
-| Component  | Stack                                                         | What you get                                                          |
-| ---------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                  |
-| `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth (Prisma only), typed schemas, OpenAPI docs |
-| `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, validation, security middleware, health checks      |
-| `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                         |
-| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                              |
-| `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                 |
-| `infra`    | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                   |
+| Component  | Stack                                                         | What you get                                                               |
+| ---------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                       |
+| `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                    |
+| `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks |
+| `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                              |
+| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                   |
+| `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                      |
+| `infra`    | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                        |
 
 ## Example invocations
 
