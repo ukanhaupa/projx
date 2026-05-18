@@ -449,7 +449,9 @@ describe('applyFeature', () => {
     await mkdir(join(featureDir, 'fastify/common/files/src'), {
       recursive: true,
     });
-    await mkdir(join(featureDir, 'fastify/common/patches'), { recursive: true });
+    await mkdir(join(featureDir, 'fastify/common/patches'), {
+      recursive: true,
+    });
     await mkdir(join(featureDir, 'fastify/drizzle/files/src'), {
       recursive: true,
     });
@@ -513,16 +515,10 @@ describe('applyFeature', () => {
       vars: { projectName: 'demo', orm: 'drizzle' },
     });
 
-    const shared = await readFile(
-      join(dest, 'api/src/shared.ts'),
-      'utf-8',
-    );
+    const shared = await readFile(join(dest, 'api/src/shared.ts'), 'utf-8');
     expect(shared).toContain("FROM = 'common'");
 
-    const overlap = await readFile(
-      join(dest, 'api/src/overlap.ts'),
-      'utf-8',
-    );
+    const overlap = await readFile(join(dest, 'api/src/overlap.ts'), 'utf-8');
     expect(overlap).toContain("OVERLAP = 'drizzle'");
 
     const drizzleOnly = await readFile(
