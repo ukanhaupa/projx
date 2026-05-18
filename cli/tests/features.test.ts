@@ -116,8 +116,18 @@ describe('applyFeature', () => {
   });
 
   afterEach(async () => {
-    await rm(dest, { recursive: true, force: true });
-    await rm(featureRoot, { recursive: true, force: true });
+    await rm(dest, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
+    await rm(featureRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   async function setupFeature(): Promise<void> {
@@ -357,7 +367,12 @@ describe('applyFeature', () => {
       const content = await readFile(join(dest, 'api/auth.ts'), 'utf-8');
       expect(content).toContain('// auth');
     } finally {
-      await rm(fakeRepo, { recursive: true, force: true });
+      await rm(fakeRepo, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -376,7 +391,12 @@ describe('applyFeature', () => {
         }),
       ).rejects.toThrow(/Feature "auth" not found/);
     } finally {
-      await rm(fakeRepo, { recursive: true, force: true });
+      await rm(fakeRepo, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -393,7 +413,12 @@ describe('applyFeature', () => {
         vars: {},
       });
     } finally {
-      await rm(fakeRepo, { recursive: true, force: true });
+      await rm(fakeRepo, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     }
   });
 

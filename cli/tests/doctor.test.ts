@@ -12,7 +12,13 @@ describe('doctor', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('passes on a healthy scaffolded project', async () => {

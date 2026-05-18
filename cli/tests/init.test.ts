@@ -15,7 +15,13 @@ describe('init workflow', () => {
   let tmp: string;
 
   afterEach(async () => {
-    if (tmp) await rm(tmp, { recursive: true, force: true });
+    if (tmp)
+      await rm(tmp, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('detects components in an existing project structure', async () => {
@@ -126,7 +132,13 @@ describe('init — guard rails', () => {
   const origExit = process.exit;
 
   afterEach(async () => {
-    if (tmp) await rm(tmp, { recursive: true, force: true });
+    if (tmp)
+      await rm(tmp, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     process.exit = origExit;
   });
 

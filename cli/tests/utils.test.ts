@@ -212,7 +212,12 @@ describe('readFileOrNull', () => {
     const f = join(tmp, 'test.txt');
     await writeFile(f, 'hello');
     expect(await readFileOrNull(f)).toBe('hello');
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('returns null for missing file', async () => {
@@ -229,7 +234,12 @@ describe('upsertComponentMarker', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('writes marker file with singular component', async () => {
@@ -272,7 +282,12 @@ describe('readComponentMarker — schema migration', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('reads old format with components plural and origin', async () => {
@@ -353,7 +368,12 @@ describe('writeProjxConfig — schema migration', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('preserves arbitrary user fields via spread', async () => {
@@ -410,7 +430,12 @@ describe('detectPackageManagerFromComponents', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('detects pnpm from fastify dir lockfile', async () => {
@@ -470,7 +495,12 @@ describe('discoverComponentsFromMarkers — multi-instance', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('returns one instance per marker dir, including duplicates of same type', async () => {
@@ -517,7 +547,12 @@ describe('discoverComponentPaths', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('discovers renamed component directories', async () => {
@@ -563,7 +598,12 @@ describe('detectPackageManager', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('detects pnpm from lockfile', async () => {
@@ -698,7 +738,12 @@ describe('replaceInFile', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('replaces text in file', async () => {
@@ -729,7 +774,12 @@ describe('replaceInDir', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('replaces in matching files recursively', async () => {
