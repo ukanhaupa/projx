@@ -43,6 +43,7 @@ MOBILE_DART=$(echo "$STAGED_FILES" | grep '^mobile/.*\.dart$' || true)
 INFRA_TF=$(echo "$STAGED_FILES" | grep '^infra/.*\.tf$' || true)
 CLI_SRC_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
 CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/.*\.ts$' || true)
+CLI_ALL=$(echo "$STAGED_FILES" | grep '^cli/' || true)
 
 # ── FastAPI ───────────────────────────────────────────────────────
 if [ -n "$FASTAPI_PY" ]; then
@@ -129,16 +130,19 @@ if [ -n "$INFRA_TF" ]; then
 fi
 
 # ── CLI ───────────────────────────────────────────────────────────
-if [ -n "$CLI_TS" ]; then
-  echo "Linting & typechecking CLI..."
+if [ -n "$CLI_ALL" ]; then
+  echo "Formatting & checking CLI..."
   cd cli
-  echo "$CLI_TS" | sed 's|^cli/||' | xargs npx eslint --fix
-  npx tsc --noEmit
+  echo "$CLI_ALL" | sed 's|^cli/||' | xargs npx prettier --write --ignore-unknown
+  if [ -n "$CLI_TS" ]; then
+    echo "$CLI_TS" | sed 's|^cli/||' | xargs npx eslint --fix
+    npx tsc --noEmit
+  fi
   if [ -n "$CLI_SRC_TS" ]; then
     npx tsup src/index.ts --format esm --target node18 --clean
   fi
   cd ..
-  echo "$CLI_TS" | xargs git add
+  echo "$CLI_ALL" | xargs git add
 fi
 
 # ── Addons / Features (overlays) ──────────────────────────────────
