@@ -22,6 +22,8 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       e2e: ${{ steps.filter.outputs.e2e }}
       infra: ${{ steps.filter.outputs.infra }}
+      addons: ${{ steps.filter.outputs.addons }}
+      features: ${{ steps.filter.outputs.features }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
@@ -44,6 +46,10 @@ jobs:
               - 'e2e/**'
             infra:
               - 'infra/**'
+            addons:
+              - 'addons/**'
+            features:
+              - 'features/**'
 
   secrets:
     name: Secret scan
@@ -260,3 +266,51 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  scaffold-matrix:
+    name: Scaffold matrix (${{ matrix.framework }}/${{ matrix.orm }})
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.addons == 'true' ||
+      needs.changes.outputs.features == 'true' ||
+      needs.changes.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - framework: fastify
+            orm: drizzle
+          - framework: fastify
+            orm: sequelize
+          - framework: fastify
+            orm: typeorm
+          - framework: express
+            orm: drizzle
+          - framework: express
+            orm: sequelize
+          - framework: express
+            orm: typeorm
+          - framework: fastapi
+            orm: none
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - run: pnpm build
+        working-directory: cli
+      - if: matrix.framework == 'fastapi'
+        uses: astral-sh/setup-uv@v3
+      - if: matrix.framework == 'fastapi'
+        working-directory: fastapi
+        run: uv sync --group dev
+      - run: scripts/ci-scaffold-matrix.sh ${{ matrix.framework }} ${{ matrix.orm }}

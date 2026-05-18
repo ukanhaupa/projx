@@ -140,3 +140,22 @@ if [ -n "$CLI_TS" ]; then
   cd ..
   echo "$CLI_TS" | xargs git add
 fi
+
+# ── Addons / Features (overlays) ──────────────────────────────────
+OVERLAY_STAGED=$(echo "$STAGED_FILES" | grep -E '^(addons|features)/' || true)
+if [ -n "$OVERLAY_STAGED" ]; then
+  echo "Formatting addons/features overlays..."
+  OVERLAY_PRETTIER=$(echo "$OVERLAY_STAGED" | grep -E '\.(ts|tsx|js|jsx|json|md|yml|yaml)$' || true)
+  if [ -n "$OVERLAY_PRETTIER" ]; then
+    echo "$OVERLAY_PRETTIER" | xargs npx --prefix cli prettier --write --ignore-unknown
+    echo "$OVERLAY_PRETTIER" | xargs git add
+  fi
+  OVERLAY_RUFF=$(echo "$OVERLAY_STAGED" | grep '^features/auth/fastapi/.*\.py$' || true)
+  if [ -n "$OVERLAY_RUFF" ] && [ -x fastapi/.venv/bin/ruff ]; then
+    # shellcheck disable=SC2086
+    fastapi/.venv/bin/ruff format $OVERLAY_RUFF
+    # shellcheck disable=SC2086
+    fastapi/.venv/bin/ruff check --fix $OVERLAY_RUFF
+    echo "$OVERLAY_RUFF" | xargs git add
+  fi
+fi
