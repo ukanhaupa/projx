@@ -443,4 +443,174 @@ describe('applyFeature', () => {
     );
     expect(marker.features).toContain('sample');
   });
+
+  it('applies common/ first, then ORM overlay; same-named patches win for ORM', async () => {
+    const featureDir = join(featureRoot, 'sample');
+    await mkdir(join(featureDir, 'fastify/common/files/src'), {
+      recursive: true,
+    });
+    await mkdir(join(featureDir, 'fastify/common/patches'), { recursive: true });
+    await mkdir(join(featureDir, 'fastify/drizzle/files/src'), {
+      recursive: true,
+    });
+    await mkdir(join(featureDir, 'fastify/drizzle/patches'), {
+      recursive: true,
+    });
+
+    await writeFile(
+      join(featureDir, 'feature.json'),
+      JSON.stringify({
+        name: 'sample',
+        summary: 'Sample',
+        supports: ['fastify'],
+        requiresOrm: ['drizzle'],
+      }),
+    );
+
+    await writeFile(
+      join(featureDir, 'fastify/common/files/src/shared.ts'),
+      "export const FROM = 'common';\n",
+    );
+    await writeFile(
+      join(featureDir, 'fastify/common/files/src/overlap.ts'),
+      "export const OVERLAP = 'common';\n",
+    );
+    await writeFile(
+      join(featureDir, 'fastify/drizzle/files/src/overlap.ts'),
+      "export const OVERLAP = 'drizzle';\n",
+    );
+    await writeFile(
+      join(featureDir, 'fastify/drizzle/files/src/drizzle-only.ts'),
+      "export const FROM = 'drizzle';\n",
+    );
+
+    await writeFile(
+      join(featureDir, 'fastify/common/patches/01-plugin.patch.json'),
+      JSON.stringify({
+        type: 'text',
+        file: 'src/app.ts',
+        anchor: '// projx-anchor: routes',
+        insert: '  await app.register(commonPlugin);\n',
+      }),
+    );
+    await writeFile(
+      join(featureDir, 'fastify/drizzle/patches/01-plugin.patch.json'),
+      JSON.stringify({
+        type: 'text',
+        file: 'src/app.ts',
+        anchor: '// projx-anchor: routes',
+        insert: '  await app.register(drizzlePlugin);\n',
+      }),
+    );
+
+    await setupTargetInstance();
+
+    await applyFeature({
+      feature: 'sample',
+      featureRoot,
+      targets: [{ component: 'fastify', instance: 'api', path: 'api' }],
+      dest,
+      vars: { projectName: 'demo', orm: 'drizzle' },
+    });
+
+    const shared = await readFile(
+      join(dest, 'api/src/shared.ts'),
+      'utf-8',
+    );
+    expect(shared).toContain("FROM = 'common'");
+
+    const overlap = await readFile(
+      join(dest, 'api/src/overlap.ts'),
+      'utf-8',
+    );
+    expect(overlap).toContain("OVERLAP = 'drizzle'");
+
+    const drizzleOnly = await readFile(
+      join(dest, 'api/src/drizzle-only.ts'),
+      'utf-8',
+    );
+    expect(drizzleOnly).toContain("FROM = 'drizzle'");
+
+    const app = await readFile(join(dest, 'api/src/app.ts'), 'utf-8');
+    expect(app).toContain('drizzlePlugin');
+    expect(app).not.toContain('commonPlugin');
+  });
+
+  it('supports position: "before" on text patches', async () => {
+    const featureDir = join(featureRoot, 'sample');
+    await mkdir(join(featureDir, 'fastify/files'), { recursive: true });
+    await mkdir(join(featureDir, 'fastify/patches'), { recursive: true });
+
+    await writeFile(
+      join(featureDir, 'feature.json'),
+      JSON.stringify({
+        name: 'sample',
+        summary: 'Sample',
+        supports: ['fastify'],
+      }),
+    );
+    await writeFile(
+      join(featureDir, 'fastify/patches/01-before.patch.json'),
+      JSON.stringify({
+        type: 'text',
+        file: 'src/app.ts',
+        anchor: '// projx-anchor: routes',
+        insert: '  // before-anchor\n',
+        position: 'before',
+      }),
+    );
+
+    await setupTargetInstance();
+
+    await applyFeature({
+      feature: 'sample',
+      featureRoot,
+      targets: [{ component: 'fastify', instance: 'api', path: 'api' }],
+      dest,
+      vars: {},
+    });
+
+    const app = await readFile(join(dest, 'api/src/app.ts'), 'utf-8');
+    const beforeIdx = app.indexOf('// before-anchor');
+    const anchorIdx = app.indexOf('// projx-anchor: routes');
+    expect(beforeIdx).toBeGreaterThan(-1);
+    expect(beforeIdx).toBeLessThan(anchorIdx);
+  });
+
+  it('throws when package-json patch targets a missing package.json', async () => {
+    const featureDir = join(featureRoot, 'sample');
+    await mkdir(join(featureDir, 'fastify/patches'), { recursive: true });
+
+    await writeFile(
+      join(featureDir, 'feature.json'),
+      JSON.stringify({
+        name: 'sample',
+        summary: 'Sample',
+        supports: ['fastify'],
+      }),
+    );
+    await writeFile(
+      join(featureDir, 'fastify/patches/01-pkg.patch.json'),
+      JSON.stringify({
+        type: 'package-json',
+        merge: { dependencies: { foo: '^1.0.0' } },
+      }),
+    );
+
+    await mkdir(join(dest, 'api/src'), { recursive: true });
+    await writeFile(
+      join(dest, 'api/src/app.ts'),
+      "import fastify from 'fastify';\n",
+    );
+
+    await expect(
+      applyFeature({
+        feature: 'sample',
+        featureRoot,
+        targets: [{ component: 'fastify', instance: 'api', path: 'api' }],
+        dest,
+        vars: {},
+      }),
+    ).rejects.toThrow(/package-json patch failed.*not found/i);
+  });
 });
