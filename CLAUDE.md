@@ -84,7 +84,7 @@ The CLI has these subcommands (see [cli/src/index.ts](cli/src/index.ts) `parseAr
 - `gen` — entity generators
 - `sync` — pull types from a running backend
 
-Feature flags: `--<feature>=<component>[:<instance>][,...]`. Only `--auth` is implemented today; see [docs/feature-templates.md](docs/feature-templates.md) for the standard. Known features live in `KNOWN_FEATURES` in [cli/src/utils.ts](cli/src/utils.ts). Manifests may set `requiresOrm: ["prisma", ...]` — [cli/src/features.ts](cli/src/features.ts) validates this against the project's `--orm` before any file I/O and errors with `Feature "<name>" requires --orm <list> (got "<orm>").`. The auth feature currently declares `requiresOrm: ["prisma"]`; porting it to other ORMs requires rewriting its schemas, migrations, and queries (kept as a follow-up).
+Feature flags: `--<feature>=<component>[:<instance>][,...]`. Only `--auth` is implemented today; see [docs/feature-templates.md](docs/feature-templates.md) for the standard. Known features live in `KNOWN_FEATURES` in [cli/src/utils.ts](cli/src/utils.ts). Manifests may set `requiresOrm: ["prisma", ...]` — [cli/src/features.ts](cli/src/features.ts) validates this against the project's `--orm` before any file I/O and errors with `Feature "<name>" requires --orm <list> (got "<orm>").`. The auth feature ships across all three backends and all four Node ORMs (`requiresOrm: ["prisma", "drizzle", "sequelize", "typeorm"]`, `supports: ["fastify", "fastapi", "express"]`).
 
 ## Local development loop
 
@@ -183,11 +183,11 @@ Strip docstrings, TODOs, and explainer comments from lifted code. Well-named ide
 
 The standard is in [docs/feature-templates.md](docs/feature-templates.md). Key points:
 
-- A feature lives at `features/<name>/<stack>/{files,patches}/`.
-- `feature.json` at `features/<name>/` declares `supports`, `env`, `requires`.
+- A feature lives at `features/<name>/<stack>/{files,patches}/` (flat) or `features/<name>/<stack>/common/{files,patches}/` + `features/<name>/<stack>/<orm>/{files,patches}/` (nested). The loader applies `common/` first, then the ORM-specific overlay; same-named patches in `<orm>/` override `common/`. Use nested for ORM-multi features; flat for fastapi or single-ORM stacks.
+- `feature.json` at `features/<name>/` declares `supports`, `env`, `requires`, and optional `requiresOrm`.
 - Patches are JSON: `package-json` (object merge) or `text` (anchor-based insert). Apply mechanism is in [cli/src/features.ts](cli/src/features.ts), idempotent via sentinel comments.
 - `applyFeatures` runs after the base copy in `scaffold.ts`.
-- Currently shipped: `auth/fastify` (signup, login, MFA, password reset, sessions, refresh rotation with replay detection, email verification, mailer, cron-driven cleanup).
+- Currently shipped: `auth` across all 9 backend × ORM combinations — fastify + {prisma, drizzle, sequelize, typeorm}, express + {prisma, drizzle, sequelize, typeorm}, fastapi. Same external surface (signup, login, MFA, password reset, sessions, refresh rotation with replay detection, email verification, mailer, cron-driven cleanup) on every port; ORM-specific bits live under `features/auth/<stack>/<orm>/`, shared bits under `features/auth/<stack>/common/`.
 
 When adapting code from sister projects (docusift, ops-pilot, memoria), strip business specifics: tenant orchestration, billing plans, queue scheduling, grace windows, UTM tracking. Keep the security hardening: rotation, lockout, recovery codes, request_id propagation.
 
