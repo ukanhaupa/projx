@@ -22,7 +22,13 @@ describe('default-skip — scenario A: fresh scaffold', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('fresh scaffold writes default skip patterns to .projx + markers', async () => {
@@ -234,7 +240,13 @@ describe('default-skip — scenario C: add new component', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it("add applies the new component's default skip to its marker", async () => {
@@ -273,7 +285,13 @@ describe('default-skip — scenario D: pinned vs unpinned behavior', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('pinned package.json with template change is left alone (no merge attempted)', async () => {
@@ -323,7 +341,13 @@ describe('default-skip — scenario E: legacy migration', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('legacy project (no defaultsApplied) gets defaults on first update', async () => {
@@ -438,7 +462,13 @@ describe('default-skip — scenario F: renamed component dirs', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('renamed component dir (fastify→backend) still gets default skip on legacy migration', async () => {
@@ -499,7 +529,13 @@ describe('default-skip — scenario G: pinned-update notification', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('findPinnedFilesWithUpdates reports nothing when pinned files match template', async () => {

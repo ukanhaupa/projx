@@ -15,7 +15,13 @@ describe('update', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('preserves user-created files through update', async () => {
@@ -228,7 +234,13 @@ describe('update — schema migration on legacy projects', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('migrates .projx with legacy components array', async () => {
@@ -373,7 +385,13 @@ describe('update — pre-commit / ci.yml rename rendering', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('generates AI_PY/BACKEND_TS bash vars when dirs are renamed (after unpinning pre-commit)', async () => {
@@ -457,7 +475,13 @@ describe('findFilesWithConflictMarkers', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('finds files with conflict markers', async () => {
@@ -523,7 +547,13 @@ describe('update — packageManager auto-sync', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('syncs .projx.packageManager from lockfile when mismatched', async () => {

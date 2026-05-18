@@ -13,7 +13,12 @@ describe('detectComponents', () => {
   });
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true });
+    await rm(tmp, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
   });
 
   it('detects fastapi from pyproject.toml', async () => {

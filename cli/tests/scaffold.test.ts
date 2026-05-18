@@ -17,7 +17,13 @@ describe('scaffold', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('scaffolds a project with fastify + frontend', async () => {
@@ -578,7 +584,13 @@ describe('scaffold install paths (mocked)', () => {
   });
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
     vi.restoreAllMocks();
   });
 
@@ -657,7 +669,13 @@ describe.each(PMS)('scaffold with %s', (pm) => {
   const cmd = pmCommands(pm);
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('stores packageManager in .projx', async () => {

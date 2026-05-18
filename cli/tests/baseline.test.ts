@@ -55,7 +55,13 @@ describe('skip patterns in update', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it("skip: ['src/**'] excludes source from template overlay", async () => {
@@ -128,7 +134,13 @@ describe('3-way merge', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('preserves user additions when template changes different lines', async () => {
@@ -198,7 +210,13 @@ describe('tier 1: git merge via worktree', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('clean merge when user has no changes', async () => {
@@ -330,7 +348,13 @@ describe('tier 2: per-file 3-way merge', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('preserves user-added lines in shared files', async () => {
@@ -554,7 +578,13 @@ describe('tier 3: direct copy fallback', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('writeTemplateToDir does not delete user-created files', async () => {
@@ -685,7 +715,13 @@ describe('cross-tier edge cases', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('scaffold → modify → update → modify → update preserves across two cycles', async () => {
@@ -815,7 +851,13 @@ describe('writeTemplateToDir — extraInstances', () => {
   let dest: string;
 
   afterEach(async () => {
-    if (dest) await rm(dest, { recursive: true, force: true });
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
   });
 
   it('renders a secondary instance dir alongside the primary', async () => {
@@ -826,7 +868,12 @@ describe('writeTemplateToDir — extraInstances', () => {
       REPO_DIR,
     );
 
-    await rm(join(dest, 'email-ingestor'), { recursive: true, force: true });
+    await rm(join(dest, 'email-ingestor'), {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
 
     const paths: ComponentPaths = {
       fastapi: 'fastapi',
