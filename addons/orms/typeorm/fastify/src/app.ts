@@ -10,6 +10,7 @@ import authzPlugin from './plugins/authz.js';
 import requestIdPlugin from './plugins/request-id.js';
 import swaggerPlugin from './plugins/swagger.js';
 import { checkDatabase, closeDatabase, dataSource } from './db/data-source.js';
+// projx-anchor: imports
 // projx-anchor: entity-imports
 
 export interface BuildAppOptions {
@@ -46,6 +47,8 @@ export async function buildApp(
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
   await app.register(authzPlugin);
+
+  // projx-anchor: plugins
 
   app.get(
     '/api/health',

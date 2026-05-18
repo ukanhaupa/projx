@@ -8,6 +8,7 @@ import pinoHttp from 'pino-http';
 import { allowedOrigins, config } from './config.js';
 import { ApiError, errorHandler, notFoundHandler } from './errors.js';
 import { checkDatabase, db } from './db/client.js';
+// projx-anchor: imports
 // projx-anchor: entity-imports
 
 const requestId: RequestHandler = (req, res, next) => {
@@ -53,6 +54,8 @@ export function buildApp(): express.Express {
       legacyHeaders: false,
     }),
   );
+
+  // projx-anchor: plugins
 
   app.get('/api/health', async (_req, res) => {
     const checks: Record<string, string> = { app: 'ok' };

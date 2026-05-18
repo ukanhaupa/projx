@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/app.ts",
+  "anchor": "// projx-anchor: plugins",
+  "insert": "  app.use('/auth', authRouter(app.locals.db));\n  initMailer(() => getServiceConfig(app.locals.db, 'smtp'), { info: console.log, warn: console.warn, error: console.error }).catch((err) => console.error('initMailer failed', err));\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(app.locals.db, { info: console.log, warn: console.warn, error: console.error });\n  }\n"
+}

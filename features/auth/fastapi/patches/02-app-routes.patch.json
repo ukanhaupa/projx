@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/app.py",
+  "anchor": "# projx-anchor: routers",
+  "insert": "from src.auth import router as auth_router\n\napp.include_router(auth_router, prefix=\"/api/v1\")\n"
+}

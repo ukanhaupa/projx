@@ -543,7 +543,7 @@ export function render(
   vars: Record<string, unknown>,
 ): string {
   const lines = template.split('\n');
-  return renderLines(lines, vars).replace(/\n{3,}/g, '\n\n');
+  return renderLines(lines, vars).replace(/\n{4,}/g, '\n\n\n');
 }
 
 function evalExpr(expr: string, vars: Record<string, unknown>): unknown {

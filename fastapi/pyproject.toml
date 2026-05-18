@@ -19,6 +19,7 @@ dependencies = [
     "aiomysql>=0.2.0,<0.4.0",
     "pyjwt>=2.10.1,<3.0.0",
     "cryptography>=47.0.0,<48.0.0",
+    # projx-anchor: deps
 ]
 
 [tool.uv]

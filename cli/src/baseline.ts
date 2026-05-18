@@ -711,9 +711,11 @@ async function applyOrmAddon(
   }
 
   const pkgPath = join(dir, 'package.json');
-  const pkg = await readJsonObject(pkgPath);
-  applyPackageOverrides(pkg, manifest.packageOverrides);
-  await writeJsonObject(pkgPath, pkg);
+  if (existsSync(pkgPath)) {
+    const pkg = await readJsonObject(pkgPath);
+    applyPackageOverrides(pkg, manifest.packageOverrides);
+    await writeJsonObject(pkgPath, pkg);
+  }
 
   const addonRoot = join(repoDir, 'addons', 'orms', orm);
   const sharedSrc = join(addonRoot, 'shared');
