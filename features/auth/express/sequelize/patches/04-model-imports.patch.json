@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/models/index.ts",
+  "anchor": "// projx-anchor: model-imports",
+  "insert": "import { User } from './user.js';\nimport { RefreshToken } from './refresh-token.js';\nimport { VerificationToken } from './verification-token.js';\nimport '../lib/service-config.js';\n"
+}

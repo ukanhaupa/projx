@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/middlewares/_public_paths.py",
+  "anchor": "# projx-anchor: authn-only-prefixes",
+  "insert": "    \"/api/v1/auth/\",\n"
+}

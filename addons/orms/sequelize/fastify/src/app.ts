@@ -10,6 +10,7 @@ import requestIdPlugin from './plugins/request-id.js';
 import swaggerPlugin from './plugins/swagger.js';
 import { checkDatabase, closeDatabase, sequelize } from './db/client.js';
 import './models/index.js';
+// projx-anchor: imports
 // projx-anchor: entity-imports
 
 export interface BuildAppOptions {
@@ -43,6 +44,7 @@ export async function buildApp(
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
   await app.register(authzPlugin);
+  // projx-anchor: plugins
 
   app.get(
     '/api/health',

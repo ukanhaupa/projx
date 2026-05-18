@@ -12,3 +12,5 @@ export const auditLogs = pgTable('audit_logs', {
     .notNull()
     .defaultNow(),
 });
+
+// projx-anchor: tables

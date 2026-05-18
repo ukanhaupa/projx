@@ -121,10 +121,22 @@ describe('render', () => {
     expect(result).toBe('node');
   });
 
-  it('collapses triple newlines', () => {
-    const tpl = 'a\n\n\n\nb';
+  it('preserves up to two blank lines (PEP 8) and collapses longer runs', () => {
+    const tpl = 'a\n\n\n\n\nb';
+    const result = render(tpl, { projectName: 'app', components: [] });
+    expect(result).toBe('a\n\n\nb');
+  });
+
+  it('preserves single blank line between sections', () => {
+    const tpl = 'a\n\nb';
     const result = render(tpl, { projectName: 'app', components: [] });
     expect(result).toBe('a\n\nb');
+  });
+
+  it('preserves two blank lines (PEP 8 top-level def separator)', () => {
+    const tpl = 'import x\n\n\ndef foo():\n    pass';
+    const result = render(tpl, { projectName: 'app', components: [] });
+    expect(result).toBe('import x\n\n\ndef foo():\n    pass');
   });
 
   it('returns empty string for missing dotted var', () => {

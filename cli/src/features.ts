@@ -246,14 +246,50 @@ async function applyTarget(args: ApplyTargetArgs): Promise<void> {
     );
   }
 
-  const filesDir = join(stackDir, 'files');
-  if (existsSync(filesDir)) {
-    await renderFilesInto(filesDir, targetPath, args.vars);
+  const orm =
+    typeof args.vars.orm === 'string' ? (args.vars.orm as string) : undefined;
+  const ormDir = orm ? join(stackDir, orm) : undefined;
+  const hasOrmDir = ormDir !== undefined && existsSync(ormDir);
+
+  const ormPatchNames = new Set<string>();
+  if (hasOrmDir) {
+    const ormPatchesDir = join(ormDir!, 'patches');
+    if (existsSync(ormPatchesDir)) {
+      for (const f of await readdir(ormPatchesDir)) {
+        if (f.endsWith('.json')) ormPatchNames.add(f);
+      }
+    }
   }
 
-  const patchesDir = join(stackDir, 'patches');
-  if (existsSync(patchesDir)) {
-    await applyPatches(patchesDir, targetPath, args.featureName);
+  for (const sub of ['files', join('common', 'files')]) {
+    const filesDir = join(stackDir, sub);
+    if (existsSync(filesDir)) {
+      await renderFilesInto(filesDir, targetPath, args.vars);
+    }
+  }
+
+  for (const sub of ['patches', join('common', 'patches')]) {
+    const patchesDir = join(stackDir, sub);
+    if (existsSync(patchesDir)) {
+      await applyPatches(
+        patchesDir,
+        targetPath,
+        args.featureName,
+        ormPatchNames,
+        hasOrmDir,
+      );
+    }
+  }
+
+  if (hasOrmDir) {
+    const ormFilesDir = join(ormDir!, 'files');
+    if (existsSync(ormFilesDir)) {
+      await renderFilesInto(ormFilesDir, targetPath, args.vars);
+    }
+    const ormPatchesDir = join(ormDir!, 'patches');
+    if (existsSync(ormPatchesDir)) {
+      await applyPatches(ormPatchesDir, targetPath, args.featureName);
+    }
   }
 
   const envKeys = args.manifest.env?.[args.target.component] ?? [];
@@ -303,9 +339,12 @@ async function applyPatches(
   patchesDir: string,
   targetPath: string,
   featureName: string,
+  skipNames: Set<string> = new Set(),
+  tolerateMissingTarget: boolean = false,
 ): Promise<void> {
   const files = (await readdir(patchesDir))
     .filter((f) => f.endsWith('.json'))
+    .filter((f) => !skipNames.has(f))
     .sort();
   for (const file of files) {
     const raw = await readFile(join(patchesDir, file), 'utf-8');
@@ -313,7 +352,12 @@ async function applyPatches(
     if (patch.type === 'package-json') {
       await applyPackageJsonPatch(targetPath, patch);
     } else if (patch.type === 'text') {
-      await applyTextPatch(targetPath, patch, featureName);
+      await applyTextPatch(
+        targetPath,
+        patch,
+        featureName,
+        tolerateMissingTarget,
+      );
     } else {
       throw new Error(
         `Unknown patch type in ${file}: ${(patch as { type: string }).type}.`,
@@ -347,22 +391,26 @@ async function applyTextPatch(
   targetPath: string,
   patch: TextPatch,
   featureName: string,
+  tolerateMissingTarget: boolean = false,
 ): Promise<void> {
   const filePath = join(targetPath, patch.file);
   if (!existsSync(filePath)) {
+    if (tolerateMissingTarget) return;
     throw new Error(
       `text patch failed: ${patch.file} not found in ${targetPath}.`,
     );
   }
   const content = await readFile(filePath, 'utf-8');
-  const sentinel = sentinelFor(featureName, patch.anchor, patch.insert);
-  if (content.includes(sentinel)) return;
   const idx = content.indexOf(patch.anchor);
   if (idx === -1) {
     throw new Error(
       `text patch anchor "${patch.anchor}" not found in ${patch.file}.`,
     );
   }
+  const lineStart = content.lastIndexOf('\n', idx) + 1;
+  const indent = content.slice(lineStart, idx).match(/^\s*/)?.[0] ?? '';
+  const sentinel = sentinelFor(featureName, patch.anchor, patch.insert, indent);
+  if (content.includes(sentinel)) return;
   const insertWithSentinel = patch.insert + sentinel;
   let next: string;
   if (patch.position === 'before') {
@@ -380,11 +428,16 @@ async function applyTextPatch(
   await writeFile(filePath, next);
 }
 
-function sentinelFor(feature: string, anchor: string, insert: string): string {
+function sentinelFor(
+  feature: string,
+  anchor: string,
+  insert: string,
+  indent: string = '',
+): string {
   const hash = simpleHash(anchor + '|' + insert);
   const isHash = anchor.includes('#');
   const open = isHash ? '# ' : '// ';
-  return `${open}projx-feature: ${feature} ${hash}\n`;
+  return `${indent}${open}projx-feature: ${feature} ${hash}\n`;
 }
 
 function simpleHash(s: string): string {

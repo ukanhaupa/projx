@@ -132,4 +132,5 @@ async def check_health():
     return {"status": "healthy", "checks": checks}
 
 
+# projx-anchor: routers
 app.include_router(api_router, prefix="/api")

@@ -1,0 +1,7 @@
+{
+  "type": "text",
+  "file": "pyproject.toml",
+  "anchor": "# projx-anchor: deps",
+  "position": "before",
+  "insert": "    \"pyotp>=2.9.0,<3.0.0\",\n    \"aiosmtplib>=3.0.0,<4.0.0\",\n    \"email-validator>=2.1.0,<3.0.0\",\n"
+}

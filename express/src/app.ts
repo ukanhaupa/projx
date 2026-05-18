@@ -7,9 +7,11 @@ import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { allowedOrigins, config } from './config.js';
 import { ApiError, errorHandler, notFoundHandler } from './errors.js';
+import { authenticate } from './middlewares/authenticate.js';
 import { prisma as defaultPrisma, type PrismaLike } from './prisma.js';
 import { EntityRegistry, registerEntityRoutes } from './modules/_base/index.js';
 import './modules/audit-logs/index.js';
+// projx-anchor: imports
 
 const requestId: RequestHandler = (req, res, next) => {
   const incoming = req.headers['x-request-id'];
@@ -65,6 +67,8 @@ export function buildApp(options: BuildAppOptions = {}): express.Express {
       legacyHeaders: false,
     }),
   );
+  app.use(authenticate);
+  // projx-anchor: plugins
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'healthy', checks: { app: 'ok' } });

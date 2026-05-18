@@ -1,11 +1,24 @@
 {
   "name": "auth",
   "summary": "Password + JWT auth with email verification, MFA, password reset, sessions",
-  "supports": ["fastify"],
-  "requires": { "fastify": [] },
-  "requiresOrm": ["prisma"],
+  "supports": ["fastify", "fastapi", "express"],
+  "requires": { "fastify": [], "fastapi": [], "express": [] },
+  "requiresOrm": ["prisma", "drizzle", "sequelize", "typeorm"],
   "env": {
     "fastify": [
+      "JWT_SECRET",
+      "FRONTEND_URL",
+      "AUTH_BACKGROUND_JOBS"
+    ],
+    "fastapi": [
+      "JWT_SECRET",
+      "JWT_ALGORITHMS",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS",
+      "AUTH_CLEANUP_INTERVAL_SECONDS"
+    ],
+    "express": [
       "JWT_SECRET",
       "FRONTEND_URL",
       "AUTH_BACKGROUND_JOBS"

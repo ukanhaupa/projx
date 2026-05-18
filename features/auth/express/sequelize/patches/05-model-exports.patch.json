@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/models/index.ts",
+  "anchor": "// projx-anchor: model-exports",
+  "insert": "  User,\n  RefreshToken,\n  VerificationToken,\n"
+}
