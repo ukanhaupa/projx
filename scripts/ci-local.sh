@@ -175,6 +175,13 @@ sec_infra() {
   run_step "terraform validate" terraform validate
 }
 
+sec_scaffold_matrix() {
+  cd "$ROOT_DIR/cli" || exit 1
+  run_step "cli build for matrix" pm_run build
+  cd "$ROOT_DIR" || exit 1
+  run_step "scaffold-matrix" "$ROOT_DIR/scripts/ci-scaffold-matrix.sh" all
+}
+
 available_sections() {
   local -a found=()
   [ -d "$ROOT_DIR/cli" ] && found+=("cli")
@@ -184,6 +191,7 @@ available_sections() {
   [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
+  { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
   printf '%s\n' "${found[@]}"
 }
 
@@ -210,6 +218,8 @@ elif [[ "${1:-}" == "changed" ]]; then
   for s in "${AVAILABLE[@]}"; do
     case "$s" in
       infra) has_changes_in "infra/" && SECTIONS+=("$s") ;;
+      scaffold_matrix)
+        { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
       *) has_changes_in "$s/" && SECTIONS+=("$s") ;;
     esac
   done
