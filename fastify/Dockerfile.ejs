@@ -1,4 +1,4 @@
-<% if (pm === 'bun') { %>
+<% if (pm.name === 'bun') { %>
 FROM oven/bun:1-alpine AS base
 
 WORKDIR /app
@@ -41,11 +41,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-<% if (pm === 'pnpm') { %>
+<% if (pm.name === 'pnpm') { %>
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-<% } else if (pm === 'yarn') { %>
+<% } else if (pm.name === 'yarn') { %>
 RUN corepack enable
 <% } %>
 
@@ -53,7 +53,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json <%= pm.lockfile %> ./
-<% if (pm === 'pnpm') { %>
+<% if (pm.name === 'pnpm') { %>
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store <%= pm.ci %>
 <% } else { %>
 RUN <%= pm.ci %>

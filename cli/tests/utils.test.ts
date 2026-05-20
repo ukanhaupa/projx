@@ -710,7 +710,7 @@ describe.each(ALL_PMS)('render with pm=%s', (pm) => {
   });
 
   it('matches own name in conditionals', () => {
-    const tpl = [`<% if (pm === '${pm}') { %>`, 'matched', '<% } %>'].join(
+    const tpl = [`<% if (pm.name === '${pm}') { %>`, 'matched', '<% } %>'].join(
       '\n',
     );
     const result = render(tpl, { projectName: 'app', components: [], pm: cmd });
@@ -720,12 +720,46 @@ describe.each(ALL_PMS)('render with pm=%s', (pm) => {
   it('excludes other PM conditionals', () => {
     const other = ALL_PMS.find((p) => p !== pm)!;
     const tpl = [
-      `<% if (pm === '${other}') { %>`,
+      `<% if (pm.name === '${other}') { %>`,
       'should not appear',
       '<% } %>',
     ].join('\n');
     const result = render(tpl, { projectName: 'app', components: [], pm: cmd });
     expect(result).toBe('');
+  });
+
+  it('throws if vars.pm is a bare string (caller-bug guard)', () => {
+    const tpl = '<%= orm === "drizzle" ? `${pm.exec} x` : `${pm.exec} y` %>';
+    expect(() =>
+      render(tpl, {
+        projectName: 'app',
+        components: [],
+        pm: 'pnpm',
+        orm: 'prisma',
+      }),
+    ).toThrow(/PmCommands object/);
+  });
+
+  it('resolves pm.X inside template-literal ternaries — regression for v1.7.2', () => {
+    const tpl =
+      '<%= orm === "drizzle" ? `${pm.exec} drizzle-kit push` : `${pm.exec} prisma migrate dev` %>';
+    const prismaResult = render(tpl, {
+      projectName: 'app',
+      components: [],
+      pm: cmd,
+      orm: 'prisma',
+    });
+    expect(prismaResult).not.toContain('undefined');
+    expect(prismaResult).toBe(`${cmd.exec} prisma migrate dev`);
+
+    const drizzleResult = render(tpl, {
+      projectName: 'app',
+      components: [],
+      pm: cmd,
+      orm: 'drizzle',
+    });
+    expect(drizzleResult).not.toContain('undefined');
+    expect(drizzleResult).toBe(`${cmd.exec} drizzle-kit push`);
   });
 });
 

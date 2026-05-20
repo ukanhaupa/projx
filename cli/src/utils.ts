@@ -298,6 +298,7 @@ export async function copyStaticFiles(
 
   const staticScripts = [
     'ci-local.sh',
+    'check-bundle-size.sh',
     'setup-docker.sh',
     'setup-ssl.sh',
     'style-check.py',
@@ -476,6 +477,7 @@ export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   '.githooks/pre-commit',
   '.github/workflows/ci.yml',
   'scripts/ci-local.sh',
+  'scripts/check-bundle-size.sh',
   'scripts/setup.sh',
   'scripts/setup-docker.sh',
   'scripts/setup-ssl.sh',
@@ -549,10 +551,19 @@ export function render(
 function evalExpr(expr: string, vars: Record<string, unknown>): unknown {
   const components = vars.components as string[];
   const projectName = vars.projectName as string;
-  const pmName = (vars.pm as { name?: string })?.name ?? 'npm';
+  if (vars.pm !== undefined && typeof vars.pm !== 'object') {
+    throw new Error(
+      `render: vars.pm must be a PmCommands object (got ${typeof vars.pm}). ` +
+        `Templates use pm.exec, pm.name etc.; passing the package-manager name as a bare string silently breaks those references.`,
+    );
+  }
+  const pm =
+    typeof vars.pm === 'object' && vars.pm !== null
+      ? (vars.pm as Record<string, unknown>)
+      : { name: 'npm' };
   const orm = (vars.orm as string | undefined) ?? 'prisma';
   const argNames = ['components', 'projectName', 'pm', 'orm'];
-  const argValues: unknown[] = [components, projectName, pmName, orm];
+  const argValues: unknown[] = [components, projectName, pm, orm];
   for (const [k, v] of Object.entries(vars)) {
     if (['components', 'projectName', 'pm', 'orm'].includes(k)) continue;
     if (!/^[a-zA-Z_$][\w$]*$/.test(k)) continue;

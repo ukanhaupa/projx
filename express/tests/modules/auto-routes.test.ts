@@ -339,5 +339,219 @@ describe('Express registerEntityRoutes', () => {
       expect(res.status).toBe(500);
       expect(prisma.widget.delete).not.toHaveBeenCalled();
     });
+
+    it('POST / persists the record even when afterCreate rejects', async () => {
+      const { app } = buildRouteApp(
+        entityConfig({
+          afterCreate: () => Promise.reject(new Error('async after-create')),
+        }),
+      );
+
+      const res = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'AsyncAfter' });
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe('AsyncAfter');
+    });
+
+    it('PATCH /:id swallows afterUpdate failures so the response still succeeds', async () => {
+      const { app } = buildRouteApp(
+        entityConfig({
+          afterUpdate: () => {
+            throw new Error('after-update boom');
+          },
+        }),
+      );
+
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Original' });
+      const res = await request(app)
+        .patch(`/api/v1/widgets/${created.body.id}`)
+        .send({ name: 'Survived' });
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Survived');
+    });
+  });
+
+  describe('readonly entities', () => {
+    it('GET / works on a readonly entity', async () => {
+      const { app } = buildRouteApp(entityConfig({ readonly: true }));
+      const res = await request(app).get('/api/v1/widgets');
+      expect(res.status).toBe(200);
+    });
+
+    it('POST / returns 404 when the entity is readonly', async () => {
+      const { app } = buildRouteApp(entityConfig({ readonly: true }));
+      const res = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'denied' });
+      expect(res.status).toBe(404);
+    });
+
+    it('PATCH /:id returns 404 when the entity is readonly', async () => {
+      const { app } = buildRouteApp(entityConfig({ readonly: true }));
+      const res = await request(app)
+        .patch('/api/v1/widgets/00000000-0000-0000-0000-000000000000')
+        .send({ name: 'x' });
+      expect(res.status).toBe(404);
+    });
+
+    it('DELETE /:id returns 404 when the entity is readonly', async () => {
+      const { app } = buildRouteApp(entityConfig({ readonly: true }));
+      const res = await request(app).delete(
+        '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
+      );
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /:id and PATCH/:id edge cases', () => {
+    it('GET /:id returns 404 for an unknown id', async () => {
+      const { app } = buildRouteApp();
+      const res = await request(app).get(
+        '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe('not_found');
+    });
+
+    it('PATCH /:id returns 400 when the body is empty', async () => {
+      const { app } = buildRouteApp();
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Initial' });
+      const res = await request(app)
+        .patch(`/api/v1/widgets/${created.body.id}`)
+        .send({});
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('empty_body');
+    });
+
+    it('PATCH /:id returns 422 when the payload fails validation', async () => {
+      const { app } = buildRouteApp();
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Initial' });
+      const res = await request(app)
+        .patch(`/api/v1/widgets/${created.body.id}`)
+        .send({ name: 123 });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('validation_error');
+    });
+  });
+
+  describe('bulk operations', () => {
+    it('POST /bulk returns 422 when items fail validation', async () => {
+      const { app } = buildRouteApp();
+      const res = await request(app)
+        .post('/api/v1/widgets/bulk')
+        .send({ items: [{ name: 123 }] });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('validation_error');
+    });
+
+    it('DELETE /bulk removes the requested ids', async () => {
+      const { app } = buildRouteApp();
+      const first = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'One' });
+      const second = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Two' });
+
+      const res = await request(app)
+        .delete('/api/v1/widgets/bulk')
+        .send({ ids: [first.body.id, second.body.id] });
+      expect(res.status).toBe(204);
+    });
+
+    it('DELETE /bulk returns 422 when ids are not uuids', async () => {
+      const { app } = buildRouteApp();
+      const res = await request(app)
+        .delete('/api/v1/widgets/bulk')
+        .send({ ids: ['not-a-uuid'] });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('validation_error');
+    });
+
+    it('POST /bulk returns 404 when bulkOperations is disabled', async () => {
+      const { app } = buildRouteApp(entityConfig({ bulkOperations: false }));
+      const res = await request(app)
+        .post('/api/v1/widgets/bulk')
+        .send({ items: [{ name: 'one' }] });
+      expect(res.status).toBe(404);
+    });
+
+    it('DELETE /bulk returns 404 when bulkOperations is disabled', async () => {
+      const { app } = buildRouteApp(entityConfig({ bulkOperations: false }));
+      const res = await request(app)
+        .delete('/api/v1/widgets/bulk')
+        .send({ ids: ['00000000-0000-0000-0000-000000000000'] });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('expand parameter', () => {
+    it('GET / forwards include when expand matches a configured relation', async () => {
+      const { app, prisma } = buildRouteApp(
+        entityConfig({
+          relations: {
+            category: { model: 'Category', field: 'category_id' },
+          },
+        }),
+      );
+      const res = await request(app).get('/api/v1/widgets?expand=category');
+      expect(res.status).toBe(200);
+      const findManyCall = prisma.widget.findMany.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(findManyCall.include).toEqual({ category: true });
+    });
+
+    it('GET /:id forwards include when expand matches a configured relation', async () => {
+      const { app, prisma } = buildRouteApp(
+        entityConfig({
+          relations: {
+            category: { model: 'Category', field: 'category_id' },
+          },
+        }),
+      );
+      const created = await request(app)
+        .post('/api/v1/widgets')
+        .send({ name: 'Expandable' });
+      const res = await request(app).get(
+        `/api/v1/widgets/${created.body.id}?expand=category`,
+      );
+      expect(res.status).toBe(200);
+      const findUniqueCall = prisma.widget.findUnique.mock.calls.at(
+        -1,
+      )?.[0] as Record<string, unknown>;
+      expect(findUniqueCall.include).toEqual({ category: true });
+    });
+  });
+
+  describe('query string handling', () => {
+    it('GET / clamps page_size to the documented maximum', async () => {
+      const { app } = buildRouteApp();
+      const res = await request(app).get('/api/v1/widgets?page_size=9999');
+      expect(res.status).toBe(200);
+      expect(res.body.pagination.page_size).toBe(100);
+    });
+
+    it('GET / accepts arbitrary filter params alongside reserved ones', async () => {
+      const { app, prisma } = buildRouteApp();
+      const res = await request(app).get(
+        '/api/v1/widgets?page=1&page_size=5&search=foo&order_by=-name&name=Bar',
+      );
+      expect(res.status).toBe(200);
+      const findManyCall = prisma.widget.findMany.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      const where = findManyCall.where as Record<string, unknown>;
+      expect(where.name).toBe('Bar');
+    });
   });
 });
