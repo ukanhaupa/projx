@@ -135,9 +135,21 @@ fi
 <%= inst.upper %>_TF=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tf$' || true)
 if [ -n "$<%= inst.upper %>_TF" ]; then
   if command -v terraform &> /dev/null; then
-    echo "Formatting <%= inst.path %>..."
+    echo "Checking <%= inst.path %>..."
     cd <%= inst.path %>/stack
     echo "$<%= inst.upper %>_TF" | sed 's|^<%= inst.path %>/stack/||' | xargs terraform fmt
+    [ -d .terraform ] || terraform init -backend=false -input=false >/dev/null
+    terraform validate
+    if command -v tflint &> /dev/null; then
+      tflint --recursive
+    else
+      echo "Skipping tflint (not installed)"
+    fi
+    if command -v trivy &> /dev/null; then
+      trivy config --exit-code 1 --severity HIGH,CRITICAL .
+    else
+      echo "Skipping trivy config scan (not installed)"
+    fi
     cd ../..
     echo "$<%= inst.upper %>_TF" | xargs git add
   else

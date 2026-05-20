@@ -119,9 +119,21 @@ fi
 # ── Infra ─────────────────────────────────────────────────────────
 if [ -n "$INFRA_TF" ]; then
   if command -v terraform &> /dev/null; then
-    echo "Formatting infra..."
+    echo "Checking infra..."
     cd infra/stack
     echo "$INFRA_TF" | sed 's|^infra/stack/||' | xargs terraform fmt
+    [ -d .terraform ] || terraform init -backend=false -input=false >/dev/null
+    terraform validate
+    if command -v tflint &> /dev/null; then
+      tflint --recursive
+    else
+      echo "Skipping tflint (not installed)"
+    fi
+    if command -v trivy &> /dev/null; then
+      trivy config --exit-code 1 --severity HIGH,CRITICAL .
+    else
+      echo "Skipping trivy config scan (not installed)"
+    fi
     cd ../..
     echo "$INFRA_TF" | xargs git add
   else

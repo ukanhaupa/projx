@@ -82,7 +82,7 @@ describe('scaffold', () => {
     const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
     expect(ci).toContain('express:');
     expect(ci).toContain(
-      'name: Express (format + lint + typecheck + build + test + audit)',
+      'name: Express (format + lint + typecheck + build + audit)',
     );
 
     const compose = await readFile(join(dest, 'docker-compose.yml'), 'utf-8');
@@ -385,7 +385,7 @@ describe('scaffold', () => {
       'name: Fastify (format + lint + typecheck + build + audit)',
     );
     expect(ci).toContain(
-      'name: Express (format + lint + typecheck + build + test + audit)',
+      'name: Express (format + lint + typecheck + build + audit)',
     );
     expect(ci).toContain(
       'name: Frontend (format + lint + typecheck + build + audit)',

@@ -2,6 +2,32 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-05-20
+
+### Added
+
+- **`scripts/check-bundle-size.sh`** ships with every scaffold — frontend chunks over budget fail the build. Defaults: initial entry chunks ≤ 500KB, async chunks ≤ 800KB; override via `BUNDLE_BUDGET_INITIAL_KB` / `BUNDLE_BUDGET_ASYNC_KB`. Backed by `scripts/check-bundle-size.test.sh` (7 assertions). [cli.yml.ejs:287](cli/src/templates/ci.yml.ejs#L287) was already invoking this script, but the file wasn't being copied — every `--components frontend` scaffold shipped a broken CI step.
+- **`sec_secrets` in `scripts/ci-local.sh`** — runs gitleaks against tracked + untracked, honouring the project's `.gitleaks.toml`. Always-on in the section dispatch; gracefully skips with a warning if `gitleaks` isn't installed.
+- **`sec_e2e` opt-in real-backend boot** — set `E2E_REAL_BACKEND=1` to make ci-local detect a sibling `fastify/` or `express/`, boot it via `tsx src/server.ts`, wait on `/api/health`, then run the full Playwright matrix. Configurable via `E2E_BACKEND_PORT` (default 3000) and `E2E_HEALTH_PATH` (default `/api/health`). Without the flag, behaviour is unchanged (typecheck-only).
+- **`sec_frontend` bundle-size step** — runs `scripts/check-bundle-size.sh` after build if `frontend/dist/assets/` exists.
+- **`sec_scripts` in `scripts/ci-local.sh`** — picks up every `scripts/*.test.sh` and runs it. `check-bundle-size.test.sh` is the first occupant; future shell-script tests drop into the same glob without further wiring.
+- **Regression test for `pm.exec → undefined` rendering** in [cli/tests/utils.test.ts](cli/tests/utils.test.ts) — asserts template-literal ternaries that reference `pm.exec` resolve to the real value and never produce the literal string `undefined`. Runs across all four package managers via `describe.each(ALL_PMS)`.
+- **Defensive guard in `evalExpr`** — throws with a clear message if `vars.pm` is passed as a bare string. Catches the same class of bug at call-time instead of producing silently-broken output.
+
+### Fixed
+
+- **`pm.exec` rendering as the literal string `undefined` in scaffolded READMEs.** The internal `evalExpr` ([cli/src/utils.ts:551](cli/src/utils.ts#L551)) was rebinding `pm` to the package-manager name string instead of the full `PmCommands` object. Template-literal ternaries that referenced `pm.exec` inside backticks therefore resolved `pm.exec` to `"npm".exec` = `undefined`, producing lines like `... npm install && undefined prisma migrate dev && npm run dev` in every scaffold's quickstart. Simple `pm.install` references used a different fast-path and worked correctly, which is why this slipped through. Fix: pass the full `PmCommands` object into evaluated expressions and update templates to compare `pm.name === 'pnpm'` (etc.) instead of `pm === 'pnpm'`.
+- **`scripts/ci-local.sh` was silencing coverage** with `--coverage.enabled=false` for every JS component, so the 80% thresholds declared in each template's `vitest.config.ts` weren't enforced anywhere. Flipped to `vitest run --coverage`. Combined with the express CI change below, ci-local is now the canonical gate before push.
+- **Scaffolded express CI step `vitest run --coverage.enabled=false`** removed — it was running tests without enforcing the thresholds. Sibling model picked: scaffolded CI does lint/typecheck/build/audit, ci-local runs tests with coverage pre-push.
+- **`sec_e2e` would orphan its backend on Ctrl-C and never resolve `pm_exec`.** `start_background` was called inside a subshell, so the parent's `LAST_PID` / `PIDS` arrays never saw the e2e backend — the script-level cleanup trap couldn't kill it, and even the explicit `kill "$backend_pid"` at end-of-function targeted a stale or empty PID. Separately, `setsid pm_exec tsx …` was passing a shell function (`pm_exec`) to a binary (`setsid`), which couldn't resolve it. Both fixed: `start_background` now runs in the function's own scope (PID propagates), and the daemon command is wrapped as `bash -c "$(declare -f pm_exec detect_pm); pm_exec …"` so `setsid` invokes `bash` (real binary) which then resolves the function. Cleanup also upgraded to process-group kill with TERM→KILL fallback.
+- **Pre-commit infra block was `fmt`-only.** Both [.githooks/pre-commit](.githooks/pre-commit) and [cli/src/templates/pre-commit.ejs](cli/src/templates/pre-commit.ejs) now run `terraform validate` + `tflint --recursive` + `trivy config --severity HIGH,CRITICAL` after format, gated on `command -v` so missing binaries don't block commits. `terraform init` is cached with `[ -d .terraform ] || init …` so the hook doesn't re-download providers on every `.tf` edit.
+- **`idna` bumped 3.13 → 3.15** (CVE-2026-45409 — DNS label length DoS). Transitive via `anyio` + `httpx` in [fastapi/uv.lock](fastapi/uv.lock). Dependabot PR #49.
+
+### Changed
+
+- **Gitleaks allowlist extended** in [.gitleaks.toml](.gitleaks.toml) for build artefacts (`*/dist/*`), Terraform module cache (`*/.terraform/*`), local environment files (`.env.{local,dev,staging,prod}`), Terraform `random_password.X.result` references, Kubernetes secret-reference field names (`passwordSecretKey`, `existingSecretPasswordKey`), and auth-feature test fixtures. The auth-test allowlist is intentionally broad — review new files added there for real secrets before commit; pragma markers (`# pragma: allowlist secret`) remain the per-line opt-out.
+- **`pip-audit` ignores `PYSEC-2025-183`** (`CVE-2025-45768`, "pyjwt weak encryption") across [scripts/ci-local.sh](scripts/ci-local.sh), [.github/workflows/ci.yml](.github/workflows/ci.yml), and [cli/src/templates/ci.yml.ejs](cli/src/templates/ci.yml.ejs). The advisory is **disputed by the pyjwt maintainer** — key length is the application's responsibility, and projx supplies `JWT_SECRET` from the encrypted `service_configs` DB table (or env at bootstrap). No fix version exists upstream. Joins the existing `CVE-2026-3219` ignore.
+
 ## [1.7.1] - 2026-05-18
 
 ### Added

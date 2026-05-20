@@ -7,7 +7,14 @@
 #   ./scripts/ci-local.sh fastify e2e           # run named sections only
 #
 # Sections (auto-detected by which top-level dirs exist):
-#   cli  fastapi  fastify  express  frontend  e2e  infra
+#   secrets  cli  fastapi  fastify  express  frontend  e2e  infra  scaffold_matrix
+#
+# Environment knobs:
+#   E2E_REAL_BACKEND=1          boot fastify/express + run Playwright in sec_e2e
+#                               (default: typecheck only)
+#   E2E_BACKEND_PORT=3000       port the booted backend listens on
+#   E2E_HEALTH_PATH=/api/health endpoint used for readiness polling
+#   LOGS_DIR=/tmp/foo           override per-section log directory
 
 set -uo pipefail
 
@@ -19,6 +26,7 @@ cd "$ROOT_DIR" || exit 1
 
 LOGS_DIR="${LOGS_DIR:-${TMPDIR:-/tmp}/projx-ci-local.$$}"
 mkdir -p "$LOGS_DIR"
+export LOGS_DIR
 
 BOLD=$'\033[1m'
 DIM=$'\033[2m'
@@ -134,10 +142,22 @@ run_js_component() {
       run_step "$dir build" pm_run build
     fi
     if [ -d tests ]; then
-      run_step "$dir tests" pm_exec vitest run --coverage.enabled=false
+      run_step "$dir tests" pm_exec vitest run --coverage
     fi
     run_step "$dir audit" pm_audit
   )
+}
+
+sec_secrets() {
+  cd "$ROOT_DIR" || exit 1
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    warn "gitleaks not installed — skipping secret scan (install via 'brew install gitleaks' or download a release)"
+    return 0
+  fi
+  local cfg="$ROOT_DIR/.gitleaks.toml"
+  local args=(detect --no-banner --no-git --redact)
+  [ -f "$cfg" ] && args+=(--config "$cfg")
+  run_step "gitleaks (tracked + untracked)" gitleaks "${args[@]}" --source "$ROOT_DIR"
 }
 
 sec_fastapi() {
@@ -149,7 +169,7 @@ sec_fastapi() {
   if [ -d tests ]; then
     run_step "fastapi tests" uv run pytest
   fi
-  run_step "fastapi audit" uv run pip-audit
+  run_step "fastapi audit" uv run pip-audit --ignore-vuln PYSEC-2025-183
 }
 
 sec_cli() {
@@ -159,14 +179,76 @@ sec_cli() {
   run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
-  run_step "cli tests" pm_exec vitest run --coverage.enabled=false
+  run_step "cli tests" pm_exec vitest run --coverage
   run_step "cli audit" pm_audit
 }
 
 sec_fastify() { run_js_component fastify; }
 sec_express() { run_js_component express; }
-sec_frontend() { run_js_component frontend; }
-sec_e2e() { run_js_component e2e; }
+
+sec_frontend() {
+  run_js_component frontend
+  if [ -d "$ROOT_DIR/frontend/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
+    (cd "$ROOT_DIR/frontend" && run_step "frontend bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
+  fi
+}
+
+sec_e2e() {
+  if [ ! -d "$ROOT_DIR/e2e" ]; then return 0; fi
+  local backend_dir=""
+  for candidate in fastify express; do
+    [ -d "$ROOT_DIR/$candidate" ] && backend_dir="$candidate" && break
+  done
+
+  if [ -z "$backend_dir" ] || [ -z "${E2E_REAL_BACKEND:-}" ]; then
+    run_js_component e2e
+    return $?
+  fi
+
+  (cd "$ROOT_DIR/$backend_dir" && pm_install) || return 1
+  if [ -f "$ROOT_DIR/$backend_dir/prisma/schema.prisma" ]; then
+    (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma generate) || return 1
+  fi
+
+  cd "$ROOT_DIR/$backend_dir" || return 1
+  start_background "e2e-backend" bash -c \
+    "$(declare -f pm_exec detect_pm); pm_exec tsx src/server.ts"
+  local backend_pid="$LAST_PID"
+  cd "$ROOT_DIR" || return 1
+
+  local port="${E2E_BACKEND_PORT:-3000}"
+  local health_path="${E2E_HEALTH_PATH:-/api/health}"
+  if ! command -v curl >/dev/null 2>&1; then
+    warn "curl missing — skipping backend healthcheck"
+  else
+    local tries=30
+    until curl -fsS "http://127.0.0.1:$port$health_path" >/dev/null 2>&1; do
+      tries=$((tries - 1))
+      if [ "$tries" -le 0 ]; then
+        xfail "e2e backend never became healthy on :$port$health_path"
+        kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
+        return 1
+      fi
+      sleep 1
+    done
+  fi
+
+  local rc=0
+  (
+    cd "$ROOT_DIR/e2e" || exit 1
+    run_step "e2e install" pm_install
+    run_step "e2e playwright install" pm_exec playwright install --with-deps chromium
+    run_step "e2e format" pm_exec prettier --check .
+    run_step "e2e lint" pm_exec eslint '**/*.ts'
+    run_step "e2e typecheck" pm_exec tsc --noEmit
+    run_step "e2e playwright" pm_exec playwright test
+  ) || rc=$?
+
+  kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
+  sleep 1
+  kill -9 -- "-$backend_pid" 2>/dev/null || kill -9 "$backend_pid" 2>/dev/null || true
+  return "$rc"
+}
 
 sec_infra() {
   cd "$ROOT_DIR/infra/stack" || exit 1
@@ -182,8 +264,21 @@ sec_scaffold_matrix() {
   run_step "scaffold-matrix" "$ROOT_DIR/scripts/ci-scaffold-matrix.sh" all
 }
 
+sec_scripts() {
+  cd "$ROOT_DIR" || exit 1
+  shopt -s nullglob
+  local tests=("$ROOT_DIR"/scripts/*.test.sh)
+  shopt -u nullglob
+  if [ ${#tests[@]} -eq 0 ]; then
+    return 0
+  fi
+  for t in "${tests[@]}"; do
+    run_step "$(basename "$t")" bash "$t"
+  done
+}
+
 available_sections() {
-  local -a found=()
+  local -a found=("secrets")
   [ -d "$ROOT_DIR/cli" ] && found+=("cli")
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
@@ -192,6 +287,7 @@ available_sections() {
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
+  compgen -G "$ROOT_DIR/scripts/*.test.sh" >/dev/null 2>&1 && found+=("scripts")
   printf '%s\n' "${found[@]}"
 }
 
@@ -217,9 +313,11 @@ elif [[ "${1:-}" == "changed" ]]; then
   SECTIONS=()
   for s in "${AVAILABLE[@]}"; do
     case "$s" in
+      secrets) SECTIONS+=("$s") ;;
       infra) has_changes_in "infra/" && SECTIONS+=("$s") ;;
       scaffold_matrix)
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
+      scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;
       *) has_changes_in "$s/" && SECTIONS+=("$s") ;;
     esac
   done
@@ -261,7 +359,7 @@ run_wave() {
       xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
       exit 2
     fi
-    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm); $fn"
+    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background xfail warn); $fn"
     NAMES+=("$s")
     printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
   done

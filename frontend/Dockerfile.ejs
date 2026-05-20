@@ -1,4 +1,4 @@
-<% if (pm === 'bun') { %>
+<% if (pm.name === 'bun') { %>
 FROM oven/bun:1-alpine AS build
 <% } else { %>
 FROM node:22-alpine3.20 AS build
@@ -6,9 +6,9 @@ FROM node:22-alpine3.20 AS build
 
 WORKDIR /app
 
-<% if (pm === 'pnpm') { %>
+<% if (pm.name === 'pnpm') { %>
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-<% } else if (pm === 'yarn') { %>
+<% } else if (pm.name === 'yarn') { %>
 RUN corepack enable
 <% } %>
 
