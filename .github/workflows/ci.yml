@@ -119,7 +119,7 @@ jobs:
         run: |
           run_pip_audit() {
             for attempt in 1 2 3; do
-              if uv run pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2025-183; then
+              if bash audit.sh; then
                 return 0
               fi
               if [ "$attempt" -eq 3 ]; then

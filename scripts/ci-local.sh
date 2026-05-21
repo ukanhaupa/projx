@@ -169,7 +169,7 @@ sec_fastapi() {
   if [ -d tests ]; then
     run_step "fastapi tests" uv run pytest
   fi
-  run_step "fastapi audit" uv run pip-audit --ignore-vuln PYSEC-2025-183
+  run_step "fastapi audit" bash audit.sh
 }
 
 sec_cli() {

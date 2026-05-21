@@ -298,6 +298,7 @@ export async function copyStaticFiles(
 
   const staticScripts = [
     'ci-local.sh',
+    'ci-runner-gc.sh',
     'check-bundle-size.sh',
     'setup-docker.sh',
     'setup-ssl.sh',
@@ -477,6 +478,7 @@ export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   '.githooks/pre-commit',
   '.github/workflows/ci.yml',
   'scripts/ci-local.sh',
+  'scripts/ci-runner-gc.sh',
   'scripts/check-bundle-size.sh',
   'scripts/setup.sh',
   'scripts/setup-docker.sh',
