@@ -399,13 +399,18 @@ describe('scaffold', () => {
       'uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3',
     );
     expect(ci).toContain(
-      'uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2',
+      'gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz',
+    );
+    expect(ci).toContain(
+      'gitleaks detect --source ${{ env.WS }} --no-git --no-banner --redact --exit-code 1',
     );
     expect(ci).not.toContain('uses: actions/checkout@v5');
-    expect(ci).not.toContain('uses: gitleaks/gitleaks-action@v2');
-    expect(ci).toContain('python3 scripts/style-check.py frontend/src');
+    expect(ci).not.toContain('uses: gitleaks/gitleaks-action');
+    expect(ci).toContain(
+      'python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/frontend/src',
+    );
     expect(ci).toContain('run_pip_audit() {');
-    expect(ci).toContain('uv run pip-audit --ignore-vuln CVE-2026-3219');
+    expect(ci).toContain('bash audit.sh');
     expect(ci).toContain('sleep $((attempt * 5))');
     expect(ci).toMatch(
       /^permissions:\n\s+contents: read\n\s+pull-requests: read/m,
@@ -790,7 +795,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     expect(ci).toContain(cmd.prismaExec);
     expect(ci).toContain(cmd.audit);
     expect(ci).toContain(
-      'gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2',
+      'gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz',
     );
 
     if (pm === 'pnpm') {
@@ -851,9 +856,14 @@ describe.each(PMS)('scaffold with %s', (pm) => {
 
     const hook = await readFile(join(dest, '.githooks/pre-commit'), 'utf-8');
     expect(hook).not.toContain('pip-audit');
+    expect(hook).not.toContain('audit.sh');
 
     const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
-    expect(ci).toContain('pip-audit');
+    expect(ci).toContain('bash audit.sh');
+
+    const auditScript = await readFile(join(dest, 'fastapi/audit.sh'), 'utf-8');
+    expect(auditScript).toContain('pip-audit');
+    expect(auditScript).toContain('.pip-audit-ignore');
   });
 
   it('frontend Dockerfile uses the correct install and run commands', async () => {

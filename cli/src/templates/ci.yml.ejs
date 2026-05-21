@@ -11,6 +11,9 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  WS: run-${{ github.run_id }}-${{ github.run_attempt }}
+
 jobs:
   changes:
     name: Detect changes
@@ -39,9 +42,12 @@ jobs:
 <% } %>
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
       - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
         id: filter
         with:
+          working-directory: ${{ env.WS }}
           filters: |
 <% for (const inst of fastapiInstances) { %>
             <%= inst.path %>:
@@ -79,10 +85,15 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python3 scripts/style-check.py frontend/src
+          path: ${{ env.WS }}
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Run gitleaks
+        run: gitleaks detect --source ${{ env.WS }} --no-git --no-banner --redact --exit-code 1
+      - run: python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/frontend/src
 <% for (const inst of fastapiInstances) { %>
 
   <%= inst.path %>:
@@ -106,7 +117,7 @@ jobs:
           --health-retries 5
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     env:
       SQLALCHEMY_DATABASE_URI: postgresql+asyncpg://postgres:postgres@localhost:5432/ci_test
       JWT_PROVIDER: shared_secret
@@ -114,6 +125,8 @@ jobs:
       JWT_ALGORITHMS: HS256
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
       - run: uv sync --group dev
       - run: uv run ruff format --check src tests
@@ -123,7 +136,7 @@ jobs:
         run: |
           run_pip_audit() {
             for attempt in 1 2 3; do
-              if uv run pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2025-183; then
+              if bash audit.sh; then
                 return 0
               fi
               if [ "$attempt" -eq 3 ]; then
@@ -157,12 +170,14 @@ jobs:
           --health-retries 5
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
       JWT_SECRET: ci-test-secret # gitleaks:allow
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
 <% if (pm.name === 'pnpm') { %>
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -176,7 +191,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
 <% if (orm === 'drizzle') { %>
@@ -216,11 +231,13 @@ jobs:
           --health-retries 5
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
 <% if (pm.name === 'pnpm') { %>
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -234,7 +251,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
 <% if (orm === 'drizzle') { %>
@@ -260,9 +277,11 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
 <% if (pm.name === 'pnpm') { %>
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -276,7 +295,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.exec %> prettier --check .
@@ -295,9 +314,11 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
@@ -317,9 +338,11 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= inst.path %>
+        working-directory: ${{ env.WS }}/<%= inst.path %>
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
 <% if (pm.name === 'pnpm') { %>
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -333,7 +356,7 @@ jobs:
         with:
           node-version: 22
           cache: <%= pm.name %>
-          cache-dependency-path: <%= inst.path %>/<%= pm.lockfile %>
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
       - run: <%= pm.exec %> prettier --check .
@@ -350,9 +373,11 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: <%= inst.path %>/stack
+        working-directory: ${{ env.WS }}/<%= inst.path %>/stack
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: '1.11'

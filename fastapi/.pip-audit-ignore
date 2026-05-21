@@ -1,0 +1,14 @@
+# Upstream-unfixed CVEs accepted as known risk.
+# Format: one PYSEC/CVE id per line. `#` for comments. Blank lines ignored.
+# To recheck: comment all entries, re-run audit.sh, see what's still flagged.
+
+# pyjwt — direct dep, src/configs/_auth.py. Advisory disputed by the maintainer:
+# key length is the application's responsibility, no fix version published.
+# projx supplies JWT_SECRET via the encrypted service_configs table (or env at
+# bootstrap), so the underlying concern is already mitigated.
+PYSEC-2025-183
+
+# pip — interpretation conflict between concatenated tar+ZIP archives.
+# Only exploitable when installing untrusted archives by URL/path; we install
+# from a pinned lockfile (uv.lock), so the attack surface doesn't apply.
+CVE-2026-3219
