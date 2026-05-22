@@ -12,7 +12,7 @@
 # Environment knobs:
 #   E2E_REAL_BACKEND=1          boot fastify/express + run Playwright in sec_e2e
 #                               (default: typecheck only)
-#   E2E_BACKEND_PORT=3000       port the booted backend listens on
+#   E2E_BACKEND_PORT=auto       port the booted backend listens on (default: random free port)
 #   E2E_HEALTH_PATH=/api/health endpoint used for readiness polling
 #   LOGS_DIR=/tmp/foo           override per-section log directory
 
@@ -27,6 +27,12 @@ cd "$ROOT_DIR" || exit 1
 LOGS_DIR="${LOGS_DIR:-${TMPDIR:-/tmp}/projx-ci-local.$$}"
 mkdir -p "$LOGS_DIR"
 export LOGS_DIR
+
+pick_free_port() {
+  python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
+}
+E2E_BACKEND_PORT="${E2E_BACKEND_PORT:-$(pick_free_port)}"
+export E2E_BACKEND_PORT
 
 BOLD=$'\033[1m'
 DIM=$'\033[2m'
@@ -212,11 +218,11 @@ sec_e2e() {
 
   cd "$ROOT_DIR/$backend_dir" || return 1
   start_background "e2e-backend" bash -c \
-    "$(declare -f pm_exec detect_pm); pm_exec tsx src/server.ts"
+    "$(declare -f pm_exec detect_pm); PORT=$E2E_BACKEND_PORT pm_exec tsx src/server.ts"
   local backend_pid="$LAST_PID"
   cd "$ROOT_DIR" || return 1
 
-  local port="${E2E_BACKEND_PORT:-3000}"
+  local port="$E2E_BACKEND_PORT"
   local health_path="${E2E_HEALTH_PATH:-/api/health}"
   if ! command -v curl >/dev/null 2>&1; then
     warn "curl missing — skipping backend healthcheck"
