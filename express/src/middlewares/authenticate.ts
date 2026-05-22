@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import jwt, { type JwtPayload } from 'jsonwebtoken';
-import { config } from '../config.js';
+import type { JWTPayload } from 'jose';
 import { ApiError } from '../errors.js';
+import { verifyToken } from '../lib/jwt-verifier.js';
 
 export interface AuthUser {
   sub: string;
@@ -21,22 +21,7 @@ function extractBearer(header: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function getSecret(): string {
-  const secret = config.JWT_SECRET;
-  if (!secret) {
-    throw new ApiError(
-      500,
-      'JWT_SECRET is not configured',
-      'jwt_not_configured',
-    );
-  }
-  return secret;
-}
-
-function toAuthUser(payload: JwtPayload | string): AuthUser {
-  if (typeof payload === 'string' || !payload || typeof payload !== 'object') {
-    throw new ApiError(401, 'Invalid token payload', 'invalid_token');
-  }
+function toAuthUser(payload: JWTPayload): AuthUser {
   if (typeof payload.sub !== 'string' || !payload.sub) {
     throw new ApiError(401, 'Invalid token payload', 'invalid_token');
   }
@@ -58,19 +43,19 @@ function toAuthUser(payload: JwtPayload | string): AuthUser {
   };
 }
 
-export const authenticate: RequestHandler = (
+export const authenticate: RequestHandler = async (
   req: Request,
   _res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const token = extractBearer(req.headers.authorization);
   if (!token) {
     next();
     return;
   }
   try {
-    const decoded = jwt.verify(token, getSecret());
-    req.authUser = toAuthUser(decoded);
+    const payload = await verifyToken(token);
+    req.authUser = toAuthUser(payload);
     next();
   } catch (err) {
     if (err instanceof ApiError) {

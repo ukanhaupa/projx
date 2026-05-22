@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { disposePrismaClient, getPrismaClient } from '../lib/prisma-client.js';
 
 const AUDIT_ACTIONS: Record<string, string> = {
   create: 'INSERT',
@@ -106,12 +107,7 @@ function buildExtendedClient(base: PrismaClient, log: LogFn) {
 export type ExtendedPrismaClient = ReturnType<typeof buildExtendedClient>;
 
 export default fp(async (fastify) => {
-  const base = new PrismaClient({
-    log: [
-      { level: 'query', emit: 'event' },
-      { level: 'error', emit: 'stdout' },
-    ],
-  });
+  const base = getPrismaClient();
 
   base.$on('query', (e) => {
     fastify.log.debug({ query: e.query, duration: e.duration }, 'prisma query');
@@ -129,7 +125,7 @@ export default fp(async (fastify) => {
   });
 
   fastify.addHook('onClose', async () => {
-    await base.$disconnect();
+    await disposePrismaClient();
   });
 });
 

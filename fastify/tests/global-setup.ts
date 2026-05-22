@@ -1,6 +1,9 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import {
+  disposePrismaClient,
+  getPrismaClient,
+} from '../src/lib/prisma-client.js';
 import {
   findMigrationChecksumDrift,
   formatMigrationDriftError,
@@ -14,7 +17,7 @@ export default async function globalSetup(): Promise<void> {
   const migrationsDir = join(process.cwd(), 'prisma/migrations');
   if (!existsSync(migrationsDir)) return;
 
-  const prisma = new PrismaClient();
+  const prisma = getPrismaClient();
   try {
     const applied = await prisma.$queryRaw<MigrationChecksum[]>`
       SELECT migration_name, checksum
@@ -30,6 +33,6 @@ export default async function globalSetup(): Promise<void> {
     if (message.includes('_prisma_migrations')) return;
     throw error;
   } finally {
-    await prisma.$disconnect();
+    await disposePrismaClient();
   }
 }

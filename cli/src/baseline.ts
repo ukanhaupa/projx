@@ -843,29 +843,39 @@ async function substituteNamesForInstance(
     const target = isCanonical
       ? (overrides?.fastapi ?? `${name}-fastapi`)
       : `${name}-${path}`;
-    await replaceInFile(
-      join(dest, `${path}/pyproject.toml`),
-      'projx-fastapi',
-      target,
-    );
+    for (const file of [
+      'pyproject.toml',
+      'src/configs/_database.py',
+      'tests/test_app.py',
+    ]) {
+      await replaceInFile(
+        join(dest, `${path}/${file}`),
+        'projx-fastapi',
+        target,
+      );
+    }
   } else if (type === 'fastify') {
     const target = isCanonical
       ? (overrides?.fastify ?? `${name}-fastify`)
       : `${name}-${path}`;
-    await replaceInFile(
-      join(dest, `${path}/package.json`),
-      'projx-fastify',
-      target,
-    );
+    for (const file of ['package.json', '.env.example', '.env.test']) {
+      await replaceInFile(
+        join(dest, `${path}/${file}`),
+        'projx-fastify',
+        target,
+      );
+    }
   } else if (type === 'express') {
     const target = isCanonical
       ? (overrides?.express ?? `${name}-express`)
       : `${name}-${path}`;
-    await replaceInFile(
-      join(dest, `${path}/package.json`),
-      'projx-express',
-      target,
-    );
+    for (const file of ['package.json', '.env.example', '.env.test']) {
+      await replaceInFile(
+        join(dest, `${path}/${file}`),
+        'projx-express',
+        target,
+      );
+    }
   } else if (type === 'frontend') {
     const target = isCanonical
       ? (overrides?.frontend ?? `${name}-frontend`)
