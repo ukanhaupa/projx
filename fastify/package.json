@@ -29,6 +29,7 @@
     "@sinclair/typebox": "^0.34.15",
     "fastify": "^5.8.5",
     "fastify-plugin": "^5.0.1",
+    "jose": "^6.2.2",
     "pino-pretty": "^13.0.0"
   },
   "devDependencies": {

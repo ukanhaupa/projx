@@ -135,7 +135,7 @@ run_js_component() {
     if [ -f drizzle.config.ts ] && [ -n "${DATABASE_URL:-}" ]; then
       run_step "$dir drizzle push" pm_exec drizzle-kit push --force
     fi
-    run_step "$dir format" pm_exec prettier --check .
+    run_step "$dir format" pm_exec prettier --write .
     run_step "$dir lint" pm_exec eslint .
     run_step "$dir typecheck" pm_exec tsc --noEmit
     if [ -f package.json ] && node -e "const p=require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
@@ -163,7 +163,7 @@ sec_secrets() {
 sec_fastapi() {
   cd "$ROOT_DIR/fastapi" || exit 1
   run_step "fastapi install" uv sync --group dev
-  run_step "fastapi format" uv run ruff format --check src tests
+  run_step "fastapi format" uv run ruff format src tests
   run_step "fastapi lint" uv run ruff check src tests
   run_step "fastapi typecheck" uv run mypy
   if [ -d tests ]; then
@@ -175,7 +175,7 @@ sec_fastapi() {
 sec_cli() {
   cd "$ROOT_DIR/cli" || exit 1
   run_step "cli install" pm_install
-  run_step "cli format" pm_exec prettier --check .
+  run_step "cli format" pm_exec prettier --write .
   run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
@@ -238,7 +238,7 @@ sec_e2e() {
     cd "$ROOT_DIR/e2e" || exit 1
     run_step "e2e install" pm_install
     run_step "e2e playwright install" pm_exec playwright install --with-deps chromium
-    run_step "e2e format" pm_exec prettier --check .
+    run_step "e2e format" pm_exec prettier --write .
     run_step "e2e lint" pm_exec eslint '**/*.ts'
     run_step "e2e typecheck" pm_exec tsc --noEmit
     run_step "e2e playwright" pm_exec playwright test

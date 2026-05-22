@@ -2,6 +2,22 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-05-21
+
+### Added
+
+- **`jwt-verifier` lib in express + fastify** ([express/src/lib/jwt-verifier.ts](express/src/lib/jwt-verifier.ts), [fastify/src/lib/jwt-verifier.ts](fastify/src/lib/jwt-verifier.ts)) — wraps `jose` with provider-aware verification (shared-secret HS256, JWKS-based RS256). Replaces the previous `jsonwebtoken` integration in `authenticate` middleware (express) and `auth` plugin (fastify); both flows are now async, with `JWTPayload` typed from `jose`. Adds `jose@^6.2.3` to express deps; backed by parallel tests in both templates.
+- **Prisma client factory in express + fastify** ([express/src/lib/prisma-client.ts](express/src/lib/prisma-client.ts), [fastify/src/lib/prisma-client.ts](fastify/src/lib/prisma-client.ts)) — singleton factory that injects `application_name`, `statement_timeout`, and `idle_in_transaction_session_timeout` into the `DATABASE_URL` query string, plus `disposePrismaClient()` for test teardown. Eager `DATABASE_URL` check throws with a clear message at first build. Override `DB_STATEMENT_TIMEOUT` (seconds) to retune. Covered by 8-test factory suites in each template.
+- **dotenv loading in express vitest config** ([express/vitest.config.ts](express/vitest.config.ts)) — mirrors fastify's pattern: `dotenv.config({ path: '.env.test' })` is evaluated at config load so every test worker sees `DATABASE_URL`, `JWT_SECRET`, etc. Adds `dotenv@^17.4.2` to express devDependencies.
+
+### Changed
+
+- **`scripts/ci-local.sh` format steps auto-fix instead of check** ([scripts/ci-local.sh](scripts/ci-local.sh)) — `prettier --check` → `prettier --write` for cli, js components, and e2e; `ruff format --check` → `ruff format` for fastapi. Local gate is now one command: re-format and verify. The published CI workflows ([.github/workflows/ci.yml](.github/workflows/ci.yml) and [cli/src/templates/ci.yml.ejs](cli/src/templates/ci.yml.ejs)) stay `--check`-only — CI must surface drift, never mutate. Lint stays `--check` in both layers; auto-fixing semantic lints (`eslint --fix`, `ruff check --fix`) can rewrite code surprisingly.
+
+### Fixed
+
+- **`express/src/prisma.ts` rewritten as a lazy `Proxy`** — the previous eager `export const prisma = getPrismaClient()` triggered `buildClient()` (and its `DATABASE_URL` check) at module load, so importing `prisma.ts` for type-only or build-time-only code paths exploded the import chain. `prisma` is now a `Proxy` that resolves `getPrismaClient()` on first property access. Callsites (`buildApp`, CRUD test base) keep their `prisma.X` syntax. Combined with the new dotenv loading above, `bash scripts/ci-local.sh express` runs clean on a checkout with no env exported.
+
 ## [1.7.2] - 2026-05-20
 
 ### Added

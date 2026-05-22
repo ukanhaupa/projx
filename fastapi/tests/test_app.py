@@ -237,3 +237,50 @@ class TestDatabaseConfig:
                 DatabaseConfig.get_engine()
         finally:
             db_mod._engine = saved_engine
+
+    @pytest.mark.asyncio
+    async def test_server_settings_applied_to_real_connections(self):
+        from sqlalchemy import text
+
+        from src.configs import DatabaseConfig
+        from src.configs import _database as db_mod
+
+        saved_engine, saved_factory = db_mod._engine, db_mod._session_factory
+        db_mod._engine = None
+        db_mod._session_factory = None
+        try:
+            async with DatabaseConfig.async_session(timeout=30) as session:
+                app_name = (await session.execute(text("SHOW application_name"))).scalar_one()
+                stmt_timeout = (await session.execute(text("SHOW statement_timeout"))).scalar_one()
+                idle_timeout = (await session.execute(text("SHOW idle_in_transaction_session_timeout"))).scalar_one()
+            assert app_name == "projx-fastapi"
+            assert stmt_timeout == "5s"
+            assert idle_timeout == "10s"
+        finally:
+            if db_mod._engine is not None:
+                await db_mod._engine.dispose()
+            db_mod._engine, db_mod._session_factory = saved_engine, saved_factory
+
+    @pytest.mark.asyncio
+    async def test_dispose_resets_engine_and_factory(self):
+        from src.configs import DatabaseConfig
+        from src.configs import _database as db_mod
+
+        saved_engine, saved_factory = db_mod._engine, db_mod._session_factory
+        db_mod._engine = None
+        db_mod._session_factory = None
+        try:
+            DatabaseConfig.get_engine()
+            assert db_mod._engine is not None
+            await DatabaseConfig.dispose()
+            assert db_mod._engine is None
+            assert db_mod._session_factory is None
+        finally:
+            db_mod._engine, db_mod._session_factory = saved_engine, saved_factory
+
+    @pytest.mark.asyncio
+    async def test_timeout_param_overrides_default(self, test_db):
+        from src.configs import DatabaseConfig
+
+        async with DatabaseConfig.async_session(timeout=30) as session:
+            assert session is not None

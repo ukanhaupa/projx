@@ -191,7 +191,7 @@ export async function computeScopeFilters(
 // ── Plugin ──────────────────────────────────────────────────────────
 
 function createResolver(): PermissionResolver {
-  const provider = process.env.JWT_PROVIDER ?? 'shared_secret';
+  const provider = process.env.JWT_PROVIDER ?? 'auto';
   if (provider === 'oidc') return new OidcPermissionResolver();
   return new DefaultPermissionResolver();
 }
