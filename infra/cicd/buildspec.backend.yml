@@ -12,7 +12,7 @@ phases:
       - IMAGE_TAG="$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)"
       - if [ -z "$IMAGE_TAG" ]; then IMAGE_TAG="latest"; fi
       - SERVICE_NAME="backend"
-      - DEFAULT_HEALTH_URL="http://localhost:7860/health"
+      - DEFAULT_HEALTH_URL="http://localhost:8000/health"
       - LAST_DEPLOYED_COMMIT="$(aws ssm get-parameter --region "$CICD_REGION" --name "$DEPLOY_STATE_PARAM" --query 'Parameter.Value' --output text 2>/dev/null || true)"
       - SHOULD_DEPLOY="true"
       - |
@@ -67,7 +67,7 @@ phases:
       - |
         set -Eeuo pipefail
         SERVICE_NAME="backend"
-        DEFAULT_HEALTH_URL="http://localhost:7860/health"
+        DEFAULT_HEALTH_URL="http://localhost:8000/health"
 
         json_escape() {
           printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'

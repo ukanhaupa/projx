@@ -14,7 +14,7 @@ try {
     }
   }
 } catch {
-  process.env.BASE_URL ||= 'http://localhost:3000';
+  process.env.BASE_URL ||= 'http://localhost:5173';
 }
 
 const isProdBuild = process.env.E2E_PROD_BUILD === '1';
@@ -33,19 +33,19 @@ function localWebServers(): NonNullable<PlaywrightTestConfig['webServer']> {
   }
 
   const frontendCommand = isProdBuild
-    ? 'cd ../frontend && pnpm exec vite build && pnpm exec vite preview --port 3000 --strictPort'
+    ? 'cd ../frontend && pnpm exec vite build && pnpm exec vite preview --port 4173 --strictPort'
     : 'cd ../frontend && npm run dev';
 
   return [
     {
       command: 'cd ../fastapi && uv run main.py',
-      url: 'http://localhost:7860/api/health',
+      url: 'http://localhost:8000/api/health',
       reuseExistingServer: true,
       timeout: 30000,
     },
     {
       command: frontendCommand,
-      url: 'http://localhost:3000',
+      url: isProdBuild ? 'http://localhost:4173' : 'http://localhost:5173',
       reuseExistingServer: true,
       timeout: isProdBuild ? 240000 : 90000,
     },
@@ -60,7 +60,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://localhost:5173',
     ignoreHTTPSErrors: isDocker,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

@@ -83,8 +83,8 @@ migrate (run-once) ──success──► backend (healthcheck) ──healthy─
 | Service    | Image / Build | Ports           | Notes                                                             |
 | ---------- | ------------- | --------------- | ----------------------------------------------------------------- |
 | `migrate`  | `./fastapi`   | none            | Runs `uv run migrate.py` then exits. Must succeed before backend. |
-| `backend`  | `./fastapi`   | 7860 (internal) | Gunicorn + Uvicorn workers. Healthcheck on `/api/health`.         |
-| `frontend` | `./frontend`  | 80, 443         | Nginx reverse-proxies `/api/` to `backend:7860`. Serves SPA.      |
+| `backend`  | `./fastapi`   | 8000 (internal) | Gunicorn + Uvicorn workers. Healthcheck on `/api/health`.         |
+| `frontend` | `./frontend`  | 80, 443         | Nginx reverse-proxies `/api/` to `backend:8000`. Serves SPA.      |
 
 Environment is supplied via `fastapi/.env`. The frontend reads `DOMAIN` (defaults to `localhost`) to configure SSL certificates.
 

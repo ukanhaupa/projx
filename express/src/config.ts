@@ -12,7 +12,7 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.string().default('debug'),
-  CORS_ALLOW_ORIGINS: z.string().default('http://localhost:3000'),
+  CORS_ALLOW_ORIGINS: z.string().default('http://localhost:5173'),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(200),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   JWT_SECRET: z.string().optional(),

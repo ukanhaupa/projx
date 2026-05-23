@@ -22,7 +22,7 @@ phases:
         case "$SERVICE" in
           backend)
             REPOSITORY_URL="$BACKEND_ECR_REPOSITORY_URL"
-            HEALTH_URL="${BACKEND_DEPLOY_HEALTH_URL:-http://localhost:7860/health}"
+            HEALTH_URL="${BACKEND_DEPLOY_HEALTH_URL:-http://localhost:8000/health}"
             ;;
           frontend)
             REPOSITORY_URL="$FRONTEND_ECR_REPOSITORY_URL"

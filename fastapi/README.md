@@ -11,16 +11,16 @@ Prerequisites: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 cp .env.example .env          # configure database + auth
 uv sync                       # install all dependencies (dev + test)
-uv run main.py                # uvicorn with hot reload on port 7860
+uv run main.py                # uvicorn with hot reload on port 8000
 ```
 
 Or run uvicorn directly:
 
 ```bash
-uv run uvicorn src.app:app --reload --port 7860
+uv run uvicorn src.app:app --reload --port 8000
 ```
 
-API docs: `http://localhost:7860/docs`
+API docs: `http://localhost:8000/docs`
 Health check: `GET /api/health` (returns app + database status)
 
 ## Project Structure
@@ -377,7 +377,7 @@ To correlate logs across services, pass your own `X-Request-ID` header in the re
 
 | Script        | Command                                    | Description                                    |
 | ------------- | ------------------------------------------ | ---------------------------------------------- |
-| `main.py`     | `uv run main.py`                           | Uvicorn server, hot reload enabled (port 7860) |
+| `main.py`     | `uv run main.py`                           | Uvicorn server, hot reload enabled (port 8000) |
 | `migrate.py`  | `uv run migrate.py`                        | Run Alembic upgrade to head                    |
 |               | `uv run migrate.py --downgrade -1`         | Downgrade one revision                         |
 | `test.py`     | `uv run test.py`                           | Pytest wrapper (passes through all args)       |

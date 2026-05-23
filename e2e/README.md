@@ -126,7 +126,7 @@ test('displays entity list', async ({ page, entities }) => {
 
 | Variable    | Default                 | Description                                                                     |
 | ----------- | ----------------------- | ------------------------------------------------------------------------------- |
-| `BASE_URL`  | `http://localhost:3000` | Frontend URL to test against                                                    |
+| `BASE_URL`  | `http://localhost:5173` | Frontend URL to test against                                                    |
 | `TEST_USER` | `admin`                 | Login username for auth tests                                                   |
 | `TEST_PASS` | `admin`                 | Login password for auth tests                                                   |
 | `CI`        | --                      | Enables CI mode (1 worker, 2 retries, GitHub reporter, no webServer auto-start) |
