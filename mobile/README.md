@@ -22,7 +22,7 @@ flutter pub get
 Copy `.env.example` to `.env` and set:
 
 ```
-API_BASE_URL=http://10.0.2.2:7860   # Android emulator → host
+API_BASE_URL=http://10.0.2.2:8000   # Android emulator → host
 FCM_ENABLED=false                    # set true once you wire FCM
 ```
 

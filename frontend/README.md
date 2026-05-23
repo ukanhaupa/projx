@@ -9,7 +9,7 @@ Prerequisites: Node.js 20+, pnpm 10+ (`corepack enable && corepack prepare pnpm@
 ```bash
 cp .env.example .env     # set VITE_API_URL
 pnpm install
-pnpm dev                 # http://localhost:3000
+pnpm dev                 # http://localhost:5173
 ```
 
 ## Project Structure

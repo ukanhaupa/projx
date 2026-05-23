@@ -8,7 +8,7 @@ from loguru import logger
 def main():
     parser = argparse.ArgumentParser(description="Run the backend server")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--reload", action="store_true", default=False)
     args = parser.parse_args()
