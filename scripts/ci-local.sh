@@ -192,6 +192,32 @@ sec_cli() {
 sec_fastify() { run_js_component fastify; }
 sec_express() { run_js_component express; }
 
+go_format_check() {
+  local out
+  out="$(gofmt -l .)"
+  if [ -n "$out" ]; then
+    echo "gofmt found unformatted files:" >&2
+    echo "$out" >&2
+    return 1
+  fi
+}
+
+sec_go() {
+  [ -d "$ROOT_DIR/go" ] || return 0
+  cd "$ROOT_DIR/go" || exit 1
+  run_step "go install" go mod download
+  run_step "go format" go_format_check
+  run_step "go vet" go vet ./...
+  run_step "go build" go build ./...
+  if command -v golangci-lint >/dev/null 2>&1; then
+    run_step "go lint" golangci-lint run ./...
+  else
+    warn "golangci-lint not installed — skipping (install: brew install golangci-lint)"
+  fi
+  run_step "go test" go test -race -coverprofile=coverage.out -short ./...
+  run_step "go coverage" bash scripts/check-coverage.sh
+}
+
 sec_frontend() {
   run_js_component frontend
   if [ -d "$ROOT_DIR/frontend/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
@@ -289,6 +315,7 @@ available_sections() {
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
+  [ -d "$ROOT_DIR/go" ] && found+=("go")
   [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
@@ -365,7 +392,7 @@ run_wave() {
       xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
       exit 2
     fi
-    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background xfail warn); $fn"
+    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background xfail warn go_format_check); $fn"
     NAMES+=("$s")
     printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
   done

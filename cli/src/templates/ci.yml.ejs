@@ -28,6 +28,9 @@ jobs:
 <% for (const inst of expressInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
+<% for (const inst of goInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
 <% for (const inst of frontendInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
@@ -58,6 +61,10 @@ jobs:
               - '<%= inst.path %>/**'
 <% } %>
 <% for (const inst of expressInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of goInstances) { %>
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
@@ -267,6 +274,58 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.run %> build
       - run: <%= pm.audit %>
+<% } %>
+<% for (const inst of goInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + vet + lint + build + test + audit)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/go.sum
+      - run: go mod download
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$out"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go build ./...
+      - name: golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2
+          "$(go env GOPATH)/bin/golangci-lint" run ./...
+      - run: go test -race -coverprofile=coverage.out -short ./...
+      - run: bash scripts/check-coverage.sh
 <% } %>
 <% for (const inst of frontendInstances) { %>
 

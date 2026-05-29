@@ -102,6 +102,42 @@ describe('scaffold', () => {
     expect(readme).toContain('Express 5, TypeScript');
   });
 
+  it('scaffolds a Go backend with production wiring', async () => {
+    dest = join(tmpdir(), `projx-go-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'go-app',
+        components: ['go'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    expect(existsSync(join(dest, 'go/main.go'))).toBe(true);
+    expect(existsSync(join(dest, 'go/go.mod'))).toBe(true);
+    expect(existsSync(join(dest, 'go/internal/entities/registry.go'))).toBe(
+      true,
+    );
+    expect(existsSync(join(dest, 'go/internal/posts/post.go'))).toBe(true);
+    expect(existsSync(join(dest, 'go/Dockerfile'))).toBe(true);
+
+    const marker = JSON.parse(
+      await readFile(join(dest, 'go/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('go');
+    expect(Array.isArray(marker.skip)).toBe(true);
+
+    const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
+    expect(ci).toContain('go:');
+    expect(ci).toContain('name: Go (');
+
+    const compose = await readFile(join(dest, 'docker-compose.yml'), 'utf-8');
+    expect(compose).toContain('go:');
+    expect(compose).toContain('http://localhost:8080/api/health');
+  });
+
   it('scaffolds Node backends with Drizzle when --orm drizzle is selected', async () => {
     dest = join(tmpdir(), `projx-drizzle-${Date.now()}`);
     await scaffold(

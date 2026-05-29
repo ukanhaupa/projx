@@ -18,6 +18,7 @@ fastapi/     FastAPI + SQLAlchemy + Alembic backend template
 frontend/    React + Vite frontend template
 mobile/      Flutter app template
 e2e/         Playwright E2E template
+go/          Chi + GORM backend template
 infra/       Terraform IaC template
 features/    Opt-in feature overlays applied via --<feature>=<targets> (e.g. --auth=fastify)
 addons/      Out-of-tree drop-ins (e.g. ORM addons in addons/orms/<orm>/)
@@ -107,17 +108,18 @@ node cli/dist/index.js my-app --components fastify --no-install --no-git --local
 
 Each template has its own test suite that must stay green on the projx repo itself (not just in scaffolded projects):
 
-| Template    | Format      | Lint                         | Typecheck      | Test                   | Coverage                                                           |
-| ----------- | ----------- | ---------------------------- | -------------- | ---------------------- | ------------------------------------------------------------------ |
-| `cli/`      | prettier    | eslint                       | `tsc --noEmit` | vitest                 | v8 ≥80%                                                            |
-| `fastify/`  | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres) | v8 ≥80%                                                            |
-| `express/`  | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres) | v8 ≥80%                                                            |
-| `fastapi/`  | ruff format | ruff check                   | mypy           | pytest                 | pytest-cov ≥80%                                                    |
-| `frontend/` | prettier    | eslint                       | `tsc --noEmit` | vitest                 | v8 ≥80%                                                            |
-| `mobile/`   | dart format | `dart analyze --fatal-infos` | (in analyze)   | flutter test           | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80% |
-| `e2e/`      | prettier    | eslint                       | `tsc --noEmit` | n/a                    | n/a                                                                |
+| Template    | Format               | Lint                         | Typecheck                 | Test                   | Coverage                                                           |
+| ----------- | -------------------- | ---------------------------- | ------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| `cli/`      | prettier             | eslint                       | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
+| `fastify/`  | prettier             | eslint                       | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
+| `express/`  | prettier             | eslint                       | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
+| `fastapi/`  | ruff format          | ruff check                   | mypy                      | pytest                 | pytest-cov ≥80%                                                    |
+| `frontend/` | prettier             | eslint                       | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
+| `mobile/`   | dart format          | `dart analyze --fatal-infos` | (in analyze)              | flutter test           | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80% |
+| `go/`       | gofmt -l + goimports | golangci-lint                | go vet (in golangci-lint) | go test -race          | [scripts/check-coverage.sh](go/scripts/check-coverage.sh) ≥80%     |
+| `e2e/`      | prettier             | eslint                       | `tsc --noEmit`            | n/a                    | n/a                                                                |
 
-CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `frontend`, `e2e`, `infra`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo.
+CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `go`, `frontend`, `e2e`, `infra`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo.
 
 Prettier config is unified across `cli/`, `fastify/`, `express/`, `frontend/`, `e2e/`: `{semi: true, singleQuote: true, trailingComma: "all", printWidth: 80, tabWidth: 2}` — frontend keeps `jsxSingleQuote` + `bracketSameLine` as overrides. All four `.prettierignore` files cover `node_modules`, `dist`, `coverage`, and all three lockfile names (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`).
 
@@ -149,6 +151,10 @@ Routes throw typed errors; handlers map them. Do NOT add inline `reply.status(N)
 ### Private module imports
 
 FastAPI: files inside `src/` cannot `from src.<pkg>._<file> import ...`. Import from the package's `__init__.py`. CI and pre-commit enforce this via grep. The base `_-prefixed` files are package-private.
+
+### Go startup discipline
+
+Go: panic-on-misconfig at startup for the entity registry — fail-loud is preferred over silent fallback. Pool sizes and HTTP timeouts come from env. Distroless static runtime image — `CGO_ENABLED=0` default.
 
 ### Entity lifecycle hooks (fastify + express)
 
@@ -187,7 +193,7 @@ The standard is in [docs/feature-templates.md](docs/feature-templates.md). Key p
 - `feature.json` at `features/<name>/` declares `supports`, `env`, `requires`, and optional `requiresOrm`.
 - Patches are JSON: `package-json` (object merge) or `text` (anchor-based insert). Apply mechanism is in [cli/src/features.ts](cli/src/features.ts), idempotent via sentinel comments.
 - `applyFeatures` runs after the base copy in `scaffold.ts`.
-- Currently shipped: `auth` across all 9 backend × ORM combinations — fastify + {prisma, drizzle, sequelize, typeorm}, express + {prisma, drizzle, sequelize, typeorm}, fastapi. Same external surface (signup, login, MFA, password reset, sessions, refresh rotation with replay detection, email verification, mailer, cron-driven cleanup) on every port; ORM-specific bits live under `features/auth/<stack>/<orm>/`, shared bits under `features/auth/<stack>/common/`.
+- Currently shipped: `auth` across all 9 backend × ORM combinations — fastify + {prisma, drizzle, sequelize, typeorm}, express + {prisma, drizzle, sequelize, typeorm}, fastapi. Same external surface (signup, login, MFA, password reset, sessions, refresh rotation with replay detection, email verification, mailer, cron-driven cleanup) on every port; ORM-specific bits live under `features/auth/<stack>/<orm>/`, shared bits under `features/auth/<stack>/common/`. Go is M1 base only — no `--auth` shipped yet (lands in M3, issue #50).
 
 When adapting code from sister projects (docusift, ops-pilot, memoria), strip business specifics: tenant orchestration, billing plans, queue scheduling, grace windows, UTM tracking. Keep the security hardening: rotation, lockout, recovery codes, request_id propagation.
 

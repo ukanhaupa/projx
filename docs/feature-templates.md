@@ -2,6 +2,8 @@
 
 Optional, opt-in modules that overlay onto an existing component (e.g. `fastify`, `fastapi`, `frontend`, `mobile`). Triggered by a CLI flag at `create` or `add` time. First feature: `auth`. Future: `billing`, `audit`, `mfa`, etc.
 
+Supported backends today: `fastify`, `express`, `fastapi`. The `go` backend ships as M1 base only — no feature overlays yet (auth lands in M3, issue #50).
+
 ## Goals
 
 - Keep the base templates lean. Anything optional ships as a feature.

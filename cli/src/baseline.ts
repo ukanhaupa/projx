@@ -479,7 +479,8 @@ export async function writeTemplateToDir(
   const hasBackend =
     components.includes('fastapi') ||
     components.includes('fastify') ||
-    components.includes('express');
+    components.includes('express') ||
+    components.includes('go');
 
   const userSkip = rootSkip ?? [];
   const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];

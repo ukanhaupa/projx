@@ -112,6 +112,35 @@ services:
           - backend
 <% } %>
 <% } %>
+<% for (const inst of goInstances) { %>
+  <%= inst.path %>:
+    build:
+      context: ./<%= inst.path %>
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    env_file:
+      - ./<%= inst.path %>/.env
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8080/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      app-network:
+<% if (fastifyInstances.length === 0 && expressInstances.length === 0 && fastapiInstances.length === 0 && inst.path === goInstances[0].path) { %>
+        aliases:
+          - backend
+<% } %>
+<% } %>
 <% for (const inst of frontendInstances) { %>
   <%= inst.path %>:
     build:
@@ -137,6 +166,10 @@ services:
 <% } else if (fastapiInstances.length > 0) { %>
     depends_on:
       <%= fastapiInstances[0].path %>:
+        condition: service_healthy
+<% } else if (goInstances.length > 0) { %>
+    depends_on:
+      <%= goInstances[0].path %>:
         condition: service_healthy
 <% } %>
     restart: unless-stopped

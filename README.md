@@ -54,6 +54,9 @@ npx create-projx saas --components fastify,frontend -y
 # Minimal Express API + React frontend
 npx create-projx api-app --components express,frontend -y
 
+# Go API + React frontend
+npx create-projx my-app --components go,frontend -y
+
 # Drizzle-backed Node API + React frontend
 npx create-projx ledger --components express,frontend --orm drizzle -y
 
@@ -90,6 +93,7 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 | `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                       |
 | `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                    |
 | `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks |
+| `go`       | Go, Chi, GORM                                                 | Auto-entity CRUD, request_id error envelope, soft-delete, lifecycle hooks  |
 | `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                              |
 | `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                   |
 | `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                      |
@@ -139,11 +143,14 @@ Sixteen endpoints across signup, login, MFA challenge/enroll/disable, recovery-c
 
 ### Backend × ORM compatibility
 
-| Backend   | Prisma | Drizzle | Sequelize | TypeORM | SQLAlchemy |
-| --------- | ------ | ------- | --------- | ------- | ---------- |
-| `fastify` | yes    | yes     | yes       | yes     | —          |
-| `express` | yes    | yes     | yes       | yes     | —          |
-| `fastapi` | —      | —       | —         | —       | yes        |
+| Backend   | Prisma | Drizzle | Sequelize | TypeORM | SQLAlchemy | GORM |
+| --------- | ------ | ------- | --------- | ------- | ---------- | ---- |
+| `fastify` | yes    | yes     | yes       | yes     | —          | —    |
+| `express` | yes    | yes     | yes       | yes     | —          | —    |
+| `fastapi` | —      | —       | —         | —       | yes        | —    |
+| `go`      | —      | —       | —         | —       | —          | —\*  |
+
+\*Go ships the base template only (M1); the `--auth` feature lands in M3 (issue #50).
 
 Nine combinations, one external contract. ORM-specific bits live under [features/auth/](features/auth/) (per-stack, per-ORM subdirectories); the shared surface per stack lives under each stack's `common/` subdirectory. Env vars the feature reads: `JWT_SECRET`, `FRONTEND_URL`, `AUTH_BACKGROUND_JOBS` (all backends); `JWT_ALGORITHMS`, `MFA_ISSUER`, `AUTH_CLEANUP_INTERVAL_SECONDS` (fastapi).
 
@@ -167,6 +174,9 @@ npx create-projx my-app
 
 # Non-interactive — specify components
 npx create-projx my-app --components fastify,frontend,e2e
+
+# Go backend + React frontend
+npx create-projx my-app --components go,frontend
 
 # Use Drizzle for Node backends instead of Prisma
 npx create-projx my-app --components express,frontend --orm drizzle
@@ -196,7 +206,7 @@ npx create-projx my-app
 Interactive prompt lets you pick components. Or specify them directly:
 
 ```bash
-npx create-projx my-app --components fastapi,fastify,frontend,mobile,e2e,infra
+npx create-projx my-app --components fastapi,fastify,go,frontend,mobile,e2e,infra
 ```
 
 ### Adopt an Existing Project
@@ -293,7 +303,7 @@ npx create-projx pin --list
 npx create-projx doctor [--fix]
 npx create-projx gen entity <name> [--ai | --backend]
 
---components <list>    Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
+--components <list>    Comma-separated: fastapi,fastify,express,go,frontend,mobile,e2e,infra
 --name <dir>           Custom directory for `add <type>` (multi-instance)
 --ai                   Target fastapi (AI/ML) for gen entity
 --backend              Target fastify (API backend) for gen entity

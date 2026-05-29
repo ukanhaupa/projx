@@ -13,6 +13,7 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: 'FastAPI', hint: 'Python — SQLAlchemy, Alembic, uvicorn' },
   fastify: { label: 'Fastify', hint: 'Node.js — Prisma, TypeBox, TypeScript' },
   express: { label: 'Express', hint: 'Node.js — Express 5, TypeScript' },
+  go: { label: 'Go', hint: 'Go — Chi + GORM, entity registry' },
   frontend: { label: 'Frontend', hint: 'React 19 + Vite + React Router' },
   mobile: { label: 'Mobile', hint: 'Flutter + Riverpod + GoRouter' },
   e2e: { label: 'E2E Tests', hint: 'Playwright' },

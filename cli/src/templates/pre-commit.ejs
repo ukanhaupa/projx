@@ -80,6 +80,34 @@ if [ -n "$<%= inst.upper %>_ALL" ]; then
   echo "$<%= inst.upper %>_ALL" | xargs git add
 fi
 <% } %>
+<% for (const inst of goInstances) { %>
+
+<%= inst.upper %>_GO=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.go$' || true)
+if [ -n "$<%= inst.upper %>_GO" ]; then
+  if command -v go &>/dev/null; then
+    echo "Checking <%= inst.path %>..."
+    cd <%= inst.path %>
+    REL_FILES=$(echo "$<%= inst.upper %>_GO" | sed 's|^<%= inst.path %>/||')
+    UNFORMATTED=$(echo "$REL_FILES" | xargs gofmt -l)
+    if [ -n "$UNFORMATTED" ]; then
+      echo "ERROR: gofmt found unformatted files in <%= inst.path %>:"
+      echo "$UNFORMATTED"
+      echo "Run 'gofmt -w' on these files and re-stage."
+      exit 1
+    fi
+    go vet ./...
+    if command -v golangci-lint &>/dev/null; then
+      golangci-lint run ./...
+    else
+      echo "Skipping golangci-lint (not installed)"
+    fi
+    cd ..
+    echo "$<%= inst.upper %>_GO" | xargs git add
+  else
+    echo "Skipping <%= inst.path %> gates (go toolchain not installed)"
+  fi
+fi
+<% } %>
 <% for (const inst of frontendInstances) { %>
 
 <%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tsx\?$' || true)

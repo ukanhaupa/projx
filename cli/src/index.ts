@@ -235,7 +235,7 @@ function printHelp(): void {
     projx gen entity <name>       Generate a new entity
 
   Options:
-    --components <list>  Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
+    --components <list>  Comma-separated: fastapi,fastify,express,go,frontend,mobile,e2e,infra
     --orm <provider>     Node backend ORM: prisma (default), drizzle, sequelize, typeorm
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
@@ -249,6 +249,7 @@ function printHelp(): void {
     npx create-projx my-app --components fastapi,frontend,e2e
     npx create-projx my-app --components express,frontend,e2e --orm drizzle
     npx create-projx my-app --components fastify,frontend,mobile --auth fastify
+    npx create-projx my-app --components go,frontend,e2e
     npx create-projx my-app -y
     npx create-projx add frontend mobile
     npx create-projx add fastify --name email-ingestor

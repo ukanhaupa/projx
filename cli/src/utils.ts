@@ -21,6 +21,7 @@ export const COMPONENTS = [
   'fastapi',
   'fastify',
   'express',
+  'go',
   'frontend',
   'mobile',
   'e2e',
@@ -234,6 +235,7 @@ export const EXCLUDE = new Set([
   'test-results',
   '.terraform',
   'cli',
+  'vendor',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -247,6 +249,8 @@ const EXCLUDE_FILES = new Set([
   '.env.prod',
   'dev.tfplan',
   '.coverage',
+  'coverage.out',
+  'coverage.html',
 ]);
 
 export async function copyComponent(
