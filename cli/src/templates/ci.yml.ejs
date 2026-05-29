@@ -322,7 +322,7 @@ jobs:
       - run: go build ./...
       - uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
         with:
-          version: v1.62.2
+          version: v2.12.2
           working-directory: ${{ env.WS }}/<%= inst.path %>
       - name: govulncheck
         run: |
