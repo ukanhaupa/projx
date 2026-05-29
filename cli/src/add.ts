@@ -361,6 +361,17 @@ async function installDeps(
             );
           }
           break;
+        case 'go':
+          if (hasCommand('go')) {
+            spinner.start(`Downloading Go modules (${path}/)`);
+            exec('go mod download', dir);
+            spinner.stop(`Go modules downloaded (${path}/).`);
+          } else {
+            p.log.warn(
+              `Go not found — run 'cd ${path} && go mod download' manually.`,
+            );
+          }
+          break;
         case 'infra':
           break;
       }

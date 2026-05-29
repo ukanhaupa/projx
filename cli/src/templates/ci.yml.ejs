@@ -307,7 +307,7 @@ jobs:
           path: ${{ env.WS }}
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
-          go-version: '1.25'
+          go-version-file: ${{ env.WS }}/<%= inst.path %>/go.mod
           cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/go.sum
       - run: go mod download
       - name: gofmt
@@ -320,11 +320,15 @@ jobs:
           fi
       - run: go vet ./...
       - run: go build ./...
-      - name: golangci-lint
+      - uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
+        with:
+          version: v1.62.2
+          working-directory: ${{ env.WS }}/<%= inst.path %>
+      - name: govulncheck
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2
-          "$(go env GOPATH)/bin/golangci-lint" run ./...
-      - run: go test -race -coverprofile=coverage.out -short ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - run: go test -race -coverprofile=coverage.out ./...
       - run: bash scripts/check-coverage.sh
 <% } %>
 <% for (const inst of frontendInstances) { %>

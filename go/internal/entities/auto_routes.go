@@ -22,6 +22,47 @@ import (
 
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
+func formatValidationError(err error, model any) string {
+	vErrs, ok := err.(validator.ValidationErrors)
+	if !ok {
+		return "validation failed"
+	}
+	t := reflect.TypeOf(model)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	msgs := make([]string, 0, len(vErrs))
+	for _, fe := range vErrs {
+		name := fe.Field()
+		if t.Kind() == reflect.Struct {
+			if sf, ok := t.FieldByName(fe.StructField()); ok {
+				if tag := jsonTagName(sf); tag != "" && tag != "-" {
+					name = tag
+				}
+			}
+		}
+		msgs = append(msgs, fieldRuleMessage(name, fe))
+	}
+	return strings.Join(msgs, ", ")
+}
+
+func fieldRuleMessage(name string, fe validator.FieldError) string {
+	switch fe.Tag() {
+	case "required":
+		return "field '" + name + "' is required"
+	case "max":
+		return "field '" + name + "' must be at most " + fe.Param() + " chars"
+	case "min":
+		return "field '" + name + "' must be at least " + fe.Param() + " chars"
+	case "email":
+		return "field '" + name + "' must be a valid email"
+	case "oneof":
+		return "field '" + name + "' must be one of: " + fe.Param()
+	default:
+		return "field '" + name + "' is invalid"
+	}
+}
+
 func MountEntity(r chi.Router, gdb *gorm.DB, cfg EntityConfig) {
 	if cfg.schema == nil {
 		s, err := schema.Parse(cfg.Model, &sync.Map{}, gdb.NamingStrategy)
@@ -72,13 +113,16 @@ func getHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 func createHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		record := reflect.New(structTypeOf(cfg.Model)).Interface()
-		if err := decodeAndValidate(r, record); err != nil {
-			return err
+		if err := json.NewDecoder(r.Body).Decode(record); err != nil {
+			return apperr.Validation("invalid JSON body")
 		}
 		if cfg.Hooks.BeforeCreate != nil {
 			if err := cfg.Hooks.BeforeCreate(r, record); err != nil {
 				return err
 			}
+		}
+		if err := validate.Struct(record); err != nil {
+			return apperr.Validation(formatValidationError(err, cfg.Model))
 		}
 		if err := gdb.Create(record).Error; err != nil {
 			return apperr.FromDB(err, cfg.Name)
@@ -114,7 +158,7 @@ func updateHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		}
 		if err := validate.Struct(decoded); err != nil {
 			if !isPartialValidationError(err, rawMap) {
-				return apperr.Validation(err.Error())
+				return apperr.Validation(formatValidationError(err, cfg.Model))
 			}
 		}
 
@@ -156,7 +200,7 @@ func deleteHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 			}
 		}
 		record := reflect.New(structTypeOf(cfg.Model)).Interface()
-		res := gdb.Where("id = ?", id).Delete(record)
+		res := gdb.WithContext(r.Context()).Where("id = ?", id).Delete(record)
 		if res.Error != nil {
 			return apperr.FromDB(res.Error, cfg.Name)
 		}
@@ -182,13 +226,13 @@ func bulkCreateHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		txErr := gdb.Transaction(func(tx *gorm.DB) error {
 			for i := 0; i < slice.Len(); i++ {
 				item := slice.Index(i).Addr().Interface()
-				if err := validate.Struct(item); err != nil {
-					return apperr.Validation(err.Error())
-				}
 				if cfg.Hooks.BeforeCreate != nil {
 					if err := cfg.Hooks.BeforeCreate(r, item); err != nil {
 						return err
 					}
+				}
+				if err := validate.Struct(item); err != nil {
+					return apperr.Validation(formatValidationError(err, cfg.Model))
 				}
 			}
 			if err := tx.Create(slicePtr.Interface()).Error; err != nil {
@@ -229,7 +273,7 @@ func bulkDeleteHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 			}
 		}
 		record := reflect.New(structTypeOf(cfg.Model)).Interface()
-		if err := gdb.Where("id IN ?", body.IDs).Delete(record).Error; err != nil {
+		if err := gdb.WithContext(r.Context()).Where("id IN ?", body.IDs).Delete(record).Error; err != nil {
 			return apperr.FromDB(err, cfg.Name)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -250,7 +294,7 @@ func decodeAndValidate(r *http.Request, dest any) error {
 		return apperr.Validation("invalid JSON body")
 	}
 	if err := validate.Struct(dest); err != nil {
-		return apperr.Validation(err.Error())
+		return apperr.Validation(formatValidationError(err, dest))
 	}
 	return nil
 }
@@ -324,6 +368,8 @@ func isPartialValidationError(err error, rawMap map[string]json.RawMessage) bool
 	return true
 }
 
+// ASCII-only: field names come from Go struct identifiers, which the spec
+// restricts to ASCII letters/digits/underscore — byte-level slicing is safe.
 func lowerFirst(s string) string {
 	if s == "" {
 		return s

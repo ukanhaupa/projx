@@ -701,6 +701,45 @@ describe('scaffold install paths (mocked)', () => {
     expect(calls.some((c) => c.includes('install'))).toBe(false);
     expect(calls.some((c) => c.includes('flutter'))).toBe(false);
   });
+
+  it('runs go mod download for go component when toolchain is on PATH', async () => {
+    dest = join(tmpdir(), `projx-scaffold-go-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      {
+        name: 'go-install-app',
+        components: ['go'],
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('go mod download'))).toBe(true);
+  });
+
+  it('warns when go toolchain is missing', async () => {
+    dest = join(tmpdir(), `projx-scaffold-go-missing-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      {
+        name: 'go-missing-app',
+        components: ['go'],
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('go mod download'))).toBe(false);
+    expect(existsSync(join(dest, 'go'))).toBe(true);
+  });
 });
 
 const PMS: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun'];

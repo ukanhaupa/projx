@@ -108,16 +108,16 @@ node cli/dist/index.js my-app --components fastify --no-install --no-git --local
 
 Each template has its own test suite that must stay green on the projx repo itself (not just in scaffolded projects):
 
-| Template    | Format               | Lint                         | Typecheck                 | Test                   | Coverage                                                           |
-| ----------- | -------------------- | ---------------------------- | ------------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `cli/`      | prettier             | eslint                       | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
-| `fastify/`  | prettier             | eslint                       | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
-| `express/`  | prettier             | eslint                       | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
-| `fastapi/`  | ruff format          | ruff check                   | mypy                      | pytest                 | pytest-cov ≥80%                                                    |
-| `frontend/` | prettier             | eslint                       | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
-| `mobile/`   | dart format          | `dart analyze --fatal-infos` | (in analyze)              | flutter test           | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80% |
-| `go/`       | gofmt -l + goimports | golangci-lint                | go vet (in golangci-lint) | go test -race          | [scripts/check-coverage.sh](go/scripts/check-coverage.sh) ≥80%     |
-| `e2e/`      | prettier             | eslint                       | `tsc --noEmit`            | n/a                    | n/a                                                                |
+| Template    | Format      | Lint                            | Typecheck                 | Test                   | Coverage                                                           |
+| ----------- | ----------- | ------------------------------- | ------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| `cli/`      | prettier    | eslint                          | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
+| `fastify/`  | prettier    | eslint                          | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
+| `express/`  | prettier    | eslint                          | `tsc --noEmit`            | vitest (real Postgres) | v8 ≥80%                                                            |
+| `fastapi/`  | ruff format | ruff check                      | mypy                      | pytest                 | pytest-cov ≥80%                                                    |
+| `frontend/` | prettier    | eslint                          | `tsc --noEmit`            | vitest                 | v8 ≥80%                                                            |
+| `mobile/`   | dart format | `dart analyze --fatal-infos`    | (in analyze)              | flutter test           | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80% |
+| `go/`       | gofmt -l    | golangci-lint (incl. goimports) | go vet (in golangci-lint) | go test -race          | [scripts/check-coverage.sh](go/scripts/check-coverage.sh) ≥80%     |
+| `e2e/`      | prettier    | eslint                          | `tsc --noEmit`            | n/a                    | n/a                                                                |
 
 CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `go`, `frontend`, `e2e`, `infra`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo.
 

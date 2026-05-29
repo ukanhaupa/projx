@@ -30,6 +30,13 @@ export const COMPONENTS = [
 
 export type Component = (typeof COMPONENTS)[number];
 
+export const BACKEND_COMPONENTS = [
+  'fastapi',
+  'fastify',
+  'express',
+  'go',
+] as const satisfies readonly Component[];
+
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 

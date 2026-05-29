@@ -99,7 +99,7 @@ if [ -n "$<%= inst.upper %>_GO" ]; then
     if command -v golangci-lint &>/dev/null; then
       golangci-lint run ./...
     else
-      echo "Skipping golangci-lint (not installed)"
+      echo "Skipping golangci-lint (not installed — \`brew install golangci-lint\` to enable)"
     fi
     cd ..
     echo "$<%= inst.upper %>_GO" | xargs git add

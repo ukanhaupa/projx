@@ -1,6 +1,3 @@
-// Package health exposes two probes: /health (liveness — process is up) and
-// /ready (readiness — DB is pingable). Liveness is unconditional 200; readiness
-// fails if the DB connection is unhealthy.
 package health
 
 import (

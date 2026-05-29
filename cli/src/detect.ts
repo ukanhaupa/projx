@@ -98,6 +98,15 @@ async function scanDirectory(
     });
   }
 
+  if (existsSync(join(dir, 'go.mod'))) {
+    results.push({
+      component: 'go',
+      directory: relPath,
+      confidence: 'high',
+      evidence: 'go.mod present',
+    });
+  }
+
   const hasTf =
     existsSync(join(dir, 'main.tf')) ||
     existsSync(join(dir, 'variables.tf')) ||

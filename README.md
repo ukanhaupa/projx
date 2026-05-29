@@ -143,16 +143,16 @@ Sixteen endpoints across signup, login, MFA challenge/enroll/disable, recovery-c
 
 ### Backend × ORM compatibility
 
-| Backend   | Prisma | Drizzle | Sequelize | TypeORM | SQLAlchemy | GORM |
-| --------- | ------ | ------- | --------- | ------- | ---------- | ---- |
-| `fastify` | yes    | yes     | yes       | yes     | —          | —    |
-| `express` | yes    | yes     | yes       | yes     | —          | —    |
-| `fastapi` | —      | —       | —         | —       | yes        | —    |
-| `go`      | —      | —       | —         | —       | —          | —\*  |
+| Backend   | Prisma | Drizzle | Sequelize | TypeORM | SQLAlchemy | GORM  |
+| --------- | ------ | ------- | --------- | ------- | ---------- | ----- |
+| `fastify` | yes    | yes     | yes       | yes     | —          | —     |
+| `express` | yes    | yes     | yes       | yes     | —          | —     |
+| `fastapi` | —      | —       | —         | —       | yes        | —     |
+| `go`      | —      | —       | —         | —       | —          | yes\* |
 
-\*Go ships the base template only (M1); the `--auth` feature lands in M3 (issue #50).
+\*Go ships only base CRUD/runtime today; `--auth=go` lands in M3 (issue #50). sqlc / ent / sea-orm are alternate ORMs deferred to M2.
 
-Nine combinations, one external contract. ORM-specific bits live under [features/auth/](features/auth/) (per-stack, per-ORM subdirectories); the shared surface per stack lives under each stack's `common/` subdirectory. Env vars the feature reads: `JWT_SECRET`, `FRONTEND_URL`, `AUTH_BACKGROUND_JOBS` (all backends); `JWT_ALGORITHMS`, `MFA_ISSUER`, `AUTH_CLEANUP_INTERVAL_SECONDS` (fastapi).
+Nine auth combinations today, one external contract — Go joins in M3. ORM-specific bits live under [features/auth/](features/auth/) (per-stack, per-ORM subdirectories); the shared surface per stack lives under each stack's `common/` subdirectory. Env vars the feature reads: `JWT_SECRET`, `FRONTEND_URL`, `AUTH_BACKGROUND_JOBS` (all backends); `JWT_ALGORITHMS`, `MFA_ISSUER`, `AUTH_CLEANUP_INTERVAL_SECONDS` (fastapi).
 
 Full feature-template spec — manifests, patches, anchors, idempotency — in [docs/feature-templates.md](docs/feature-templates.md).
 

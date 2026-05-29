@@ -94,7 +94,7 @@ if [ -n "$GO_FILES" ]; then
     if command -v golangci-lint &> /dev/null; then
       golangci-lint run ./...
     else
-      echo "Skipping golangci-lint (not installed)"
+      echo "Skipping golangci-lint (not installed — \`brew install golangci-lint\` to enable)"
     fi
     cd ..
     echo "$GO_FILES" | xargs git add

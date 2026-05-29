@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import * as p from '@clack/prompts';
 import {
   type PackageManager,
+  BACKEND_COMPONENTS,
   cleanupRepo,
   discoverComponentsFromMarkers,
   downloadRepo,
@@ -1815,7 +1816,7 @@ async function appendDrizzleEntity(
 
 // --- Main ---
 
-type BackendTarget = 'fastapi' | 'fastify' | 'express';
+type BackendTarget = (typeof BACKEND_COMPONENTS)[number];
 
 async function resolvePrimaryBackend(
   cwd: string,
@@ -1834,11 +1835,10 @@ async function resolvePrimaryBackend(
 
   const config = await readProjxConfig(cwd);
   if (
-    config.primaryBackend === 'fastapi' ||
-    config.primaryBackend === 'fastify' ||
-    config.primaryBackend === 'express'
+    typeof config.primaryBackend === 'string' &&
+    (BACKEND_COMPONENTS as readonly string[]).includes(config.primaryBackend)
   ) {
-    return config.primaryBackend;
+    return config.primaryBackend as BackendTarget;
   }
 
   if (!process.stdin.isTTY) {
@@ -1943,7 +1943,7 @@ async function runGen(opts: RunGenOpts): Promise<void> {
 
   if (!hasFastapi && !hasFastify && !hasExpress) {
     p.log.error(
-      'No backend component found. Need fastapi, fastify, or express.',
+      `No backend component found. Need ${BACKEND_COMPONENTS.join(', ')}.`,
     );
     process.exit(1);
   }

@@ -16,6 +16,7 @@ import {
   type Component,
   type ComponentInstance,
   type ComponentPaths,
+  BACKEND_COMPONENTS,
   DEFAULT_COMPONENT_SKIP_PATTERNS,
   DEFAULT_ROOT_SKIP_PATTERNS,
   copyComponent,
@@ -476,11 +477,7 @@ export async function writeTemplateToDir(
     });
   }
 
-  const hasBackend =
-    components.includes('fastapi') ||
-    components.includes('fastify') ||
-    components.includes('express') ||
-    components.includes('go');
+  const hasBackend = BACKEND_COMPONENTS.some((c) => components.includes(c));
 
   const userSkip = rootSkip ?? [];
   const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];
@@ -910,7 +907,15 @@ async function substituteNamesForInstance(
       `package:${target}/`,
       '.dart',
     );
+  } else if (type === 'go' || type === 'infra') {
+    return;
+  } else {
+    assertNever(type);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled component type: ${String(value)}`);
 }
 
 export async function detectPackageNameOverrides(
