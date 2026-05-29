@@ -99,6 +99,56 @@ Plus, in every project: Docker Compose for dev + prod, GitHub Actions CI per com
 
 All optional. Pick any combination.
 
+## Optional features
+
+Components are the floor. Features are the opt-in modules that ride on top — same standard, same CI, same skip-list discipline. Today there's one, and it's the one everyone rewrites: **auth**.
+
+```bash
+# Fastify + Prisma (default ORM)
+npx create-projx my-app --components fastify --auth fastify
+
+# Express + Drizzle
+npx create-projx my-app --components express --orm drizzle --auth express
+
+# FastAPI + SQLAlchemy
+npx create-projx my-app --components fastapi --auth fastapi
+
+# Multiple backends, one flag — comma-separable targets
+npx create-projx my-app --components fastify,express --auth fastify,express
+```
+
+### What `--auth` ships
+
+- Email + password signup — first user auto-promoted to admin
+- Login with JWT access token and refresh-token rotation, with replay detection
+- Account lockout after 5 failed logins (15-minute cooldown)
+- MFA via TOTP authenticator app — enroll via otpauth URL (client renders the QR), verify on challenge
+- MFA recovery codes — generate, single-use consume, regenerate
+- MFA lockout on repeated bad codes with time-based unlock
+- Password reset via emailed single-use token (30-minute TTL)
+- Email verification with resend endpoint (24-hour TTL token)
+- Authenticated password change — revokes all other sessions
+- Active session listing
+- Current-user lookup via `/me`
+- Role-based permissions baked into the JWT payload
+- SMTP mailer for verification and reset emails — falls back to logging the link when SMTP is unset
+- Cron-driven cleanup of expired tokens (toggle via `AUTH_BACKGROUND_JOBS`)
+- Centralized error responses with `request_id` propagation
+
+Sixteen endpoints across signup, login, MFA challenge/enroll/disable, recovery-code regen, refresh, logout, change-password, sessions, forgot/reset password, verify/resend email, me. Same surface on every backend — mounted at `/auth/*` on fastify and express, `/api/v1/auth/*` on fastapi.
+
+### Backend × ORM compatibility
+
+| Backend   | Prisma | Drizzle | Sequelize | TypeORM | SQLAlchemy |
+| --------- | ------ | ------- | --------- | ------- | ---------- |
+| `fastify` | yes    | yes     | yes       | yes     | —          |
+| `express` | yes    | yes     | yes       | yes     | —          |
+| `fastapi` | —      | —       | —         | —       | yes        |
+
+Nine combinations, one external contract. ORM-specific bits live under [features/auth/](features/auth/) (per-stack, per-ORM subdirectories); the shared surface per stack lives under each stack's `common/` subdirectory. Env vars the feature reads: `JWT_SECRET`, `FRONTEND_URL`, `AUTH_BACKGROUND_JOBS` (all backends); `JWT_ALGORITHMS`, `MFA_ISSUER`, `AUTH_CLEANUP_INTERVAL_SECONDS` (fastapi).
+
+Full feature-template spec — manifests, patches, anchors, idempotency — in [docs/feature-templates.md](docs/feature-templates.md).
+
 ## Built for humans and AI agents
 
 Projx is a shared operating system for teams that ship with both:
