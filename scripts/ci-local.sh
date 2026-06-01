@@ -224,6 +224,9 @@ sec_frontend() {
   if [ -d "$ROOT_DIR/frontend/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
     (cd "$ROOT_DIR/frontend" && run_step "frontend bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
   fi
+  if [ -f "$ROOT_DIR/frontend/nginx.conf" ] && [ -x "$ROOT_DIR/scripts/validate-nginx-config.sh" ]; then
+    run_step "frontend nginx-config" bash "$ROOT_DIR/scripts/validate-nginx-config.sh"
+  fi
 }
 
 sec_e2e() {

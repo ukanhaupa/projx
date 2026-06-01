@@ -2,6 +2,14 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-06-01
+
+### Added
+
+- **`scripts/validate-nginx-config.sh`** ships with every scaffold ([scripts/validate-nginx-config.sh](scripts/validate-nginx-config.sh)) — validates `frontend/nginx.conf` against the same nginx image declared in `frontend/Dockerfile` by mounting the config + a dummy self-signed cert pair and running `nginx -t`. Catches unknown directives (e.g. `brotli on;` on stock `nginx:alpine` without `ngx_brotli` compiled in) BEFORE deploy — without this gate, the directive only fails when the container tries to start in production, after CI is green and the merge has happened. Auto-skips with a warning if Docker isn't available locally; CI's runner is the second line of defence. Fails fast with explicit migration instructions if the Dockerfile adds nginx modules (`apk add nginx-mod-*` or `--add-module`), since the gate's stock-image assumption no longer holds in that case.
+- **CI step `Validate nginx config against runtime image`** in [cli/src/templates/ci.yml.ejs](cli/src/templates/ci.yml.ejs) — runs the new script in every scaffolded project's frontend job, between `check-bundle-size.sh` and the audit step.
+- **`sec_frontend` nginx-config step** in [scripts/ci-local.sh](scripts/ci-local.sh) — invokes the script after the bundle-size step when a `frontend/nginx.conf` is present, so the pre-push gate matches the published CI gate.
+
 ## [1.7.3] - 2026-05-21
 
 ### Added

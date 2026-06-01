@@ -11,7 +11,6 @@ interface StoredTokens {
 }
 
 let tokens: StoredTokens | null = null;
-let refreshTimer: number | null = null;
 let refreshPromise: Promise<void> | null = null;
 
 function parseExp(accessToken: string): number {
@@ -23,16 +22,6 @@ function parseExp(accessToken: string): number {
   }
 }
 
-function scheduleRefresh() {
-  if (refreshTimer) clearTimeout(refreshTimer);
-  if (!tokens) return;
-  const msUntilExpiry = tokens.expires_at - Date.now();
-  const delay = Math.max(msUntilExpiry - 30_000, 1_000);
-  refreshTimer = window.setTimeout(() => {
-    doRefresh();
-  }, delay);
-}
-
 function save(raw: { access_token: string; refresh_token: string }) {
   tokens = {
     access_token: raw.access_token,
@@ -40,7 +29,6 @@ function save(raw: { access_token: string; refresh_token: string }) {
     expires_at: parseExp(raw.access_token),
   };
   localStorage.setItem('auth', JSON.stringify(tokens));
-  scheduleRefresh();
 }
 
 export async function login(username: string, password: string) {
@@ -142,7 +130,6 @@ export function getUserInfo() {
 export function logout() {
   tokens = null;
   localStorage.removeItem('auth');
-  if (refreshTimer) clearTimeout(refreshTimer);
   window.location.href = '/';
 }
 
@@ -153,11 +140,6 @@ export function initAuth(): boolean {
     const parsed: StoredTokens = JSON.parse(stored);
     if (!parsed.access_token || !parsed.refresh_token) return false;
     tokens = parsed;
-    if (tokens.expires_at - Date.now() < 10_000) {
-      doRefresh();
-    } else {
-      scheduleRefresh();
-    }
     return true;
   } catch {
     return false;

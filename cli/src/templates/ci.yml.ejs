@@ -366,7 +366,18 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.run %> build
       - run: bash scripts/check-bundle-size.sh
-      - run: <%= pm.audit %>
+      # Validates frontend/nginx.conf against the same nginx image the Dockerfile
+      # uses. Catches unknown / module-dependent directives (e.g. `brotli on;` on
+      # stock nginx:alpine) BEFORE deploy — without it, the directive only fails
+      # when the container tries to start in prod, after CI is green.
+      #
+      # GOTCHA: if you convert this job to self-hosted runners (shared outbound
+      # IP), `docker run` against `public.ecr.aws/...` will fall back to anonymous
+      # pulls and hit rate limits across concurrent runs. Add OIDC + ECR Public
+      # login steps before this step (see memoria/.github/workflows/ci.yml).
+      - name: Validate nginx config against runtime image
+        working-directory: ${{ env.WS }}
+        run: bash scripts/validate-nginx-config.sh
 <% } %>
 <% for (const inst of mobileInstances) { %>
 
