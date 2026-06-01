@@ -1,15 +1,12 @@
-// Package ratelimit provides an in-process token-bucket rate limiter keyed by
-// an extractable identity (typically AuthUser.ID) — never by IP.
-//
-// IP-keyed rate limits belong at the edge proxy (nginx). This package exists
-// only for per-user / per-tenant business limits that require JWT/body
-// inspection the proxy cannot do. Mount per-route (opt-in) on sensitive
-// endpoints (e.g., login, signup, password reset); never globally.
+// Package ratelimit is per-user / per-tenant in-process token-bucket limiting.
+// IP-keyed limits live at the nginx edge; this package is opt-in per route.
 package ratelimit
 
 import (
 	"context"
+	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -19,14 +16,10 @@ import (
 
 type ctxKey struct{}
 
-// WithUserID returns a new context carrying the user ID for PerUser keying.
-// The auth feature middleware is expected to call this after JWT verification.
 func WithUserID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, ctxKey{}, id)
 }
 
-// UserIDFromContext returns the user ID previously stored via WithUserID,
-// or "" if absent.
 func UserIDFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(ctxKey{}).(string); ok {
 		return v
@@ -34,11 +27,7 @@ func UserIDFromContext(ctx context.Context) string {
 	return ""
 }
 
-// Options configures a Middleware.
-//
-// KeyFunc returns the identity to key the bucket on; returning "" skips
-// limiting for that request. Capacity is the max burst; RefillPerSec is the
-// steady-state rate. OnLimit overrides the 429 response if set.
+// KeyFunc returning "" skips limiting for that request.
 type Options struct {
 	KeyFunc      func(r *http.Request) string
 	Capacity     int
@@ -78,7 +67,7 @@ func newLimiter(capacity int, refillPerSec float64) *limiter {
 	}
 }
 
-func (l *limiter) allow(key string) bool {
+func (l *limiter) allow(key string) (bool, float64, time.Duration) {
 	l.mu.RLock()
 	b, ok := l.buckets[key]
 	l.mu.RUnlock()
@@ -105,10 +94,11 @@ func (l *limiter) allow(key string) bool {
 	b.lastSeen = now
 
 	if b.tokens < 1 {
-		return false
+		retry := time.Duration((1-b.tokens)/l.refillPerSec*1000) * time.Millisecond
+		return false, 0, retry
 	}
 	b.tokens--
-	return true
+	return true, b.tokens, 0
 }
 
 func (l *limiter) sweep() {
@@ -142,8 +132,6 @@ func (l *limiter) startCleanup() {
 	})
 }
 
-// Middleware returns an http middleware that enforces the token-bucket policy
-// described by opts. Cleanup of stale buckets runs lazily on first use.
 func Middleware(opts Options) func(http.Handler) http.Handler {
 	if opts.KeyFunc == nil {
 		panic("ratelimit: KeyFunc is required")
@@ -160,11 +148,12 @@ func Middleware(opts Options) func(http.Handler) http.Handler {
 	if onLimit == nil {
 		onLimit = defaultOnLimit
 	}
+	limitStr := strconv.Itoa(opts.Capacity)
 
-	return wrap(lim, opts.KeyFunc, onLimit)
+	return wrap(lim, opts.KeyFunc, onLimit, limitStr)
 }
 
-func wrap(lim *limiter, keyFunc func(r *http.Request) string, onLimit http.HandlerFunc) func(http.Handler) http.Handler {
+func wrap(lim *limiter, keyFunc func(r *http.Request) string, onLimit http.HandlerFunc, limitStr string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lim.startCleanup()
@@ -173,7 +162,12 @@ func wrap(lim *limiter, keyFunc func(r *http.Request) string, onLimit http.Handl
 				next.ServeHTTP(w, r)
 				return
 			}
-			if !lim.allow(key) {
+			ok, remaining, retry := lim.allow(key)
+			h := w.Header()
+			h.Set("X-RateLimit-Limit", limitStr)
+			h.Set("X-RateLimit-Remaining", strconv.Itoa(int(math.Floor(remaining))))
+			if !ok {
+				h.Set("Retry-After", strconv.Itoa(int(math.Ceil(retry.Seconds()))))
 				onLimit(w, r)
 				return
 			}
@@ -190,13 +184,8 @@ func defaultOnLimit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// PerUser returns a middleware keyed by the user ID stored in the request
-// context via WithUserID. Requests without a user ID skip the limit — the
-// caller is expected to chain this after the auth middleware, which is what
-// makes it useful only on authenticated routes.
-//
-// Defaults: 120 burst capacity, 1 token/sec refill (60 req/min sustained).
-// Construct via Middleware directly to override.
+// PerUser keys on the user ID stored via WithUserID; chains after auth middleware.
+// Defaults: 120 burst, 1 token/sec (60 req/min sustained).
 func PerUser() func(http.Handler) http.Handler {
 	return Middleware(Options{
 		KeyFunc:      func(r *http.Request) string { return UserIDFromContext(r.Context()) },

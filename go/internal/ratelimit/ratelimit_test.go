@@ -25,15 +25,20 @@ func newTestLimiter(capacity int, refillPerSec float64, now func() time.Time) *l
 	return l
 }
 
+func allowOK(l *limiter, key string) bool {
+	ok, _, _ := l.allow(key)
+	return ok
+}
+
 func TestAllowConsumesUntilEmpty(t *testing.T) {
 	t.Parallel()
 	clock := time.Unix(0, 0)
 	l := newTestLimiter(3, 1, func() time.Time { return clock })
 
-	require.True(t, l.allow("u"))
-	require.True(t, l.allow("u"))
-	require.True(t, l.allow("u"))
-	require.False(t, l.allow("u"))
+	require.True(t, allowOK(l, "u"))
+	require.True(t, allowOK(l, "u"))
+	require.True(t, allowOK(l, "u"))
+	require.False(t, allowOK(l, "u"))
 }
 
 func TestRefillRestoresCapacity(t *testing.T) {
@@ -41,13 +46,13 @@ func TestRefillRestoresCapacity(t *testing.T) {
 	clock := time.Unix(0, 0)
 	l := newTestLimiter(2, 1, func() time.Time { return clock })
 
-	require.True(t, l.allow("u"))
-	require.True(t, l.allow("u"))
-	require.False(t, l.allow("u"))
+	require.True(t, allowOK(l, "u"))
+	require.True(t, allowOK(l, "u"))
+	require.False(t, allowOK(l, "u"))
 
 	clock = clock.Add(1100 * time.Millisecond)
-	require.True(t, l.allow("u"))
-	require.False(t, l.allow("u"))
+	require.True(t, allowOK(l, "u"))
+	require.False(t, allowOK(l, "u"))
 }
 
 func TestRefillDoesNotExceedCapacity(t *testing.T) {
@@ -55,14 +60,14 @@ func TestRefillDoesNotExceedCapacity(t *testing.T) {
 	clock := time.Unix(0, 0)
 	l := newTestLimiter(2, 10, func() time.Time { return clock })
 
-	require.True(t, l.allow("u"))
-	require.True(t, l.allow("u"))
-	require.False(t, l.allow("u"))
+	require.True(t, allowOK(l, "u"))
+	require.True(t, allowOK(l, "u"))
+	require.False(t, allowOK(l, "u"))
 
 	clock = clock.Add(10 * time.Second)
-	require.True(t, l.allow("u"))
-	require.True(t, l.allow("u"))
-	require.False(t, l.allow("u"))
+	require.True(t, allowOK(l, "u"))
+	require.True(t, allowOK(l, "u"))
+	require.False(t, allowOK(l, "u"))
 }
 
 func TestPerKeyIsolation(t *testing.T) {
@@ -70,10 +75,10 @@ func TestPerKeyIsolation(t *testing.T) {
 	clock := time.Unix(0, 0)
 	l := newTestLimiter(1, 1, func() time.Time { return clock })
 
-	require.True(t, l.allow("alice"))
-	require.False(t, l.allow("alice"))
-	require.True(t, l.allow("bob"))
-	require.False(t, l.allow("bob"))
+	require.True(t, allowOK(l, "alice"))
+	require.False(t, allowOK(l, "alice"))
+	require.True(t, allowOK(l, "bob"))
+	require.False(t, allowOK(l, "bob"))
 }
 
 func TestMiddlewareSkipsEmptyKey(t *testing.T) {
@@ -109,6 +114,9 @@ func TestMiddleware429EnvelopeOnLimit(t *testing.T) {
 	w1 := httptest.NewRecorder()
 	h.ServeHTTP(w1, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusOK, w1.Code)
+	require.Equal(t, "1", w1.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "0", w1.Header().Get("X-RateLimit-Remaining"))
+	require.Equal(t, "", w1.Header().Get("Retry-After"))
 
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -116,6 +124,9 @@ func TestMiddleware429EnvelopeOnLimit(t *testing.T) {
 	h.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusTooManyRequests, w2.Code)
 	require.Equal(t, "application/json", w2.Header().Get("Content-Type"))
+	require.Equal(t, "1", w2.Header().Get("X-RateLimit-Limit"))
+	require.Equal(t, "0", w2.Header().Get("X-RateLimit-Remaining"))
+	require.NotEmpty(t, w2.Header().Get("Retry-After"))
 
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &body))
@@ -218,8 +229,8 @@ func TestSweepRemovesStaleBuckets(t *testing.T) {
 	l := newTestLimiter(1, 1, func() time.Time { return clock })
 	l.cleanupTTL = 100 * time.Millisecond
 
-	require.True(t, l.allow("alice"))
-	require.True(t, l.allow("bob"))
+	require.True(t, allowOK(l, "alice"))
+	require.True(t, allowOK(l, "bob"))
 	require.Len(t, l.buckets, 2)
 
 	clock = clock.Add(200 * time.Millisecond)
@@ -233,7 +244,7 @@ func TestSweepKeepsFreshBuckets(t *testing.T) {
 	l := newTestLimiter(1, 1, func() time.Time { return clock })
 	l.cleanupTTL = 1 * time.Second
 
-	require.True(t, l.allow("alice"))
+	require.True(t, allowOK(l, "alice"))
 	clock = clock.Add(500 * time.Millisecond)
 	l.sweep()
 	require.Len(t, l.buckets, 1)
@@ -248,7 +259,7 @@ func TestCleanupGoroutineStartsOnce(t *testing.T) {
 
 	l.startCleanup()
 	l.startCleanup()
-	l.allow("alice")
+	_, _, _ = l.allow("alice")
 	time.Sleep(50 * time.Millisecond)
 
 	l.mu.RLock()
@@ -272,7 +283,7 @@ func TestConcurrentAllowSafe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			l.allow("shared")
+			_, _, _ = l.allow("shared")
 		}()
 	}
 	wg.Wait()

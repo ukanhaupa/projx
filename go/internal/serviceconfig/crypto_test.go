@@ -73,10 +73,7 @@ func TestEmptyPlaintextRoundTrip(t *testing.T) {
 	assert.Equal(t, "", got)
 }
 
-// Asserts the on-disk wire format: base64(iv[12] || tag[16] || ciphertext[n]).
-// This is the contract every sibling backend (fastify/express/fastapi) writes
-// to and reads from. If this test breaks, scaffolded projects can no longer
-// decrypt rows written by a Node/Python peer.
+// Wire-format contract with fastify/express/fastapi: base64(iv[12] || tag[16] || ct[n]).
 func TestWireFormatLayout(t *testing.T) {
 	pt := "wire-format-fixture"
 	ct, err := encrypt(testKey, pt)
@@ -92,10 +89,7 @@ func TestWireFormatLayout(t *testing.T) {
 	assert.Equal(t, pt, got)
 }
 
-// NIST GCM test case 13: key=zero32, iv=zero12, plaintext=empty.
-// Expected tag (hex): 530f8afbc74536b9a963b4f1c4cb738b.
-// We hand-build the wire envelope (iv || tag || ct=empty) and decrypt to
-// confirm Go reads the canonical layout the Node/Python siblings produce.
+// NIST GCM TC13 (zero32 key, zero12 iv, empty pt) — locks the iv||tag||ct layout.
 func TestDecryptNistVector(t *testing.T) {
 	key := make([]byte, 32)
 	iv := make([]byte, 12)
