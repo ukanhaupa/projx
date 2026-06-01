@@ -2,6 +2,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  BACKEND_COMPONENTS,
   COMPONENTS,
   KNOWN_FEATURES,
   ORM_PROVIDERS,
@@ -20,6 +21,7 @@ import { pin, unpin, listPins } from './pin.js';
 import { doctor } from './doctor.js';
 import { diff } from './diff.js';
 import { gen } from './gen.js';
+import { sync } from './sync.js';
 
 const args = process.argv.slice(2);
 
@@ -33,7 +35,8 @@ interface ParsedArgs {
     | 'unpin'
     | 'diff'
     | 'doctor'
-    | 'gen';
+    | 'gen'
+    | 'sync';
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -43,6 +46,8 @@ interface ParsedArgs {
     fix?: boolean;
     ai?: boolean;
     backend?: boolean;
+    syncBackend?: (typeof BACKEND_COMPONENTS)[number];
+    syncUrl?: string;
   };
 }
 
@@ -116,6 +121,10 @@ function parseArgs(): ParsedArgs {
       command = 'gen';
       continue;
     }
+    if (arg === 'sync' && !name) {
+      command = 'sync';
+      continue;
+    }
 
     if (arg === '--components') {
       const val = args[++i];
@@ -170,7 +179,38 @@ function parseArgs(): ParsedArgs {
       continue;
     }
     if (arg === '--backend') {
+      const next = args[i + 1];
+      if (
+        command === 'sync' &&
+        next &&
+        BACKEND_COMPONENTS.includes(next as (typeof BACKEND_COMPONENTS)[number])
+      ) {
+        flags.syncBackend = next as (typeof BACKEND_COMPONENTS)[number];
+        i++;
+        continue;
+      }
       flags.backend = true;
+      continue;
+    }
+    if (arg.startsWith('--backend=')) {
+      const val = arg.slice('--backend='.length);
+      if (
+        BACKEND_COMPONENTS.includes(val as (typeof BACKEND_COMPONENTS)[number])
+      ) {
+        flags.syncBackend = val as (typeof BACKEND_COMPONENTS)[number];
+      } else {
+        throw new Error(
+          `Invalid --backend. Use one of: ${BACKEND_COMPONENTS.join(', ')}.`,
+        );
+      }
+      continue;
+    }
+    if (arg === '--url') {
+      flags.syncUrl = args[++i];
+      continue;
+    }
+    if (arg.startsWith('--url=')) {
+      flags.syncUrl = arg.slice('--url='.length);
       continue;
     }
 
@@ -233,6 +273,7 @@ function printHelp(): void {
     projx pin --list              Show all skip patterns
     projx doctor [--fix]          Health check for projx project
     projx gen entity <name>       Generate a new entity
+    projx sync [--backend N]      Pull entity types from a running backend
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,express,go,frontend,mobile,e2e,infra
@@ -331,6 +372,14 @@ async function main(): Promise<void> {
 
   if (command === 'doctor') {
     await doctor(process.cwd(), flags.fix);
+    return;
+  }
+
+  if (command === 'sync') {
+    await sync(process.cwd(), {
+      backend: flags.syncBackend,
+      url: flags.syncUrl,
+    });
     return;
   }
 

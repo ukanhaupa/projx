@@ -14,13 +14,21 @@ import (
 	"github.com/joho/godotenv"
 
 	"projx.local/go/internal/apperr"
+	"projx.local/go/internal/auth"
+	"projx.local/go/internal/cors"
 	"projx.local/go/internal/db"
 	"projx.local/go/internal/entities"
 	"projx.local/go/internal/envutil"
 	"projx.local/go/internal/health"
 	"projx.local/go/internal/logging"
-	"projx.local/go/internal/posts"
 	"projx.local/go/internal/requestid"
+	"projx.local/go/internal/serviceconfig"
+	syncmeta "projx.local/go/internal/sync"
+
+	// projx-anchor: imports
+
+	"projx.local/go/internal/posts"
+	// projx-anchor: entity-imports
 )
 
 const defaultPort = "8080"
@@ -40,19 +48,41 @@ func main() {
 	defer cancel()
 
 	gdb := db.MustOpen(ctx)
-	if err := gdb.AutoMigrate(&posts.Post{}); err != nil {
+	if err := gdb.AutoMigrate(&posts.Post{}, &serviceconfig.ServiceConfig{}); err != nil {
 		logger.Error("automigrate failed", "error", err)
 		os.Exit(1)
 	}
 
+	configSvc, err := serviceconfig.NewService(gdb)
+	if err != nil {
+		logger.Error("service_config init failed", "error", err)
+		os.Exit(1)
+	}
+	_ = configSvc
+
+	var jwtVerifier *auth.Verifier
+	if os.Getenv("JWT_PROVIDER") != "" || os.Getenv("JWT_SECRET") != "" || os.Getenv("JWT_JWKS_URL") != "" {
+		v, err := auth.NewVerifierFromEnv()
+		if err != nil {
+			logger.Error("jwt verifier init failed", "error", err)
+			os.Exit(1)
+		}
+		jwtVerifier = v
+	}
+	_ = jwtVerifier
+
 	entities.Register(posts.Config())
+	// projx-anchor: entity-registrations
 
 	r := chi.NewRouter()
 	r.Use(requestid.Middleware)
 	r.Use(logging.Middleware(logger))
+	r.Use(cors.DefaultMiddleware())
 	r.Use(apperr.Recoverer)
+	// projx-anchor: plugins
 
 	r.Mount("/", health.Routes(gdb))
+	r.Mount("/api/v1/_meta", syncmeta.Routes(gdb))
 	for _, cfg := range entities.All() {
 		entities.MountEntity(r, gdb, cfg)
 	}

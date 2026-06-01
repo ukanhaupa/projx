@@ -288,6 +288,174 @@ async function checkSkipPatterns(
   return results;
 }
 
+const GO_MIN_MAJOR = 1;
+const GO_MIN_MINOR = 25;
+
+export function parseGoVersion(
+  raw: string,
+): { major: number; minor: number } | null {
+  const m = /go(\d+)\.(\d+)(?:\.\d+)?/.exec(raw);
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]) };
+}
+
+export function isGoVersionSupported(v: {
+  major: number;
+  minor: number;
+}): boolean {
+  if (v.major > GO_MIN_MAJOR) return true;
+  if (v.major < GO_MIN_MAJOR) return false;
+  return v.minor >= GO_MIN_MINOR;
+}
+
+function which(cmd: string): boolean {
+  try {
+    execSync(`command -v ${cmd}`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function checkGoComponent(cwd: string, goDir: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const fullDir = join(cwd, goDir);
+
+  try {
+    const raw = execSync('go version', { cwd: fullDir, stdio: 'pipe' })
+      .toString()
+      .trim();
+    const parsed = parseGoVersion(raw);
+    if (!parsed) {
+      results.push({
+        name: 'go toolchain',
+        status: 'fail',
+        message: `Could not parse 'go version' output: ${raw}`,
+      });
+    } else if (!isGoVersionSupported(parsed)) {
+      results.push({
+        name: 'go toolchain',
+        status: 'fail',
+        message: `Go ${parsed.major}.${parsed.minor} detected; need >= ${GO_MIN_MAJOR}.${GO_MIN_MINOR}.`,
+        fix: 'Upgrade Go via https://go.dev/dl/ or your package manager.',
+      });
+    } else {
+      results.push({
+        name: 'go toolchain',
+        status: 'pass',
+        message: `${parsed.major}.${parsed.minor}`,
+      });
+    }
+  } catch {
+    results.push({
+      name: 'go toolchain',
+      status: 'fail',
+      message: "'go' not on PATH.",
+      fix: 'Install Go >= 1.25 from https://go.dev/dl/.',
+    });
+    return results;
+  }
+
+  const goMod = join(fullDir, 'go.mod');
+  if (existsSync(goMod)) {
+    results.push({
+      name: 'go.mod',
+      status: 'pass',
+      message: `${goDir}/go.mod`,
+    });
+  } else {
+    results.push({
+      name: 'go.mod',
+      status: 'fail',
+      message: `Missing ${goDir}/go.mod.`,
+      fix: `Run 'go mod init' in ${goDir}/.`,
+    });
+  }
+
+  if (which('golangci-lint')) {
+    try {
+      const lintRaw = execSync('golangci-lint --version', { stdio: 'pipe' })
+        .toString()
+        .trim();
+      const m = /version\s+v?(\d+)\./i.exec(lintRaw);
+      const major = m ? Number(m[1]) : 0;
+      if (major >= 2) {
+        results.push({
+          name: 'golangci-lint',
+          status: 'pass',
+          message: `v${major}.x`,
+        });
+      } else {
+        results.push({
+          name: 'golangci-lint',
+          status: 'warn',
+          message: `Detected v${major || '?'}.x — projx Go uses v2.`,
+          fix: 'Install golangci-lint v2: https://golangci-lint.run/welcome/install/.',
+        });
+      }
+    } catch {
+      results.push({
+        name: 'golangci-lint',
+        status: 'warn',
+        message: 'Present but version probe failed.',
+      });
+    }
+  } else {
+    results.push({
+      name: 'golangci-lint',
+      status: 'warn',
+      message: 'Not on PATH; CI will still gate lint.',
+      fix: 'Install for local checks: https://golangci-lint.run/welcome/install/.',
+    });
+  }
+
+  if (which('govulncheck')) {
+    results.push({ name: 'govulncheck', status: 'pass', message: 'OK' });
+  } else {
+    results.push({
+      name: 'govulncheck',
+      status: 'warn',
+      message: 'Not on PATH; CI will still gate vuln scan.',
+      fix: 'Install: go install golang.org/x/vuln/cmd/govulncheck@latest.',
+    });
+  }
+
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    results.push({
+      name: 'DATABASE_URL',
+      status: 'warn',
+      message: 'Unset — entity-registry runtime checks need Postgres.',
+      fix: `Set DATABASE_URL in ${goDir}/.env to enable runtime checks.`,
+    });
+  } else if (which('psql')) {
+    try {
+      execSync(`psql "${dbUrl}" -c 'SELECT 1' >/dev/null 2>&1`, {
+        stdio: 'pipe',
+      });
+      results.push({
+        name: 'DATABASE_URL',
+        status: 'pass',
+        message: 'Postgres reachable',
+      });
+    } catch {
+      results.push({
+        name: 'DATABASE_URL',
+        status: 'warn',
+        message: 'Set but Postgres not reachable.',
+      });
+    }
+  } else {
+    results.push({
+      name: 'DATABASE_URL',
+      status: 'pass',
+      message: 'Set (psql not on PATH; reachability skipped).',
+    });
+  }
+
+  return results;
+}
+
 async function patternMatchesAnything(
   dir: string,
   pattern: string,
@@ -336,6 +504,10 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
   allResults.push(...(await checkComponents(cwd, components, componentPaths)));
 
   allResults.push(...checkGit(cwd, fix));
+
+  if (components.includes('go')) {
+    allResults.push(...checkGoComponent(cwd, componentPaths.go));
+  }
 
   allResults.push(
     ...(await checkSkipPatterns(cwd, rootConfig, components, componentPaths)),

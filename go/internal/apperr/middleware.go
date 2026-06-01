@@ -41,6 +41,10 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	writeError(w, r, err)
+}
+
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	rid := requestid.FromContext(r.Context())
 	status := StatusOf(err)

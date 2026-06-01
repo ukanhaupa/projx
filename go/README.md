@@ -30,6 +30,7 @@ Integration tests skip when `DATABASE_URL` is unset.
 - **Entities**: declare an `entities.EntityConfig` per resource and `Register` it; `MountEntity` wires CRUD + bulk routes off `BasePath`. Same hook contract as the other backends (`BeforeCreate`, `AfterCreate`, `BeforeUpdate`, `AfterUpdate`, `BeforeDelete`); `Before*` errors abort, `After*` are best-effort.
 - **Errors**: handlers return typed `apperr` values; one adapter (`apperr.H`) maps them to `{detail, request_id}` JSON envelopes with the right status code.
 - **Logging**: stdlib `log/slog` with JSON output; level from `LOG_LEVEL`.
+- **Rate limiting**: in-process per-user token bucket in `internal/ratelimit`. Opt-in per route — mount `ratelimit.PerUser()` (or `ratelimit.Middleware(...)` with custom keying) on sensitive endpoints only. IP-keyed limits stay at the edge proxy (nginx); the app handles only per-user/per-tenant business limits that require auth context.
 
 ## Scope
 

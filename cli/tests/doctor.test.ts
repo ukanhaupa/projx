@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { scaffold } from '../src/scaffold.js';
-import { doctor } from '../src/doctor.js';
+import { doctor, isGoVersionSupported, parseGoVersion } from '../src/doctor.js';
 
 const REPO_DIR = join(import.meta.dirname, '../..');
 
@@ -98,6 +98,34 @@ describe('doctor', () => {
       .toString()
       .trim();
     expect(ref).toBeTruthy();
+  });
+
+  it('parseGoVersion accepts common go version strings', () => {
+    expect(parseGoVersion('go version go1.25.0 darwin/arm64')).toEqual({
+      major: 1,
+      minor: 25,
+    });
+    expect(parseGoVersion('go1.24.2')).toEqual({ major: 1, minor: 24 });
+    expect(parseGoVersion('not-go')).toBeNull();
+  });
+
+  it('isGoVersionSupported gates on the 1.25 minimum', () => {
+    expect(isGoVersionSupported({ major: 1, minor: 25 })).toBe(true);
+    expect(isGoVersionSupported({ major: 1, minor: 26 })).toBe(true);
+    expect(isGoVersionSupported({ major: 2, minor: 0 })).toBe(true);
+    expect(isGoVersionSupported({ major: 1, minor: 24 })).toBe(false);
+    expect(isGoVersionSupported({ major: 0, minor: 99 })).toBe(false);
+  });
+
+  it('runs Go-component checks when go is scaffolded', async () => {
+    dest = join(tmpdir(), `projx-doc-go-${Date.now()}`);
+    await scaffold(
+      { name: 'doc-app', components: ['go'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await doctor(dest);
   });
 
   it('warns on stale skip patterns', async () => {
