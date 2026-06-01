@@ -1814,6 +1814,944 @@ async function appendDrizzleEntity(
   }
 }
 
+// --- Go (GORM) generation ---
+
+function goFieldType(type: FieldType): string {
+  switch (type) {
+    case 'string':
+    case 'text':
+      return 'string';
+    case 'number':
+      return 'int';
+    case 'boolean':
+      return 'bool';
+    case 'date':
+    case 'datetime':
+      return 'time.Time';
+    case 'json':
+      return 'json.RawMessage';
+  }
+}
+
+function goJsonTag(name: string, required: boolean): string {
+  return required ? `"${name}"` : `"${name},omitempty"`;
+}
+
+function goGormTag(field: EntityField): string {
+  const parts: string[] = [];
+  if (field.required) parts.push('not null');
+  if (field.unique) parts.push('uniqueIndex');
+  return parts.join(';');
+}
+
+function maxFieldWidth(names: string[]): number {
+  return names.reduce((acc, n) => Math.max(acc, n.length), 0);
+}
+
+function generateGoModel(
+  config: EntityConfig,
+  gomod: string,
+  pkg: string,
+): string {
+  const className = toPascal(config.name);
+
+  interface GoField {
+    name: string;
+    type: string;
+    gormTag: string;
+    jsonName: string;
+    required: boolean;
+  }
+
+  const goFields: GoField[] = [
+    {
+      name: 'ID',
+      type: 'string',
+      gormTag: 'primaryKey;type:uuid',
+      jsonName: 'id',
+      required: true,
+    },
+    ...config.fields.map((f) => ({
+      name: toPascal(f.name),
+      type: goFieldType(f.type),
+      gormTag: goGormTag(f),
+      jsonName: f.name,
+      required: f.required,
+    })),
+    {
+      name: 'CreatedAt',
+      type: 'time.Time',
+      gormTag: '',
+      jsonName: 'created_at',
+      required: true,
+    },
+    {
+      name: 'UpdatedAt',
+      type: 'time.Time',
+      gormTag: '',
+      jsonName: 'updated_at',
+      required: true,
+    },
+  ];
+
+  if (config.softDelete) {
+    goFields.push({
+      name: 'DeletedAt',
+      type: 'gorm.DeletedAt',
+      gormTag: 'index',
+      jsonName: '-',
+      required: false,
+    });
+  }
+
+  const nameW = maxFieldWidth(goFields.map((f) => f.name));
+  const typeW = maxFieldWidth(goFields.map((f) => f.type));
+
+  const usesJson = config.fields.some((f) => f.type === 'json');
+  const usesTime = goFields.some((f) => f.type === 'time.Time');
+
+  const stdImports: string[] = [];
+  if (usesJson) stdImports.push('"encoding/json"');
+  if (usesTime) stdImports.push('"time"');
+
+  const lines: string[] = [];
+  lines.push(`package ${pkg}`);
+  lines.push('');
+  lines.push('import (');
+  for (const imp of stdImports) {
+    lines.push(`\t${imp}`);
+  }
+  if (stdImports.length > 0) lines.push('');
+  lines.push('\t"gorm.io/gorm"');
+  lines.push('');
+  lines.push(`\t"${gomod}/internal/entities"`);
+  lines.push(`\t"${gomod}/internal/uuid"`);
+  lines.push(')');
+  lines.push('');
+  lines.push(`type ${className} struct {`);
+
+  for (const f of goFields) {
+    const tagParts: string[] = [];
+    if (f.gormTag) tagParts.push(`gorm:"${f.gormTag}"`);
+    tagParts.push(
+      `json:${f.jsonName === '-' ? '"-"' : goJsonTag(f.jsonName, f.required)}`,
+    );
+    const tag = tagParts.join(' ');
+    lines.push(`\t${f.name.padEnd(nameW)} ${f.type.padEnd(typeW)} \`${tag}\``);
+  }
+  lines.push('}');
+  lines.push('');
+  lines.push(`func (m *${className}) BeforeCreate(_ *gorm.DB) error {`);
+  lines.push('\tif m.ID == "" {');
+  lines.push('\t\tm.ID = uuid.V4()');
+  lines.push('\t}');
+  lines.push('\treturn nil');
+  lines.push('}');
+  lines.push('');
+  lines.push('func Config() entities.EntityConfig {');
+  lines.push('\treturn entities.EntityConfig{');
+  lines.push(`\t\tName:             "${toSnake(config.name)}",`);
+  lines.push(`\t\tModel:            &${className}{},`);
+  lines.push(`\t\tBasePath:         "${config.apiPrefix}",`);
+  if (config.searchableFields.length > 0) {
+    const fields = config.searchableFields.map((f) => `"${f}"`).join(', ');
+    lines.push(`\t\tSearchableFields: []string{${fields}},`);
+  } else {
+    lines.push('\t\tSearchableFields: []string{},');
+  }
+  lines.push(`\t\tSoftDelete:       ${String(config.softDelete)},`);
+  lines.push('\t}');
+  lines.push('}');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function generateGoTest(config: EntityConfig, pkg: string): string {
+  const className = toPascal(config.name);
+  const lines: string[] = [];
+
+  lines.push(`package ${pkg}`);
+  lines.push('');
+  lines.push('import (');
+  lines.push('\t"testing"');
+  lines.push('');
+  lines.push('\t"github.com/stretchr/testify/assert"');
+  lines.push('\t"github.com/stretchr/testify/require"');
+  lines.push(')');
+  lines.push('');
+  lines.push('func TestConfigShape(t *testing.T) {');
+  lines.push('\tcfg := Config()');
+  lines.push(`\tassert.Equal(t, "${toSnake(config.name)}", cfg.Name)`);
+  lines.push(`\tassert.Equal(t, "${config.apiPrefix}", cfg.BasePath)`);
+  lines.push(`\tassert.Equal(t, ${String(config.softDelete)}, cfg.SoftDelete)`);
+  lines.push('\trequire.NotNil(t, cfg.Model)');
+  lines.push(`\t_, ok := cfg.Model.(*${className})`);
+  lines.push(`\tassert.True(t, ok, "Model must be a *${className}")`);
+  lines.push('}');
+  lines.push('');
+  lines.push('func TestBeforeCreateAssignsIDWhenEmpty(t *testing.T) {');
+  lines.push(`\tm := &${className}{}`);
+  lines.push('\trequire.NoError(t, m.BeforeCreate(nil))');
+  lines.push('\tassert.NotEmpty(t, m.ID)');
+  lines.push('\tassert.Len(t, m.ID, 36)');
+  lines.push('}');
+  lines.push('');
+  lines.push('func TestBeforeCreatePreservesExistingID(t *testing.T) {');
+  lines.push(`\tm := &${className}{ID: "preset-id"}`);
+  lines.push('\trequire.NoError(t, m.BeforeCreate(nil))');
+  lines.push('\tassert.Equal(t, "preset-id", m.ID)');
+  lines.push('}');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+async function readGoModule(goDir: string): Promise<string> {
+  const path = join(goDir, 'go.mod');
+  if (!existsSync(path)) {
+    throw new Error(`go.mod not found at ${path}`);
+  }
+  const content = await readFile(path, 'utf-8');
+  const match = content.match(/^\s*module\s+(\S+)\s*$/m);
+  if (!match) {
+    throw new Error(`Could not parse module path from ${path}`);
+  }
+  return match[1];
+}
+
+async function appendGoEntity(
+  cwd: string,
+  dir: string,
+  config: EntityConfig,
+  generated: string[],
+): Promise<void> {
+  const goDir = join(cwd, dir);
+  const gomod = await readGoModule(goDir);
+  const pkg = toSnake(config.name);
+  const fileBase = toSnake(config.name);
+
+  const entityDir = join(goDir, 'internal', pkg);
+  const modelPath = join(entityDir, `${fileBase}.go`);
+  const testPath = join(entityDir, `${fileBase}_test.go`);
+
+  if (!existsSync(modelPath)) {
+    await mkdir(entityDir, { recursive: true });
+    await writeFile(modelPath, generateGoModel(config, gomod, pkg));
+    generated.push(`${dir}/internal/${pkg}/${fileBase}.go`);
+  }
+
+  if (!existsSync(testPath)) {
+    await mkdir(entityDir, { recursive: true });
+    await writeFile(testPath, generateGoTest(config, pkg));
+    generated.push(`${dir}/internal/${pkg}/${fileBase}_test.go`);
+  }
+
+  const mainPath = join(goDir, 'main.go');
+  if (existsSync(mainPath)) {
+    let mainContent = await readFile(mainPath, 'utf-8');
+    const importLine = `\t"${gomod}/internal/${pkg}"`;
+    const registrationLine = `\tentities.Register(${pkg}.Config())`;
+    const updated = insertAtAnchor(
+      insertAtAnchor(mainContent, 'projx-anchor: entity-imports', importLine),
+      'projx-anchor: entity-registrations',
+      registrationLine,
+    );
+    if (updated !== mainContent) {
+      mainContent = updated;
+      await writeFile(mainPath, mainContent);
+      generated.push(`${dir}/main.go (entity wired)`);
+    }
+  }
+}
+
+interface SqlcEntityVars extends Record<string, string> {
+  ENTITY_PASCAL: string;
+  ENTITY_SNAKE: string;
+  API_PREFIX: string;
+  TABLE_NAME: string;
+  COLUMNS_ARRAY: string;
+  UPDATABLE_COLUMNS_ARRAY: string;
+  SEARCHABLE_FIELDS_ARRAY: string;
+  SOFT_DELETE: string;
+  SOFT_DELETE_FILTER: string;
+  SOFT_DELETE_FILTER_AND: string;
+  SOFT_DELETE_LIST_BLOCK: string;
+  SELECT_COLS: string;
+  SELECT_COLS_STR: string;
+  STRUCT_FIELDS: string;
+  CREATE_INPUT_FIELDS: string;
+  CREATE_VALIDATION: string;
+  INSERT_COLUMNS: string;
+  INSERT_PLACEHOLDERS: string;
+  INSERT_VALUES: string;
+  SCAN_ARGS: string;
+  SEARCH_CLAUSES: string;
+  FILTER_CASES: string;
+  DELETE_BODY: string;
+  BULK_DELETE_BODY: string;
+  MIGRATION_COLUMNS: string;
+  SOFT_DELETE_COLUMN: string;
+  SOFT_DELETE_INDEX: string;
+}
+
+function sqlcGoType(field: EntityField): string {
+  const optional = !field.required;
+  switch (field.type) {
+    case 'string':
+    case 'text':
+      return optional ? 'sql.NullString' : 'string';
+    case 'number':
+      return optional ? 'sql.NullInt64' : 'int64';
+    case 'boolean':
+      return optional ? 'sql.NullBool' : 'bool';
+    case 'date':
+    case 'datetime':
+      return optional ? 'sql.NullTime' : 'time.Time';
+    case 'json':
+      return '[]byte';
+  }
+}
+
+function sqlcSqlType(field: EntityField): string {
+  switch (field.type) {
+    case 'string':
+      return 'VARCHAR(255)';
+    case 'text':
+      return 'TEXT';
+    case 'number':
+      return 'BIGINT';
+    case 'boolean':
+      return 'BOOLEAN';
+    case 'date':
+      return 'DATE';
+    case 'datetime':
+      return 'TIMESTAMPTZ';
+    case 'json':
+      return 'JSONB';
+  }
+}
+
+function buildSqlcEntityVars(config: EntityConfig): SqlcEntityVars {
+  const pascal = toPascal(config.name);
+  const snake = toSnake(config.name);
+  const tableName = config.tableName;
+
+  const allCols = [
+    'id',
+    ...config.fields.map((f) => f.name),
+    'created_at',
+    'updated_at',
+  ];
+  if (config.softDelete) allCols.push('deleted_at');
+
+  const updatableCols = config.fields
+    .filter((f) => !f.generated)
+    .map((f) => f.name);
+
+  const colsArr = allCols.map((c) => `"${c}"`).join(', ');
+  const updArr = updatableCols.map((c) => `"${c}"`).join(', ');
+  const searchArr = config.searchableFields.map((f) => `"${f}"`).join(', ');
+
+  const softDeleteFilter = config.softDelete ? ' AND deleted_at IS NULL' : '';
+  const softDeleteFilterAnd = config.softDelete
+    ? ' AND deleted_at IS NULL'
+    : '';
+  const softDeleteListBlock = config.softDelete
+    ? `\tif !p.IncludeDeleted {\n\t\twhere = append(where, "deleted_at IS NULL")\n\t}`
+    : '';
+
+  const selectCols = allCols.join(', ');
+
+  const structFieldLines: string[] = [`\tID string \`json:"id"\``];
+  for (const f of config.fields) {
+    structFieldLines.push(
+      `\t${toPascal(f.name)} ${sqlcGoType(f)} \`json:"${f.name}"\``,
+    );
+  }
+  const structFields = structFieldLines.join('\n');
+
+  const createInputFields = config.fields
+    .filter((f) => !f.generated)
+    .map((f) => {
+      const t = sqlcGoType(f);
+      const tag = `\`json:"${f.name}"\``;
+      return `\t${toPascal(f.name)} ${t} ${tag}`;
+    })
+    .join('\n');
+
+  const createValidation = config.fields
+    .filter(
+      (f) =>
+        f.required &&
+        !f.generated &&
+        (f.type === 'string' || f.type === 'text'),
+    )
+    .map((f) => {
+      const goName = toPascal(f.name);
+      return `\tif strings.TrimSpace(in.${goName}) == "" {\n\t\treturn nil, apperr.Validation("field '${f.name}' is required")\n\t}`;
+    })
+    .join('\n');
+
+  const insertCols = [
+    'id',
+    ...config.fields.filter((f) => !f.generated).map((f) => f.name),
+    'created_at',
+    'updated_at',
+  ];
+  const insertPlaceholders = insertCols
+    .map((_, i) => (i < insertCols.length - 2 ? `$${i + 1}` : 'NOW()'))
+    .join(', ');
+  const insertValues = [
+    'id',
+    ...config.fields
+      .filter((f) => !f.generated)
+      .map((f) => `in.${toPascal(f.name)}`),
+  ].join(', ');
+
+  const scanArgs = allCols
+    .map((c) => {
+      if (c === 'id') return '&rec.ID';
+      if (c === 'created_at') return '&rec.CreatedAt';
+      if (c === 'updated_at') return '&rec.UpdatedAt';
+      if (c === 'deleted_at') return '&rec.DeletedAt';
+      return `&rec.${toPascal(c)}`;
+    })
+    .join(', ');
+
+  const searchClauses =
+    config.searchableFields.length > 0
+      ? '[]string{' +
+        config.searchableFields
+          .map((f, i) => `fmt.Sprintf("${f} ILIKE $%d", idx+${i})`)
+          .join(', ') +
+        '}'
+      : '[]string{}';
+
+  const filterCases = allCols
+    .filter(
+      (c) =>
+        c !== 'id' &&
+        c !== 'created_at' &&
+        c !== 'updated_at' &&
+        c !== 'deleted_at',
+    )
+    .map((c) => `\t\tcase "${c}":`)
+    .join('\n');
+
+  const deleteBody = config.softDelete
+    ? `\tres, err := q.pool.ExecContext(ctx, \`UPDATE \`+tableName+\` SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL\`, id)
+\tif err != nil {
+\t\treturn err
+\t}
+\tn, _ := res.RowsAffected()
+\tif n == 0 {
+\t\treturn apperr.NotFound("${snake}")
+\t}
+\treturn nil`
+    : `\tres, err := q.pool.ExecContext(ctx, \`DELETE FROM \`+tableName+\` WHERE id = $1\`, id)
+\tif err != nil {
+\t\treturn err
+\t}
+\tn, _ := res.RowsAffected()
+\tif n == 0 {
+\t\treturn apperr.NotFound("${snake}")
+\t}
+\treturn nil`;
+
+  const bulkDeleteBody = config.softDelete
+    ? `\t_, err := q.pool.ExecContext(ctx, \`UPDATE \`+tableName+\` SET deleted_at = NOW() WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL\`, ids)
+\treturn err`
+    : `\t_, err := q.pool.ExecContext(ctx, \`DELETE FROM \`+tableName+\` WHERE id = ANY($1::uuid[])\`, ids)
+\treturn err`;
+
+  const migrationCols = config.fields
+    .map((f) => {
+      const nullable = f.required ? ' NOT NULL' : '';
+      const uniq = f.unique ? ' UNIQUE' : '';
+      return `    ${f.name.padEnd(12)}${sqlcSqlType(f)}${nullable}${uniq},`;
+    })
+    .join('\n');
+
+  const softDeleteColumn = config.softDelete
+    ? ',\n    deleted_at  TIMESTAMPTZ'
+    : '';
+  const softDeleteIndex = config.softDelete
+    ? `CREATE INDEX IF NOT EXISTS ${tableName}_deleted_at_idx ON ${tableName} (deleted_at);`
+    : '';
+
+  return {
+    ENTITY_PASCAL: pascal,
+    ENTITY_SNAKE: snake,
+    API_PREFIX: config.apiPrefix,
+    TABLE_NAME: tableName,
+    COLUMNS_ARRAY: colsArr,
+    UPDATABLE_COLUMNS_ARRAY: updArr,
+    SEARCHABLE_FIELDS_ARRAY: searchArr,
+    SOFT_DELETE: String(config.softDelete),
+    SOFT_DELETE_FILTER: softDeleteFilter,
+    SOFT_DELETE_FILTER_AND: softDeleteFilterAnd,
+    SOFT_DELETE_LIST_BLOCK: softDeleteListBlock,
+    SELECT_COLS: selectCols,
+    SELECT_COLS_STR: selectCols,
+    STRUCT_FIELDS: structFields,
+    CREATE_INPUT_FIELDS: createInputFields,
+    CREATE_VALIDATION: createValidation,
+    INSERT_COLUMNS: insertCols.join(', '),
+    INSERT_PLACEHOLDERS: insertPlaceholders,
+    INSERT_VALUES: insertValues,
+    SCAN_ARGS: scanArgs,
+    SEARCH_CLAUSES: searchClauses,
+    FILTER_CASES: filterCases || '\t\t// no filter columns',
+    DELETE_BODY: deleteBody,
+    BULK_DELETE_BODY: bulkDeleteBody,
+    MIGRATION_COLUMNS: migrationCols,
+    SOFT_DELETE_COLUMN: softDeleteColumn,
+    SOFT_DELETE_INDEX: softDeleteIndex,
+  };
+}
+
+interface EntEntityVars extends Record<string, string> {
+  ENTITY_PASCAL: string;
+  ENTITY_SNAKE: string;
+  API_PREFIX: string;
+  TABLE_NAME: string;
+  COLUMNS_ARRAY: string;
+  UPDATABLE_COLUMNS_ARRAY: string;
+  SEARCHABLE_FIELDS_ARRAY: string;
+  SOFT_DELETE: string;
+  ENT_PKG: string;
+  ENT_PKG_IMPORT: string;
+  MIXIN_LIST: string;
+  SCHEMA_FIELDS: string;
+  SCHEMA_INDEXES: string;
+  CREATE_INPUT_FIELDS: string;
+  CREATE_VALIDATION: string;
+  CREATE_SETTERS: string;
+  UPDATE_SETTERS: string;
+  GET_SOFT_DELETE_FILTER: string;
+  LIST_SOFT_DELETE_BLOCK: string;
+  UPDATE_SOFT_DELETE_FILTER: string;
+  SEARCH_BLOCK: string;
+  FILTER_SWITCH: string;
+  DELETE_BODY: string;
+  BULK_DELETE_BODY: string;
+}
+
+function entSchemaFieldExpr(field: EntityField): string {
+  const fname = field.name;
+  let base: string;
+  switch (field.type) {
+    case 'string':
+      base = `field.String("${fname}")`;
+      if (field.required) base += '.NotEmpty()';
+      break;
+    case 'text':
+      base = `field.Text("${fname}")`;
+      break;
+    case 'number':
+      base = `field.Int("${fname}")`;
+      break;
+    case 'boolean':
+      base = `field.Bool("${fname}").Default(false)`;
+      break;
+    case 'date':
+    case 'datetime':
+      base = `field.Time("${fname}")`;
+      break;
+    case 'json':
+      base = `field.JSON("${fname}", map[string]any{})`;
+      break;
+  }
+  if (!field.required) base += '.Optional().Nillable()';
+  if (field.unique) base += '.Unique()';
+  return `\t\t${base},`;
+}
+
+function entCreateInputField(field: EntityField): string {
+  const goName = toPascal(field.name);
+  const jsonTag = `\`json:"${field.name}"\``;
+  let goType: string;
+  switch (field.type) {
+    case 'string':
+    case 'text':
+      goType = field.required ? 'string' : '*string';
+      break;
+    case 'number':
+      goType = field.required ? 'int' : '*int';
+      break;
+    case 'boolean':
+      goType = field.required ? 'bool' : '*bool';
+      break;
+    case 'date':
+    case 'datetime':
+      goType = field.required ? 'time.Time' : '*time.Time';
+      break;
+    case 'json':
+      goType = 'map[string]any';
+      break;
+  }
+  return `\t${goName} ${goType} ${jsonTag}`;
+}
+
+function entCreateValidation(fields: EntityField[]): string {
+  const lines: string[] = [];
+  for (const f of fields) {
+    if (!f.required || f.generated) continue;
+    const goName = toPascal(f.name);
+    if (f.type === 'string' || f.type === 'text') {
+      lines.push(`\tif strings.TrimSpace(in.${goName}) == "" {`);
+      lines.push(
+        `\t\treturn nil, apperr.Validation("field '${f.name}' is required")`,
+      );
+      lines.push(`\t}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function entCreateSetter(field: EntityField): string {
+  const goName = toPascal(field.name);
+  return `\t\tSet${goName}(in.${goName}).`;
+}
+
+function entUpdateSetter(field: EntityField): string {
+  const goName = toPascal(field.name);
+  let cast: string;
+  switch (field.type) {
+    case 'string':
+    case 'text':
+      cast = 'string';
+      break;
+    case 'number':
+      cast = 'int';
+      break;
+    case 'boolean':
+      cast = 'bool';
+      break;
+    default:
+      cast = 'any';
+  }
+  if (cast === 'any') {
+    return [
+      `\tif v, ok := patch["${field.name}"]; ok {`,
+      `\t\tupd = upd.Set${goName}(v)`,
+      `\t}`,
+    ].join('\n');
+  }
+  if (cast === 'int') {
+    return [
+      `\tif v, ok := patch["${field.name}"]; ok {`,
+      `\t\tswitch n := v.(type) {`,
+      `\t\tcase float64:`,
+      `\t\t\tupd = upd.Set${goName}(int(n))`,
+      `\t\tcase int:`,
+      `\t\t\tupd = upd.Set${goName}(n)`,
+      `\t\t}`,
+      `\t}`,
+    ].join('\n');
+  }
+  return [
+    `\tif v, ok := patch["${field.name}"]; ok {`,
+    `\t\tif s, ok := v.(${cast}); ok {`,
+    `\t\t\tupd = upd.Set${goName}(s)`,
+    `\t\t}`,
+    `\t}`,
+  ].join('\n');
+}
+
+function buildEntEntityVars(
+  config: EntityConfig,
+  gomod: string,
+): EntEntityVars {
+  const pascal = toPascal(config.name);
+  const snake = toSnake(config.name);
+  const tableName = config.tableName;
+  const entPkg = snake;
+  const entPkgImport = `"${gomod}/ent/${entPkg}"`;
+
+  const allCols = [
+    'id',
+    ...config.fields.map((f) => f.name),
+    'created_at',
+    'updated_at',
+  ];
+  if (config.softDelete) allCols.push('deleted_at');
+
+  const updatableCols = config.fields
+    .filter((f) => !f.generated)
+    .map((f) => f.name);
+
+  const colsArr = allCols.map((c) => `"${c}"`).join(', ');
+  const updArr = updatableCols.map((c) => `"${c}"`).join(', ');
+  const searchArr = config.searchableFields.map((f) => `"${f}"`).join(', ');
+
+  const schemaFields = config.fields.map(entSchemaFieldExpr).join('\n');
+  const schemaIndexes =
+    config.searchableFields.length > 0
+      ? config.searchableFields
+          .map((f) => `\t\tindex.Fields("${f}"),`)
+          .join('\n')
+      : '';
+
+  const mixinList = config.softDelete ? '\t\tSoftDeleteMixin{},' : '';
+
+  const createInputFields = config.fields
+    .filter((f) => !f.generated)
+    .map(entCreateInputField)
+    .join('\n');
+
+  const createValidation = entCreateValidation(config.fields);
+
+  const createSetters = config.fields
+    .filter((f) => !f.generated)
+    .map(entCreateSetter)
+    .join('\n');
+
+  const updateSetters = updatableCols
+    .map((col) => {
+      const f = config.fields.find((field) => field.name === col);
+      return f ? entUpdateSetter(f) : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  const getSoftDeleteFilter = config.softDelete
+    ? `\tqry = qry.Where(${entPkg}.DeletedAtIsNil())`
+    : '';
+
+  const listSoftDeleteBlock = config.softDelete
+    ? `\tif !p.IncludeDeleted {\n\t\tqry = qry.Where(${entPkg}.DeletedAtIsNil())\n\t}`
+    : '';
+
+  const updateSoftDeleteFilter = config.softDelete
+    ? `\tupd = upd.Where(${entPkg}.DeletedAtIsNil())`
+    : '';
+
+  const searchClauses = config.searchableFields
+    .map((f) => `${entPkg}.${toPascal(f)}ContainsFold(needle)`)
+    .join(', ');
+  const searchBlock =
+    config.searchableFields.length > 0
+      ? `\t\tqry = qry.Where(${entPkg}.Or(${searchClauses}))`
+      : '';
+
+  const filterableCols = config.fields
+    .filter((f) => !f.generated)
+    .filter(
+      (f) =>
+        f.type === 'string' ||
+        f.type === 'text' ||
+        f.type === 'number' ||
+        f.type === 'boolean',
+    );
+  const filterCases = filterableCols
+    .map((f) => {
+      const pf = toPascal(f.name);
+      if (f.type === 'boolean') {
+        return `\t\tcase "${f.name}":\n\t\t\tqry = qry.Where(${entPkg}.${pf}(val == "true"))`;
+      }
+      if (f.type === 'number') {
+        return `\t\tcase "${f.name}":\n\t\t\tif n, perr := strconv.Atoi(val); perr == nil {\n\t\t\t\tqry = qry.Where(${entPkg}.${pf}(n))\n\t\t\t}`;
+      }
+      return `\t\tcase "${f.name}":\n\t\t\tqry = qry.Where(${entPkg}.${pf}(val))`;
+    })
+    .join('\n');
+  const filterSwitch =
+    filterCases.length > 0 ? `\t\tswitch col {\n${filterCases}\n\t\t}` : '';
+
+  const deleteBody = config.softDelete
+    ? `\tnow := time.Now()\n\tn, err := q.client.${pascal}.Update().\n\t\tWhere(${entPkg}.ID(id), ${entPkg}.DeletedAtIsNil()).\n\t\tSetDeletedAt(now).\n\t\tSave(ctx)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif n == 0 {\n\t\treturn apperr.NotFound("${snake}")\n\t}\n\treturn nil`
+    : `\terr := q.client.${pascal}.DeleteOneID(id).Exec(ctx)\n\tif err != nil {\n\t\tif ent.IsNotFound(err) {\n\t\t\treturn apperr.NotFound("${snake}")\n\t\t}\n\t\treturn err\n\t}\n\treturn nil`;
+
+  const bulkDeleteBody = config.softDelete
+    ? `\tnow := time.Now()\n\t_, err := q.client.${pascal}.Update().\n\t\tWhere(${entPkg}.IDIn(ids...), ${entPkg}.DeletedAtIsNil()).\n\t\tSetDeletedAt(now).\n\t\tSave(ctx)\n\treturn err`
+    : `\t_, err := q.client.${pascal}.Delete().Where(${entPkg}.IDIn(ids...)).Exec(ctx)\n\treturn err`;
+
+  return {
+    ENTITY_PASCAL: pascal,
+    ENTITY_SNAKE: snake,
+    API_PREFIX: config.apiPrefix,
+    TABLE_NAME: tableName,
+    COLUMNS_ARRAY: colsArr,
+    UPDATABLE_COLUMNS_ARRAY: updArr,
+    SEARCHABLE_FIELDS_ARRAY: searchArr,
+    SOFT_DELETE: String(config.softDelete),
+    ENT_PKG: entPkg,
+    ENT_PKG_IMPORT: entPkgImport,
+    MIXIN_LIST: mixinList,
+    SCHEMA_FIELDS: schemaFields,
+    SCHEMA_INDEXES: schemaIndexes,
+    CREATE_INPUT_FIELDS: createInputFields,
+    CREATE_VALIDATION: createValidation,
+    CREATE_SETTERS: createSetters,
+    UPDATE_SETTERS: updateSetters,
+    GET_SOFT_DELETE_FILTER: getSoftDeleteFilter,
+    LIST_SOFT_DELETE_BLOCK: listSoftDeleteBlock,
+    UPDATE_SOFT_DELETE_FILTER: updateSoftDeleteFilter,
+    SEARCH_BLOCK: searchBlock,
+    FILTER_SWITCH: filterSwitch,
+    DELETE_BODY: deleteBody,
+    BULK_DELETE_BODY: bulkDeleteBody,
+  };
+}
+
+async function appendEntEntity(
+  repoDir: string,
+  cwd: string,
+  dir: string,
+  config: EntityConfig,
+  generated: string[],
+): Promise<void> {
+  const goDir = join(cwd, dir);
+  const gomod = await readGoModule(goDir);
+  const vars = buildEntEntityVars(config, gomod);
+  const pkg = vars.ENTITY_SNAKE;
+
+  const schemaDir = join(goDir, 'ent', 'schema');
+  await mkdir(schemaDir, { recursive: true });
+  const schemaPath = join(schemaDir, `${pkg}.go`);
+  if (!existsSync(schemaPath)) {
+    const schemaSource = await fillTemplate(repoDir, 'ent', 'schema.go', vars);
+    await writeFile(schemaPath, schemaSource);
+    generated.push(`${dir}/ent/schema/${pkg}.go`);
+  }
+
+  const entityDir = join(goDir, 'internal', pkg);
+  await mkdir(entityDir, { recursive: true });
+
+  const adapterPath = join(entityDir, `${pkg}.go`);
+  if (!existsSync(adapterPath)) {
+    const adapterSource = await fillTemplate(
+      repoDir,
+      'ent',
+      'entity_adapter.go',
+      vars,
+    );
+    await writeFile(adapterPath, adapterSource);
+    generated.push(`${dir}/internal/${pkg}/${pkg}.go`);
+  }
+
+  const testPath = join(entityDir, `${pkg}_test.go`);
+  if (!existsSync(testPath)) {
+    const testSource = await fillTemplate(
+      repoDir,
+      'ent',
+      'entity_test.go',
+      vars,
+    );
+    await writeFile(testPath, testSource);
+    generated.push(`${dir}/internal/${pkg}/${pkg}_test.go`);
+  }
+
+  const mainPath = join(goDir, 'main.go');
+  if (existsSync(mainPath)) {
+    let mainContent = await readFile(mainPath, 'utf-8');
+    const importLine = `\t"${gomod}/internal/${pkg}"`;
+    const registrationLine = `\tentities.Register(${pkg}.Config(handles.Client))`;
+    const updated = insertAtAnchor(
+      insertAtAnchor(mainContent, 'projx-anchor: entity-imports', importLine),
+      'projx-anchor: entity-registrations',
+      registrationLine,
+    );
+    if (updated !== mainContent) {
+      mainContent = updated;
+      await writeFile(mainPath, mainContent);
+      generated.push(`${dir}/main.go (entity wired)`);
+    }
+  }
+}
+
+async function appendSqlcEntity(
+  repoDir: string,
+  cwd: string,
+  dir: string,
+  config: EntityConfig,
+  generated: string[],
+): Promise<void> {
+  const vars = buildSqlcEntityVars(config);
+  const goDir = join(cwd, dir);
+  const gomod = await readGoModule(goDir);
+  const pkg = vars.ENTITY_SNAKE;
+
+  const entityDir = join(goDir, 'internal', pkg);
+  await mkdir(entityDir, { recursive: true });
+
+  const sqlPath = join(entityDir, `${pkg}.sql`);
+  if (!existsSync(sqlPath)) {
+    const sqlSource = await fillTemplate(repoDir, 'sqlc', 'entity.sql', vars);
+    await writeFile(sqlPath, sqlSource);
+    generated.push(`${dir}/internal/${pkg}/${pkg}.sql`);
+  }
+
+  const adapterPath = join(entityDir, `${pkg}.go`);
+  if (!existsSync(adapterPath)) {
+    const adapterSource = await fillTemplate(
+      repoDir,
+      'sqlc',
+      'entity_adapter.go',
+      vars,
+    );
+    await writeFile(adapterPath, adapterSource);
+    generated.push(`${dir}/internal/${pkg}/${pkg}.go`);
+  }
+
+  const testPath = join(entityDir, `${pkg}_test.go`);
+  if (!existsSync(testPath)) {
+    const testSource = await fillTemplate(
+      repoDir,
+      'sqlc',
+      'entity_test.go',
+      vars,
+    );
+    await writeFile(testPath, testSource);
+    generated.push(`${dir}/internal/${pkg}/${pkg}_test.go`);
+  }
+
+  const migrationsDir = join(goDir, 'migrations');
+  await mkdir(migrationsDir, { recursive: true });
+  const ts = new Date()
+    .toISOString()
+    .replace(/[^0-9]/g, '')
+    .slice(0, 14);
+  const upName = `${ts}_add_${pkg}.up.sql`;
+  const downName = `${ts}_add_${pkg}.down.sql`;
+  const upPath = join(migrationsDir, upName);
+  const downPath = join(migrationsDir, downName);
+  if (!existsSync(upPath)) {
+    const upSrc = await fillTemplate(repoDir, 'sqlc', 'migration.up.sql', vars);
+    await writeFile(upPath, upSrc);
+    generated.push(`${dir}/migrations/${upName}`);
+  }
+  if (!existsSync(downPath)) {
+    const downSrc = await fillTemplate(
+      repoDir,
+      'sqlc',
+      'migration.down.sql',
+      vars,
+    );
+    await writeFile(downPath, downSrc);
+    generated.push(`${dir}/migrations/${downName}`);
+  }
+
+  const mainPath = join(goDir, 'main.go');
+  if (existsSync(mainPath)) {
+    let mainContent = await readFile(mainPath, 'utf-8');
+    const importLine = `\t"${gomod}/internal/${pkg}"`;
+    const registrationLine = `\tentities.Register(${pkg}.Config(pool))`;
+    const updated = insertAtAnchor(
+      insertAtAnchor(mainContent, 'projx-anchor: entity-imports', importLine),
+      'projx-anchor: entity-registrations',
+      registrationLine,
+    );
+    if (updated !== mainContent) {
+      mainContent = updated;
+      await writeFile(mainPath, mainContent);
+      generated.push(`${dir}/main.go (entity wired)`);
+    }
+  }
+}
+
 // --- Main ---
 
 type BackendTarget = (typeof BACKEND_COMPONENTS)[number];
@@ -1893,7 +2831,11 @@ export async function gen(
   const pm = pmCommands(pmName);
   const orm = (projxData.orm as string | undefined) ?? 'prisma';
   const needsAddon =
-    orm === 'drizzle' || orm === 'sequelize' || orm === 'typeorm';
+    orm === 'drizzle' ||
+    orm === 'sequelize' ||
+    orm === 'typeorm' ||
+    orm === 'sqlc' ||
+    orm === 'ent';
   const repoDir = needsAddon
     ? await downloadRepo(localRepo).catch((err) => {
         p.cancel(`Failed to fetch templates: ${(err as Error).message}`);
@@ -1938,10 +2880,11 @@ async function runGen(opts: RunGenOpts): Promise<void> {
   const hasFastapi = discovered.includes('fastapi');
   const hasFastify = discovered.includes('fastify');
   const hasExpress = discovered.includes('express');
+  const hasGo = discovered.includes('go');
   const hasFrontend = discovered.includes('frontend');
   const hasMobile = discovered.includes('mobile');
 
-  if (!hasFastapi && !hasFastify && !hasExpress) {
+  if (!hasFastapi && !hasFastify && !hasExpress && !hasGo) {
     p.log.error(
       `No backend component found. Need ${BACKEND_COMPONENTS.join(', ')}.`,
     );
@@ -2212,6 +3155,42 @@ async function runGen(opts: RunGenOpts): Promise<void> {
       config,
       generated,
     );
+  }
+
+  if (hasGo && (orm === 'prisma' || orm === 'gorm' || orm === undefined)) {
+    const { instances } = await discoverComponentsFromMarkers(cwd);
+    const goInstances = instances.filter((item) => item.type === 'go');
+    const dirs =
+      goInstances.length > 0
+        ? goInstances.map((item) => item.path)
+        : [componentPaths.go];
+    for (const dir of dirs) {
+      await appendGoEntity(cwd, dir, config, generated);
+    }
+  }
+
+  if (hasGo && orm === 'sqlc') {
+    const { instances } = await discoverComponentsFromMarkers(cwd);
+    const goInstances = instances.filter((item) => item.type === 'go');
+    const dirs =
+      goInstances.length > 0
+        ? goInstances.map((item) => item.path)
+        : [componentPaths.go];
+    for (const dir of dirs) {
+      await appendSqlcEntity(repoDir, cwd, dir, config, generated);
+    }
+  }
+
+  if (hasGo && orm === 'ent') {
+    const { instances } = await discoverComponentsFromMarkers(cwd);
+    const goInstances = instances.filter((item) => item.type === 'go');
+    const dirs =
+      goInstances.length > 0
+        ? goInstances.map((item) => item.path)
+        : [componentPaths.go];
+    for (const dir of dirs) {
+      await appendEntEntity(repoDir, cwd, dir, config, generated);
+    }
   }
 
   if (hasFrontend) {

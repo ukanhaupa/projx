@@ -317,7 +317,11 @@ function which(cmd: string): boolean {
   }
 }
 
-function checkGoComponent(cwd: string, goDir: string): CheckResult[] {
+function checkGoComponent(
+  cwd: string,
+  goDir: string,
+  orm: string,
+): CheckResult[] {
   const results: CheckResult[] = [];
   const fullDir = join(cwd, goDir);
 
@@ -420,6 +424,45 @@ function checkGoComponent(cwd: string, goDir: string): CheckResult[] {
     });
   }
 
+  if (orm === 'sqlc') {
+    if (which('sqlc')) {
+      results.push({ name: 'sqlc CLI', status: 'pass', message: 'OK' });
+    } else {
+      results.push({
+        name: 'sqlc CLI',
+        status: 'warn',
+        message: 'Not on PATH; required to regenerate sqlc-generated code.',
+        fix: 'Install: brew install sqlc OR go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest.',
+      });
+    }
+  } else if (orm === 'ent') {
+    const entSchema = join(fullDir, 'ent/schema');
+    if (!existsSync(entSchema)) {
+      results.push({
+        name: 'ent schema',
+        status: 'warn',
+        message: `Missing ${goDir}/ent/schema/.`,
+        fix: `Run 'go run -mod=mod entgo.io/ent/cmd/ent new <Entity>' inside ${goDir}/.`,
+      });
+    } else {
+      try {
+        execSync('go generate ./...', { cwd: fullDir, stdio: 'pipe' });
+        results.push({
+          name: 'ent generate',
+          status: 'pass',
+          message: 'go generate ./... succeeded',
+        });
+      } catch {
+        results.push({
+          name: 'ent generate',
+          status: 'warn',
+          message: "'go generate ./...' failed; run manually to inspect.",
+          fix: `cd ${goDir} && go generate ./...`,
+        });
+      }
+    }
+  }
+
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     results.push({
@@ -506,7 +549,8 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
   allResults.push(...checkGit(cwd, fix));
 
   if (components.includes('go')) {
-    allResults.push(...checkGoComponent(cwd, componentPaths.go));
+    const orm = typeof rootConfig.orm === 'string' ? rootConfig.orm : 'gorm';
+    allResults.push(...checkGoComponent(cwd, componentPaths.go, orm));
   }
 
   allResults.push(

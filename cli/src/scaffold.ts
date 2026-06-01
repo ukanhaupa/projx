@@ -31,13 +31,18 @@ export async function scaffold(
   const paths = Object.fromEntries(
     opts.components.map((c) => [c, c]),
   ) as ComponentPaths;
+  const defaultOrm = opts.components.includes('go') ? 'gorm' : 'prisma';
   const vars: GeneratorVars = {
     projectName: name,
     components: opts.components,
     paths,
     pm: pmCommands(pm),
-    orm: opts.orm ?? 'prisma',
+    orm: opts.orm ?? defaultOrm,
   };
+  const goOrm = opts.components.includes('go')
+    ? (opts.orm ?? 'gorm')
+    : undefined;
+  const goNeedsTidy = goOrm !== undefined && goOrm !== 'gorm';
   const isLocal = !!localRepo;
 
   await mkdir(dest, { recursive: true });
@@ -95,7 +100,7 @@ export async function scaffold(
     }
 
     if (opts.install) {
-      await installDeps(dest, opts.components, pm);
+      await installDeps(dest, opts.components, pm, { goNeedsTidy });
     }
 
     copyEnvExamples(dest, opts.components);
@@ -119,10 +124,15 @@ export async function scaffold(
   );
 }
 
+interface InstallDepsOptions {
+  goNeedsTidy?: boolean;
+}
+
 async function installDeps(
   dest: string,
   components: Component[],
   pm: PackageManager,
+  options: InstallDepsOptions = {},
 ): Promise<void> {
   const cmds = pmCommands(pm);
   const pmBin = pm === 'bun' ? 'bun' : pm;
@@ -197,12 +207,20 @@ async function installDeps(
           break;
         case 'go':
           if (hasCommand('go')) {
-            spinner.start('Downloading Go modules');
-            exec('go mod download', join(dest, 'go'));
-            spinner.stop('Go modules downloaded.');
+            if (options.goNeedsTidy) {
+              spinner.start('Tidying Go modules (ORM addon applied)');
+              exec('go mod tidy', join(dest, 'go'));
+              spinner.stop('Go modules tidied.');
+            } else {
+              spinner.start('Downloading Go modules');
+              exec('go mod download', join(dest, 'go'));
+              spinner.stop('Go modules downloaded.');
+            }
           } else {
             p.log.warn(
-              "Go not found — run 'cd go && go mod download' manually.",
+              options.goNeedsTidy
+                ? "Go not found — run 'cd go && go mod tidy' manually."
+                : "Go not found — run 'cd go && go mod download' manually.",
             );
           }
           break;

@@ -310,6 +310,21 @@ jobs:
           go-version-file: ${{ env.WS }}/<%= inst.path %>/go.mod
           cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/go.sum
       - run: go mod download
+<% if (orm === 'sqlc') { %>
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
+      - name: sqlc generate --check (drift gate)
+        run: "$(go env GOPATH)/bin/sqlc generate --check"
+<% } else if (orm === 'ent') { %>
+      - name: ent generate (drift gate)
+        run: |
+          go generate ./ent/...
+          if ! git diff --quiet; then
+            echo "::error::ent generate produced uncommitted drift:"
+            git diff --stat
+            exit 1
+          fi
+<% } %>
       - name: gofmt
         run: |
           out="$(gofmt -l .)"

@@ -45,8 +45,30 @@ export const ORM_PROVIDERS = [
   'drizzle',
   'sequelize',
   'typeorm',
+  'gorm',
+  'sqlc',
+  'ent',
 ] as const;
 export type OrmProvider = (typeof ORM_PROVIDERS)[number];
+
+export const NODE_ORM_PROVIDERS = [
+  'prisma',
+  'drizzle',
+  'sequelize',
+  'typeorm',
+] as const satisfies readonly OrmProvider[];
+
+export const GO_ORM_PROVIDERS = [
+  'gorm',
+  'sqlc',
+  'ent',
+] as const satisfies readonly OrmProvider[];
+
+export function ormBackendFamily(orm: OrmProvider): 'node' | 'go' {
+  return (GO_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)
+    ? 'go'
+    : 'node';
+}
 
 export interface PmCommands {
   name: PackageManager;

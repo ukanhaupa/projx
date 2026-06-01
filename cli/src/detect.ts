@@ -1,13 +1,19 @@
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type Component, EXCLUDE, readFileOrNull } from './utils.js';
+import {
+  type Component,
+  type OrmProvider,
+  EXCLUDE,
+  readFileOrNull,
+} from './utils.js';
 
 export interface DetectedComponent {
   component: Component;
   directory: string;
   confidence: 'high' | 'medium';
   evidence: string;
+  orm?: OrmProvider;
 }
 
 export async function detectComponents(
@@ -99,11 +105,13 @@ async function scanDirectory(
   }
 
   if (existsSync(join(dir, 'go.mod'))) {
+    const orm = detectGoOrm(dir);
     results.push({
       component: 'go',
       directory: relPath,
       confidence: 'high',
-      evidence: 'go.mod present',
+      evidence: orm ? `go.mod present (orm: ${orm})` : 'go.mod present',
+      orm,
     });
   }
 
@@ -122,6 +130,20 @@ async function scanDirectory(
   }
 
   return results;
+}
+
+function detectGoOrm(dir: string): OrmProvider | undefined {
+  if (
+    existsSync(join(dir, 'sqlc.yaml')) ||
+    existsSync(join(dir, 'sqlc.yml')) ||
+    existsSync(join(dir, 'sqlc.json'))
+  ) {
+    return 'sqlc';
+  }
+  if (existsSync(join(dir, 'ent')) && existsSync(join(dir, 'ent/schema'))) {
+    return 'ent';
+  }
+  return undefined;
 }
 
 async function readPkg(dir: string): Promise<{

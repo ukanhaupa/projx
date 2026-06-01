@@ -95,6 +95,35 @@ if command -v go &>/dev/null; then
   (
     cd <%= inst.path %>
     go mod download
+<% if (orm === 'sqlc') { %>
+    if [ -f scripts/db-sync.sh ]; then
+      if [ -n "$DATABASE_URL" ]; then
+        bash scripts/db-sync.sh
+      else
+        echo "<%= inst.display %>: skipping sqlc db-sync (DATABASE_URL not set)."
+      fi
+    fi
+<% } else if (orm === 'ent') { %>
+    if [ -d ent/schema ]; then
+      go generate ./ent/...
+      go mod tidy
+      if [ -f scripts/db-sync.sh ]; then
+        if [ -n "$DATABASE_URL" ]; then
+          bash scripts/db-sync.sh
+        else
+          echo "<%= inst.display %>: skipping ent migrate (DATABASE_URL not set)."
+        fi
+      fi
+    fi
+<% } else { %>
+    if [ -f scripts/db-sync.sh ]; then
+      if [ -n "$DATABASE_URL" ]; then
+        bash scripts/db-sync.sh
+      else
+        echo "<%= inst.display %>: skipping GORM schema sync (DATABASE_URL not set)."
+      fi
+    fi
+<% } %>
   )
   if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
     cp <%= inst.path %>/.env.example <%= inst.path %>/.env

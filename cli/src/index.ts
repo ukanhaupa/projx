@@ -4,8 +4,11 @@ import { resolve } from 'node:path';
 import {
   BACKEND_COMPONENTS,
   COMPONENTS,
+  GO_ORM_PROVIDERS,
   KNOWN_FEATURES,
+  NODE_ORM_PROVIDERS,
   ORM_PROVIDERS,
+  ormBackendFamily,
   type Component,
   type Feature,
   type OrmProvider,
@@ -259,6 +262,36 @@ function parseArgs(): ParsedArgs {
   return { command, name, options, localRepo, extraArgs, flags };
 }
 
+function validateOrmAgainstComponents(
+  orm: OrmProvider,
+  components: Component[],
+): void {
+  const family = ormBackendFamily(orm);
+  const hasNodeBackend = components.some(
+    (c) => c === 'fastify' || c === 'express',
+  );
+  const hasGo = components.includes('go');
+  if (family === 'go' && !hasGo) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'go'. Go ORMs: ${GO_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (family === 'node' && !hasNodeBackend) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'fastify' or 'express'. Node ORMs: ${NODE_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+}
+
+function defaultOrmForComponents(components: Component[]): OrmProvider {
+  const hasNodeBackend = components.some(
+    (c) => c === 'fastify' || c === 'express',
+  );
+  if (hasNodeBackend) return 'prisma';
+  if (components.includes('go')) return 'gorm';
+  return 'prisma';
+}
+
 function printHelp(): void {
   console.log(`
   Usage:
@@ -277,7 +310,8 @@ function printHelp(): void {
 
   Options:
     --components <list>  Comma-separated: fastapi,fastify,express,go,frontend,mobile,e2e,infra
-    --orm <provider>     Node backend ORM: prisma (default), drizzle, sequelize, typeorm
+    --orm <provider>     Backend ORM. Node (fastify/express): prisma (default) | drizzle | sequelize | typeorm.
+                         Go: gorm (default) | sqlc | ent.
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation
@@ -413,19 +447,24 @@ async function main(): Promise<void> {
       console.error('Error: project name required. Usage: projx <name>');
       return process.exit(1);
     }
+    const components = options.components;
+    const orm = options.orm ?? defaultOrmForComponents(components);
+    validateOrmAgainstComponents(orm, components);
     opts = {
       name,
-      components: options.components,
+      components,
       git: options.git ?? true,
       install: options.install ?? true,
-      orm: options.orm ?? 'prisma',
+      orm,
       features: options.features,
     };
   } else {
     opts = await runPrompts(name);
     opts.git = options.git ?? opts.git;
     opts.install = options.install ?? opts.install;
-    opts.orm = options.orm ?? opts.orm ?? 'prisma';
+    opts.orm =
+      options.orm ?? opts.orm ?? defaultOrmForComponents(opts.components);
+    validateOrmAgainstComponents(opts.orm, opts.components);
     opts.features = options.features ?? opts.features;
   }
 
