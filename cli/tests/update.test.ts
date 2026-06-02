@@ -125,6 +125,8 @@ describe('update', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
 
@@ -166,6 +168,8 @@ describe('update', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
 
@@ -197,6 +201,8 @@ describe('update', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
 

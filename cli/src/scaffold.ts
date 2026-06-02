@@ -224,6 +224,31 @@ async function installDeps(
             );
           }
           break;
+        case 'rust':
+          if (hasCommand('cargo')) {
+            spinner.start('Fetching Rust crates (cargo fetch)');
+            exec('cargo fetch', join(dest, 'rust'));
+            spinner.stop('Rust crates fetched.');
+          } else {
+            p.log.warn(
+              "cargo not found — run 'cd rust && cargo fetch' manually.",
+            );
+          }
+          break;
+        case 'laravel':
+          if (hasCommand('composer')) {
+            spinner.start('Installing Laravel dependencies (composer install)');
+            exec(
+              'composer install --no-interaction --prefer-dist',
+              join(dest, 'laravel'),
+            );
+            spinner.stop('Laravel dependencies installed.');
+          } else {
+            p.log.warn(
+              "composer not found — run 'cd laravel && composer install' manually.",
+            );
+          }
+          break;
         case 'infra':
           break;
       }

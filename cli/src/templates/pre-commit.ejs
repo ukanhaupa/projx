@@ -108,6 +108,40 @@ if [ -n "$<%= inst.upper %>_GO" ]; then
   fi
 fi
 <% } %>
+<% for (const inst of rustInstances) { %>
+
+<%= inst.upper %>_RS=$(echo "$STAGED_FILES" | grep -E '^<%= inst.path %>/.*\.rs$' || true)
+if [ -n "$<%= inst.upper %>_RS" ]; then
+  if command -v cargo &>/dev/null; then
+    echo "Checking <%= inst.path %>..."
+    cd <%= inst.path %>
+    REL_RS=$(echo "$<%= inst.upper %>_RS" | sed 's|^<%= inst.path %>/||')
+    echo "$REL_RS" | xargs cargo fmt --check --
+    cargo clippy -- -D warnings
+    cd ..
+    echo "$<%= inst.upper %>_RS" | xargs git add
+  else
+    echo "Skipping <%= inst.path %> gates (cargo not installed)"
+  fi
+fi
+<% } %>
+<% for (const inst of laravelInstances) { %>
+
+<%= inst.upper %>_PHP=$(echo "$STAGED_FILES" | grep -E '^<%= inst.path %>/.*\.php$' || true)
+if [ -n "$<%= inst.upper %>_PHP" ]; then
+  if command -v php &>/dev/null && [ -x <%= inst.path %>/vendor/bin/pint ]; then
+    echo "Checking <%= inst.path %>..."
+    cd <%= inst.path %>
+    REL_PHP=$(echo "$<%= inst.upper %>_PHP" | sed 's|^<%= inst.path %>/||')
+    echo "$REL_PHP" | xargs ./vendor/bin/pint
+    ./vendor/bin/phpstan analyse --no-progress --level=8
+    cd ..
+    echo "$<%= inst.upper %>_PHP" | xargs git add
+  else
+    echo "Skipping <%= inst.path %> gates (php or vendor/bin/pint not available — run 'composer install' in <%= inst.path %>/)"
+  fi
+fi
+<% } %>
 <% for (const inst of frontendInstances) { %>
 
 <%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tsx\?$' || true)

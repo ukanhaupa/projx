@@ -115,6 +115,45 @@ async function scanDirectory(
     });
   }
 
+  const cargo = await readFileOrNull(join(dir, 'Cargo.toml'));
+  if (cargo && /(^|\n)\s*axum\s*=/.test(cargo)) {
+    const orm: OrmProvider | undefined = /(^|\n)\s*sea-orm\s*=/.test(cargo)
+      ? 'seaorm'
+      : undefined;
+    results.push({
+      component: 'rust',
+      directory: relPath,
+      confidence: 'high',
+      evidence: orm ? 'Cargo.toml has axum + sea-orm' : 'Cargo.toml has axum',
+      orm,
+    });
+  }
+
+  const composer = await readFileOrNull(join(dir, 'composer.json'));
+  if (composer) {
+    try {
+      const parsed = JSON.parse(composer) as {
+        require?: Record<string, string>;
+        'require-dev'?: Record<string, string>;
+      };
+      const deps = {
+        ...(parsed.require ?? {}),
+        ...(parsed['require-dev'] ?? {}),
+      };
+      if (deps['laravel/framework']) {
+        results.push({
+          component: 'laravel',
+          directory: relPath,
+          confidence: 'high',
+          evidence: 'composer.json has laravel/framework',
+          orm: 'eloquent',
+        });
+      }
+    } catch {
+      // not valid json
+    }
+  }
+
   const hasTf =
     existsSync(join(dir, 'main.tf')) ||
     existsSync(join(dir, 'variables.tf')) ||

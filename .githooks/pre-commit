@@ -36,6 +36,8 @@ FASTAPI_PY=$(echo "$STAGED_FILES" | grep '^fastapi/.*\.py$' || true)
 FASTIFY_TS=$(echo "$STAGED_FILES" | grep '^fastify/.*\.ts$' || true)
 FASTIFY_ALL=$(echo "$STAGED_FILES" | grep '^fastify/' || true)
 GO_FILES=$(echo "$STAGED_FILES" | grep '^go/.*\.go$' || true)
+RUST_FILES=$(echo "$STAGED_FILES" | grep -E '^rust/.*\.rs$' || true)
+LARAVEL_FILES=$(echo "$STAGED_FILES" | grep -E '^laravel/.*\.php$' || true)
 FRONTEND_TS=$(echo "$STAGED_FILES" | grep '^frontend/.*\.tsx\?$' || true)
 FRONTEND_ALL=$(echo "$STAGED_FILES" | grep '^frontend/' || true)
 E2E_TS=$(echo "$STAGED_FILES" | grep '^e2e/.*\.ts$' || true)
@@ -100,6 +102,38 @@ if [ -n "$GO_FILES" ]; then
     echo "$GO_FILES" | xargs git add
   else
     echo "Skipping go gates (go toolchain not installed)"
+  fi
+fi
+
+# ── Rust ──────────────────────────────────────────────────────────
+if [ -n "$RUST_FILES" ]; then
+  if command -v cargo &>/dev/null; then
+    echo "Checking rust..."
+    cd rust
+    REL_RS=$(echo "$RUST_FILES" | sed 's|^rust/||')
+    # shellcheck disable=SC2086
+    echo "$REL_RS" | xargs cargo fmt --check --
+    cargo clippy -- -D warnings
+    cd ..
+    echo "$RUST_FILES" | xargs git add
+  else
+    echo "Skipping rust gates (cargo not installed)"
+  fi
+fi
+
+# ── Laravel ───────────────────────────────────────────────────────
+if [ -n "$LARAVEL_FILES" ]; then
+  if command -v php &>/dev/null && [ -x laravel/vendor/bin/pint ]; then
+    echo "Checking laravel..."
+    cd laravel
+    REL_PHP=$(echo "$LARAVEL_FILES" | sed 's|^laravel/||')
+    # shellcheck disable=SC2086
+    echo "$REL_PHP" | xargs ./vendor/bin/pint
+    ./vendor/bin/phpstan analyse --no-progress --level=8
+    cd ..
+    echo "$LARAVEL_FILES" | xargs git add
+  else
+    echo "Skipping laravel gates (php or vendor/bin/pint not available — run 'composer install' in laravel/)"
   fi
 fi
 

@@ -55,16 +55,8 @@ __GET_SOFT_DELETE_FILTER__
 func (q *querier) List(ctx context.Context, p entities.ListParams) (entities.Page, error) {
 	qry := q.client.__ENTITY_PASCAL__.Query()
 __LIST_SOFT_DELETE_BLOCK__
-	if p.Search != "" {
-		needle := "%" + p.Search + "%"
-		_ = needle
 __SEARCH_BLOCK__
-	}
-	for col, val := range p.Filters {
-		_ = col
-		_ = val
-__FILTER_SWITCH__
-	}
+__FILTER_BLOCK__
 
 	total, err := qry.Clone().Count(ctx)
 	if err != nil {
@@ -175,7 +167,7 @@ __CREATE_SETTERS__
 	return out, nil
 }
 
-func (q *querier) BulkDelete(ctx context.Context, ids []string) error {
+func (q *querier) BulkDelete(ctx context.Context, ids []string) (int, error) {
 __BULK_DELETE_BODY__
 }
 

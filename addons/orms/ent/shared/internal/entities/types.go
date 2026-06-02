@@ -31,7 +31,7 @@ type Querier interface {
 	Update(ctx context.Context, id string, patch map[string]any) (any, error)
 	Delete(ctx context.Context, id string) error
 	BulkCreate(ctx context.Context, payloads [][]byte) ([]any, error)
-	BulkDelete(ctx context.Context, ids []string) error
+	BulkDelete(ctx context.Context, ids []string) (int, error)
 }
 
 type Hooks struct {

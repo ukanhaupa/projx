@@ -186,8 +186,12 @@ func bulkDeleteHandler(cfg EntityConfig) apperr.HandlerFunc {
 				}
 			}
 		}
-		if err := cfg.Querier.BulkDelete(r.Context(), body.IDs); err != nil {
+		affected, err := cfg.Querier.BulkDelete(r.Context(), body.IDs)
+		if err != nil {
 			return apperr.FromDB(err, cfg.Name)
+		}
+		if affected == 0 {
+			return apperr.NotFound(cfg.Name)
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil

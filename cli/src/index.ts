@@ -8,6 +8,8 @@ import {
   KNOWN_FEATURES,
   NODE_ORM_PROVIDERS,
   ORM_PROVIDERS,
+  PHP_ORM_PROVIDERS,
+  RUST_ORM_PROVIDERS,
   ormBackendFamily,
   type Component,
   type Feature,
@@ -271,6 +273,8 @@ function validateOrmAgainstComponents(
     (c) => c === 'fastify' || c === 'express',
   );
   const hasGo = components.includes('go');
+  const hasRust = components.includes('rust');
+  const hasLaravel = components.includes('laravel');
   if (family === 'go' && !hasGo) {
     throw new Error(
       `--orm ${orm} requires --components to include 'go'. Go ORMs: ${GO_ORM_PROVIDERS.join(', ')}.`,
@@ -281,6 +285,16 @@ function validateOrmAgainstComponents(
       `--orm ${orm} requires --components to include 'fastify' or 'express'. Node ORMs: ${NODE_ORM_PROVIDERS.join(', ')}.`,
     );
   }
+  if (family === 'rust' && !hasRust) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'rust'. Rust ORMs: ${RUST_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (family === 'php' && !hasLaravel) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'laravel'. PHP ORMs: ${PHP_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
 }
 
 function defaultOrmForComponents(components: Component[]): OrmProvider {
@@ -289,6 +303,8 @@ function defaultOrmForComponents(components: Component[]): OrmProvider {
   );
   if (hasNodeBackend) return 'prisma';
   if (components.includes('go')) return 'gorm';
+  if (components.includes('rust')) return 'seaorm';
+  if (components.includes('laravel')) return 'eloquent';
   return 'prisma';
 }
 
@@ -309,9 +325,10 @@ function printHelp(): void {
     projx sync [--backend N]      Pull entity types from a running backend
 
   Options:
-    --components <list>  Comma-separated: fastapi,fastify,express,go,frontend,mobile,e2e,infra
+    --components <list>  Comma-separated: fastapi,fastify,express,go,rust,laravel,frontend,mobile,e2e,infra
     --orm <provider>     Backend ORM. Node (fastify/express): prisma (default) | drizzle | sequelize | typeorm.
                          Go: gorm (default) | sqlc | ent.
+                         Rust: seaorm. PHP/Laravel: eloquent.
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation

@@ -613,6 +613,8 @@ describe('tier 3: direct copy fallback', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
     const vars: GeneratorVars = {
@@ -650,6 +652,8 @@ describe('tier 3: direct copy fallback', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
     const vars: GeneratorVars = {
@@ -685,6 +689,8 @@ describe('tier 3: direct copy fallback', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
     const vars: GeneratorVars = {
@@ -886,6 +892,8 @@ describe('writeTemplateToDir — extraInstances', () => {
       frontend: 'frontend',
       mobile: 'mobile',
       e2e: 'e2e',
+      rust: 'rust',
+      laravel: 'laravel',
       infra: 'infra',
     };
     const vars: GeneratorVars = {

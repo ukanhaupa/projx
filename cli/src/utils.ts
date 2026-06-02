@@ -22,6 +22,8 @@ export const COMPONENTS = [
   'fastify',
   'express',
   'go',
+  'rust',
+  'laravel',
   'frontend',
   'mobile',
   'e2e',
@@ -35,6 +37,8 @@ export const BACKEND_COMPONENTS = [
   'fastify',
   'express',
   'go',
+  'rust',
+  'laravel',
 ] as const satisfies readonly Component[];
 
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
@@ -48,6 +52,8 @@ export const ORM_PROVIDERS = [
   'gorm',
   'sqlc',
   'ent',
+  'seaorm',
+  'eloquent',
 ] as const;
 export type OrmProvider = (typeof ORM_PROVIDERS)[number];
 
@@ -64,10 +70,22 @@ export const GO_ORM_PROVIDERS = [
   'ent',
 ] as const satisfies readonly OrmProvider[];
 
-export function ormBackendFamily(orm: OrmProvider): 'node' | 'go' {
-  return (GO_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)
-    ? 'go'
-    : 'node';
+export const RUST_ORM_PROVIDERS = [
+  'seaorm',
+] as const satisfies readonly OrmProvider[];
+
+export const PHP_ORM_PROVIDERS = [
+  'eloquent',
+] as const satisfies readonly OrmProvider[];
+
+export function ormBackendFamily(
+  orm: OrmProvider,
+): 'node' | 'go' | 'rust' | 'php' {
+  if ((GO_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)) return 'go';
+  if ((RUST_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm))
+    return 'rust';
+  if ((PHP_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)) return 'php';
+  return 'node';
 }
 
 export interface PmCommands {

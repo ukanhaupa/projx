@@ -138,6 +138,42 @@ describe('scaffold', () => {
     expect(compose).toContain('http://localhost:8080/api/health');
   });
 
+  it('scaffolds a Rust backend and tolerates a missing cargo toolchain', async () => {
+    dest = join(tmpdir(), `projx-rust-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'rust-app',
+        components: ['rust'],
+        orm: 'seaorm',
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+    expect(existsSync(join(dest, 'rust/Cargo.toml'))).toBe(true);
+    expect(existsSync(join(dest, 'rust/src/main.rs'))).toBe(true);
+    expect(existsSync(join(dest, 'rust/Dockerfile'))).toBe(true);
+  });
+
+  it('scaffolds a Laravel backend and tolerates a missing composer toolchain', async () => {
+    dest = join(tmpdir(), `projx-laravel-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'laravel-app',
+        components: ['laravel'],
+        orm: 'eloquent',
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+    expect(existsSync(join(dest, 'laravel/composer.json'))).toBe(true);
+    expect(existsSync(join(dest, 'laravel/app/Http/Kernel.php'))).toBe(true);
+    expect(existsSync(join(dest, 'laravel/Dockerfile'))).toBe(true);
+  });
+
   it('scaffolds Node backends with Drizzle when --orm drizzle is selected', async () => {
     dest = join(tmpdir(), `projx-drizzle-${Date.now()}`);
     await scaffold(

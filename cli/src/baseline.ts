@@ -21,6 +21,8 @@ import {
   DEFAULT_ROOT_SKIP_PATTERNS,
   GO_ORM_PROVIDERS,
   NODE_ORM_PROVIDERS,
+  PHP_ORM_PROVIDERS,
+  RUST_ORM_PROVIDERS,
   copyComponent,
   copyStaticFiles,
   readComponentMarker,
@@ -637,6 +639,22 @@ async function applyOrmProviderToInstance(
     await applyOrmAddon(repoDir, orm, component, dir, vars);
     return;
   }
+  if (component === 'rust') {
+    if (!(RUST_ORM_PROVIDERS as readonly string[]).includes(orm)) {
+      throw new Error(
+        `ORM "${orm}" is not supported for rust. Use one of: ${RUST_ORM_PROVIDERS.join(', ')}.`,
+      );
+    }
+    return;
+  }
+  if (component === 'laravel') {
+    if (!(PHP_ORM_PROVIDERS as readonly string[]).includes(orm)) {
+      throw new Error(
+        `ORM "${orm}" is not supported for laravel. Use one of: ${PHP_ORM_PROVIDERS.join(', ')}.`,
+      );
+    }
+    return;
+  }
 }
 
 interface GomodOverrides {
@@ -1024,6 +1042,18 @@ async function substituteNamesForInstance(
       'package:projx_mobile/',
       `package:${target}/`,
       '.dart',
+    );
+  } else if (type === 'rust') {
+    if (isCanonical) return;
+    const target = `${name}-${path}`;
+    await replaceInFile(join(dest, `${path}/Cargo.toml`), 'projx-rust', target);
+  } else if (type === 'laravel') {
+    if (isCanonical) return;
+    const target = `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/composer.json`),
+      'projx-laravel',
+      target,
     );
   } else if (type === 'go' || type === 'infra') {
     return;

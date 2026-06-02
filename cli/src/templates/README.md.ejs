@@ -18,6 +18,12 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 <% if (components.includes('go')) { %>
 | **<%= paths.go %>/** | Go, Chi, GORM, PostgreSQL |
 <% } %>
+<% if (components.includes('rust')) { %>
+| **<%= paths.rust %>/** | Rust, Axum, SeaORM, PostgreSQL |
+<% } %>
+<% if (components.includes('laravel')) { %>
+| **<%= paths.laravel %>/** | Laravel 11, PHP 8.3, Eloquent, PostgreSQL |
+<% } %>
 <% if (components.includes('frontend')) { %>
 | **<%= paths.frontend %>/** | React 19, TypeScript, Vite, React Router |
 <% } %>
@@ -80,6 +86,26 @@ cd <%= paths.go %> && cp .env.example .env && go mod download && go run .
 
 Health check at `http://localhost:8080/api/health`.
 <% } %>
+<% if (components.includes('rust')) { %>
+
+### <%= paths.rust %>/
+
+```bash
+cd <%= paths.rust %> && cp .env.example .env && cargo run
+```
+
+Health check at `http://localhost:8080/api/health`.
+<% } %>
+<% if (components.includes('laravel')) { %>
+
+### <%= paths.laravel %>/
+
+```bash
+cd <%= paths.laravel %> && cp .env.example .env && composer install && php artisan key:generate && php artisan migrate && php artisan serve
+```
+
+Health check at `http://localhost:8000/api/health`.
+<% } %>
 <% if (components.includes('frontend')) { %>
 
 ### <%= paths.frontend %>/
@@ -111,6 +137,12 @@ cd <%= paths.express %> && <%= pm.run %> test
 <% } %>
 <% if (components.includes('go')) { %>
 cd <%= paths.go %> && go test ./...
+<% } %>
+<% if (components.includes('rust')) { %>
+cd <%= paths.rust %> && cargo test --all-features
+<% } %>
+<% if (components.includes('laravel')) { %>
+cd <%= paths.laravel %> && ./vendor/bin/pest
 <% } %>
 <% if (components.includes('frontend')) { %>
 cd <%= paths.frontend %> && <%= pm.exec %> vitest run

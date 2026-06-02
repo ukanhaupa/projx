@@ -36,7 +36,7 @@ export interface SchemasDocument {
 
 export const META_SCHEMAS_PATH = '/api/v1/_meta/schemas';
 
-const DEFAULT_BACKEND_URLS: Record<
+export const DEFAULT_BACKEND_URLS: Record<
   (typeof BACKEND_COMPONENTS)[number],
   string
 > = {
@@ -44,6 +44,8 @@ const DEFAULT_BACKEND_URLS: Record<
   express: 'http://localhost:3000',
   fastapi: 'http://localhost:8000',
   go: 'http://localhost:8080',
+  rust: 'http://localhost:8080',
+  laravel: 'http://localhost:8000',
 };
 
 export interface SyncOptions {

@@ -308,6 +308,54 @@ export function isGoVersionSupported(v: {
   return v.minor >= GO_MIN_MINOR;
 }
 
+const RUST_MIN = { major: 1, minor: 83, patch: 0 };
+const PHP_MIN = { major: 8, minor: 3, patch: 0 };
+const COMPOSER_MIN_MAJOR = 2;
+
+function compareSemver(
+  a: { major: number; minor: number; patch: number },
+  b: { major: number; minor: number; patch: number },
+): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+function parseSemver(
+  v: string,
+): { major: number; minor: number; patch: number } | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]) };
+}
+
+export function parseRustVersion(output: string): string | null {
+  const m = /rustc\s+(\d+\.\d+\.\d+)/.exec(output);
+  return m ? m[1] : null;
+}
+
+export function isRustVersionSupported(version: string): boolean {
+  const v = parseSemver(version);
+  if (!v) return false;
+  return compareSemver(v, RUST_MIN) >= 0;
+}
+
+export function parsePhpVersion(output: string): string | null {
+  const m = /PHP\s+(\d+\.\d+\.\d+)/.exec(output);
+  return m ? m[1] : null;
+}
+
+export function isPhpVersionSupported(version: string): boolean {
+  const v = parseSemver(version);
+  if (!v) return false;
+  return compareSemver(v, PHP_MIN) >= 0;
+}
+
+export function parseComposerVersion(output: string): string | null {
+  const m = /Composer(?:\s+version)?\s+(\d+\.\d+\.\d+)/.exec(output);
+  return m ? m[1] : null;
+}
+
 function which(cmd: string): boolean {
   try {
     execSync(`command -v ${cmd}`, { stdio: 'pipe' });
@@ -499,6 +547,267 @@ function checkGoComponent(
   return results;
 }
 
+function probeDatabaseUrl(label: string, hintDir: string): CheckResult {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    return {
+      name: 'DATABASE_URL',
+      status: 'warn',
+      message: `Unset — ${label} runtime checks need a database.`,
+      fix: `Set DATABASE_URL in ${hintDir}/.env to enable runtime checks.`,
+    };
+  }
+  if (which('psql')) {
+    try {
+      execSync(`psql "${dbUrl}" -c 'SELECT 1' >/dev/null 2>&1`, {
+        stdio: 'pipe',
+      });
+      return {
+        name: 'DATABASE_URL',
+        status: 'pass',
+        message: 'Postgres reachable',
+      };
+    } catch {
+      return {
+        name: 'DATABASE_URL',
+        status: 'warn',
+        message: 'Set but Postgres not reachable.',
+      };
+    }
+  }
+  return {
+    name: 'DATABASE_URL',
+    status: 'pass',
+    message: 'Set (psql not on PATH; reachability skipped).',
+  };
+}
+
+function checkRustComponent(cwd: string, rustDir: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const fullDir = join(cwd, rustDir);
+
+  try {
+    const raw = execSync('cargo --version', { cwd: fullDir, stdio: 'pipe' })
+      .toString()
+      .trim();
+    const m = /cargo\s+(\d+\.\d+\.\d+)/.exec(raw);
+    if (m) {
+      results.push({
+        name: 'cargo',
+        status: 'pass',
+        message: m[1],
+      });
+    } else {
+      results.push({
+        name: 'cargo',
+        status: 'warn',
+        message: `Could not parse 'cargo --version' output: ${raw}`,
+      });
+    }
+  } catch {
+    results.push({
+      name: 'cargo',
+      status: 'fail',
+      message: "'cargo' not on PATH.",
+      fix: 'Install Rust via https://rustup.rs/.',
+    });
+    return results;
+  }
+
+  try {
+    const raw = execSync('rustc --version', { cwd: fullDir, stdio: 'pipe' })
+      .toString()
+      .trim();
+    const parsed = parseRustVersion(raw);
+    if (!parsed) {
+      results.push({
+        name: 'rust toolchain',
+        status: 'warn',
+        message: `Could not parse 'rustc --version' output: ${raw}`,
+      });
+    } else if (!isRustVersionSupported(parsed)) {
+      results.push({
+        name: 'rust toolchain',
+        status: 'fail',
+        message: `Rust ${parsed} detected; need >= ${RUST_MIN.major}.${RUST_MIN.minor}.${RUST_MIN.patch}.`,
+        fix: 'Upgrade via `rustup update stable`.',
+      });
+    } else {
+      results.push({
+        name: 'rust toolchain',
+        status: 'pass',
+        message: parsed,
+      });
+    }
+  } catch {
+    results.push({
+      name: 'rust toolchain',
+      status: 'warn',
+      message: "'rustc' not on PATH.",
+      fix: 'Install Rust via https://rustup.rs/.',
+    });
+  }
+
+  const cargoToml = join(fullDir, 'Cargo.toml');
+  if (existsSync(cargoToml)) {
+    results.push({
+      name: 'Cargo.toml',
+      status: 'pass',
+      message: `${rustDir}/Cargo.toml`,
+    });
+  } else {
+    results.push({
+      name: 'Cargo.toml',
+      status: 'fail',
+      message: `Missing ${rustDir}/Cargo.toml.`,
+      fix: `Run 'cargo init' in ${rustDir}/.`,
+    });
+  }
+
+  if (which('rustfmt')) {
+    results.push({ name: 'rustfmt', status: 'pass', message: 'OK' });
+  } else {
+    results.push({
+      name: 'rustfmt',
+      status: 'warn',
+      message: 'Not on PATH; CI will still gate formatting.',
+      fix: 'Install: rustup component add rustfmt.',
+    });
+  }
+
+  if (which('clippy-driver')) {
+    try {
+      const raw = execSync('clippy-driver --version', { stdio: 'pipe' })
+        .toString()
+        .trim();
+      results.push({ name: 'clippy', status: 'pass', message: raw });
+    } catch {
+      results.push({
+        name: 'clippy',
+        status: 'warn',
+        message: 'Present but version probe failed.',
+      });
+    }
+  } else {
+    results.push({
+      name: 'clippy',
+      status: 'warn',
+      message: 'Not on PATH; CI will still gate lint.',
+      fix: 'Install: rustup component add clippy.',
+    });
+  }
+
+  results.push(probeDatabaseUrl('rust', rustDir));
+
+  return results;
+}
+
+function checkLaravelComponent(cwd: string, laravelDir: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const fullDir = join(cwd, laravelDir);
+
+  try {
+    const raw = execSync('php --version', { cwd: fullDir, stdio: 'pipe' })
+      .toString()
+      .trim();
+    const parsed = parsePhpVersion(raw);
+    if (!parsed) {
+      results.push({
+        name: 'php',
+        status: 'fail',
+        message: `Could not parse 'php --version' output: ${raw}`,
+      });
+    } else if (!isPhpVersionSupported(parsed)) {
+      results.push({
+        name: 'php',
+        status: 'fail',
+        message: `PHP ${parsed} detected; need >= ${PHP_MIN.major}.${PHP_MIN.minor}.${PHP_MIN.patch}.`,
+        fix: 'Upgrade PHP to >= 8.3 via your package manager.',
+      });
+    } else {
+      results.push({ name: 'php', status: 'pass', message: parsed });
+    }
+  } catch {
+    results.push({
+      name: 'php',
+      status: 'fail',
+      message: "'php' not on PATH.",
+      fix: 'Install PHP >= 8.3 via your package manager.',
+    });
+    return results;
+  }
+
+  try {
+    const raw = execSync('composer --version', { cwd: fullDir, stdio: 'pipe' })
+      .toString()
+      .trim();
+    const parsed = parseComposerVersion(raw);
+    if (!parsed) {
+      results.push({
+        name: 'composer',
+        status: 'fail',
+        message: `Could not parse 'composer --version' output: ${raw}`,
+      });
+    } else {
+      const sem = parseSemver(parsed);
+      if (!sem || sem.major < COMPOSER_MIN_MAJOR) {
+        results.push({
+          name: 'composer',
+          status: 'fail',
+          message: `Composer ${parsed} detected; need >= ${COMPOSER_MIN_MAJOR}.0.0.`,
+          fix: 'Upgrade Composer: composer self-update --2.',
+        });
+      } else {
+        results.push({ name: 'composer', status: 'pass', message: parsed });
+      }
+    }
+  } catch {
+    results.push({
+      name: 'composer',
+      status: 'fail',
+      message: "'composer' not on PATH.",
+      fix: 'Install Composer >= 2.0 from https://getcomposer.org/.',
+    });
+    return results;
+  }
+
+  const composerJson = join(fullDir, 'composer.json');
+  if (existsSync(composerJson)) {
+    results.push({
+      name: 'composer.json',
+      status: 'pass',
+      message: `${laravelDir}/composer.json`,
+    });
+  } else {
+    results.push({
+      name: 'composer.json',
+      status: 'fail',
+      message: `Missing ${laravelDir}/composer.json.`,
+      fix: `Run 'composer init' in ${laravelDir}/.`,
+    });
+  }
+
+  const envFile = join(fullDir, '.env');
+  if (existsSync(envFile)) {
+    results.push({
+      name: '.env',
+      status: 'pass',
+      message: `${laravelDir}/.env`,
+    });
+  } else {
+    results.push({
+      name: '.env',
+      status: 'warn',
+      message: `Missing ${laravelDir}/.env.`,
+      fix: `cp ${laravelDir}/.env.example ${laravelDir}/.env && php artisan key:generate.`,
+    });
+  }
+
+  results.push(probeDatabaseUrl('laravel', laravelDir));
+
+  return results;
+}
+
 async function patternMatchesAnything(
   dir: string,
   pattern: string,
@@ -551,6 +860,14 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
   if (components.includes('go')) {
     const orm = typeof rootConfig.orm === 'string' ? rootConfig.orm : 'gorm';
     allResults.push(...checkGoComponent(cwd, componentPaths.go, orm));
+  }
+
+  if (components.includes('rust')) {
+    allResults.push(...checkRustComponent(cwd, componentPaths.rust));
+  }
+
+  if (components.includes('laravel')) {
+    allResults.push(...checkLaravelComponent(cwd, componentPaths.laravel));
   }
 
   allResults.push(

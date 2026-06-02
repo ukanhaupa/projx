@@ -219,6 +219,31 @@ sec_go() {
   run_step "go coverage" bash scripts/check-coverage.sh
 }
 
+sec_rust() {
+  [ -d "$ROOT_DIR/rust" ] || return 0
+  if ! command -v cargo >/dev/null 2>&1; then
+    warn "rust toolchain not installed, skipping (install: https://rustup.rs)"
+    return 0
+  fi
+  cd "$ROOT_DIR/rust" || exit 1
+  run_step "rust format" cargo fmt --check
+  run_step "rust lint" cargo clippy -- -D warnings
+  run_step "rust test" cargo test --all-features
+}
+
+sec_laravel() {
+  [ -d "$ROOT_DIR/laravel" ] || return 0
+  if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1; then
+    warn "php/composer not installed, skipping (install: https://www.php.net + https://getcomposer.org)"
+    return 0
+  fi
+  cd "$ROOT_DIR/laravel" || exit 1
+  run_step "laravel install" composer install --no-interaction
+  run_step "laravel format" ./vendor/bin/pint --test
+  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress
+  run_step "laravel tests" ./vendor/bin/pest --no-coverage
+}
+
 sec_frontend() {
   run_js_component frontend
   if [ -d "$ROOT_DIR/frontend/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
@@ -320,6 +345,8 @@ available_sections() {
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
   [ -d "$ROOT_DIR/go" ] && found+=("go")
+  [ -d "$ROOT_DIR/rust" ] && found+=("rust")
+  [ -d "$ROOT_DIR/laravel" ] && found+=("laravel")
   [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")

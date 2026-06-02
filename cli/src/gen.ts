@@ -2087,7 +2087,7 @@ interface SqlcEntityVars extends Record<string, string> {
   INSERT_VALUES: string;
   SCAN_ARGS: string;
   SEARCH_CLAUSES: string;
-  FILTER_CASES: string;
+  FILTER_BLOCK: string;
   DELETE_BODY: string;
   BULK_DELETE_BODY: string;
   MIGRATION_COLUMNS: string;
@@ -2228,16 +2228,27 @@ function buildSqlcEntityVars(config: EntityConfig): SqlcEntityVars {
         '}'
       : '[]string{}';
 
-  const filterCases = allCols
-    .filter(
-      (c) =>
-        c !== 'id' &&
-        c !== 'created_at' &&
-        c !== 'updated_at' &&
-        c !== 'deleted_at',
-    )
-    .map((c) => `\t\tcase "${c}":`)
-    .join('\n');
+  const filterableCols = allCols.filter(
+    (c) =>
+      c !== 'id' &&
+      c !== 'created_at' &&
+      c !== 'updated_at' &&
+      c !== 'deleted_at',
+  );
+  const filterCases = filterableCols.map((c) => `\t\tcase "${c}":`).join('\n');
+  const filterBlock =
+    filterableCols.length > 0
+      ? `\tfor col, val := range p.Filters {
+\t\tswitch col {
+${filterCases}
+\t\tdefault:
+\t\t\tcontinue
+\t\t}
+\t\twhere = append(where, fmt.Sprintf("%s::text = $%d", col, idx))
+\t\targs = append(args, val)
+\t\tidx++
+\t}`
+      : '';
 
   const deleteBody = config.softDelete
     ? `\tres, err := q.pool.ExecContext(ctx, \`UPDATE \`+tableName+\` SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL\`, id)
@@ -2260,10 +2271,18 @@ function buildSqlcEntityVars(config: EntityConfig): SqlcEntityVars {
 \treturn nil`;
 
   const bulkDeleteBody = config.softDelete
-    ? `\t_, err := q.pool.ExecContext(ctx, \`UPDATE \`+tableName+\` SET deleted_at = NOW() WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL\`, ids)
-\treturn err`
-    : `\t_, err := q.pool.ExecContext(ctx, \`DELETE FROM \`+tableName+\` WHERE id = ANY($1::uuid[])\`, ids)
-\treturn err`;
+    ? `\tres, err := q.pool.ExecContext(ctx, \`UPDATE \`+tableName+\` SET deleted_at = NOW() WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL\`, ids)
+\tif err != nil {
+\t\treturn 0, err
+\t}
+\tn, _ := res.RowsAffected()
+\treturn int(n), nil`
+    : `\tres, err := q.pool.ExecContext(ctx, \`DELETE FROM \`+tableName+\` WHERE id = ANY($1::uuid[])\`, ids)
+\tif err != nil {
+\t\treturn 0, err
+\t}
+\tn, _ := res.RowsAffected()
+\treturn int(n), nil`;
 
   const migrationCols = config.fields
     .map((f) => {
@@ -2302,7 +2321,7 @@ function buildSqlcEntityVars(config: EntityConfig): SqlcEntityVars {
     INSERT_VALUES: insertValues,
     SCAN_ARGS: scanArgs,
     SEARCH_CLAUSES: searchClauses,
-    FILTER_CASES: filterCases || '\t\t// no filter columns',
+    FILTER_BLOCK: filterBlock,
     DELETE_BODY: deleteBody,
     BULK_DELETE_BODY: bulkDeleteBody,
     MIGRATION_COLUMNS: migrationCols,
@@ -2333,7 +2352,7 @@ interface EntEntityVars extends Record<string, string> {
   LIST_SOFT_DELETE_BLOCK: string;
   UPDATE_SOFT_DELETE_FILTER: string;
   SEARCH_BLOCK: string;
-  FILTER_SWITCH: string;
+  FILTER_BLOCK: string;
   DELETE_BODY: string;
   BULK_DELETE_BODY: string;
 }
@@ -2533,10 +2552,10 @@ function buildEntEntityVars(
     .join(', ');
   const searchBlock =
     config.searchableFields.length > 0
-      ? `\t\tqry = qry.Where(${entPkg}.Or(${searchClauses}))`
+      ? `\tif p.Search != "" {\n\t\tneedle := "%" + p.Search + "%"\n\t\tqry = qry.Where(${entPkg}.Or(${searchClauses}))\n\t}`
       : '';
 
-  const filterableCols = config.fields
+  const entFilterableCols = config.fields
     .filter((f) => !f.generated)
     .filter(
       (f) =>
@@ -2545,7 +2564,7 @@ function buildEntEntityVars(
         f.type === 'number' ||
         f.type === 'boolean',
     );
-  const filterCases = filterableCols
+  const entFilterCases = entFilterableCols
     .map((f) => {
       const pf = toPascal(f.name);
       if (f.type === 'boolean') {
@@ -2557,16 +2576,18 @@ function buildEntEntityVars(
       return `\t\tcase "${f.name}":\n\t\t\tqry = qry.Where(${entPkg}.${pf}(val))`;
     })
     .join('\n');
-  const filterSwitch =
-    filterCases.length > 0 ? `\t\tswitch col {\n${filterCases}\n\t\t}` : '';
+  const filterBlock =
+    entFilterCases.length > 0
+      ? `\tfor col, val := range p.Filters {\n\t\tswitch col {\n${entFilterCases}\n\t\t}\n\t}`
+      : '';
 
   const deleteBody = config.softDelete
     ? `\tnow := time.Now()\n\tn, err := q.client.${pascal}.Update().\n\t\tWhere(${entPkg}.ID(id), ${entPkg}.DeletedAtIsNil()).\n\t\tSetDeletedAt(now).\n\t\tSave(ctx)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif n == 0 {\n\t\treturn apperr.NotFound("${snake}")\n\t}\n\treturn nil`
     : `\terr := q.client.${pascal}.DeleteOneID(id).Exec(ctx)\n\tif err != nil {\n\t\tif ent.IsNotFound(err) {\n\t\t\treturn apperr.NotFound("${snake}")\n\t\t}\n\t\treturn err\n\t}\n\treturn nil`;
 
   const bulkDeleteBody = config.softDelete
-    ? `\tnow := time.Now()\n\t_, err := q.client.${pascal}.Update().\n\t\tWhere(${entPkg}.IDIn(ids...), ${entPkg}.DeletedAtIsNil()).\n\t\tSetDeletedAt(now).\n\t\tSave(ctx)\n\treturn err`
-    : `\t_, err := q.client.${pascal}.Delete().Where(${entPkg}.IDIn(ids...)).Exec(ctx)\n\treturn err`;
+    ? `\tnow := time.Now()\n\tn, err := q.client.${pascal}.Update().\n\t\tWhere(${entPkg}.IDIn(ids...), ${entPkg}.DeletedAtIsNil()).\n\t\tSetDeletedAt(now).\n\t\tSave(ctx)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\treturn n, nil`
+    : `\tn, err := q.client.${pascal}.Delete().Where(${entPkg}.IDIn(ids...)).Exec(ctx)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\treturn n, nil`;
 
   return {
     ENTITY_PASCAL: pascal,
@@ -2590,7 +2611,7 @@ function buildEntEntityVars(
     LIST_SOFT_DELETE_BLOCK: listSoftDeleteBlock,
     UPDATE_SOFT_DELETE_FILTER: updateSoftDeleteFilter,
     SEARCH_BLOCK: searchBlock,
-    FILTER_SWITCH: filterSwitch,
+    FILTER_BLOCK: filterBlock,
     DELETE_BODY: deleteBody,
     BULK_DELETE_BODY: bulkDeleteBody,
   };

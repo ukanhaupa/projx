@@ -31,6 +31,12 @@ jobs:
 <% for (const inst of goInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
+<% for (const inst of rustInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
+<% for (const inst of laravelInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
 <% for (const inst of frontendInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
@@ -65,6 +71,14 @@ jobs:
               - '<%= inst.path %>/**'
 <% } %>
 <% for (const inst of goInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of rustInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of laravelInstances) { %>
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
@@ -345,6 +359,77 @@ jobs:
           "$(go env GOPATH)/bin/govulncheck" ./...
       - run: go test -race -coverprofile=coverage.out ./...
       - run: bash scripts/check-coverage.sh
+<% } %>
+<% for (const inst of rustInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (fmt + clippy + test + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: '1.83'
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test --all-features
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version 0.31.5 --locked
+      - name: Coverage (≥80%)
+        run: cargo tarpaulin --fail-under 80 --out Xml --workspace --all-features
+<% } %>
+<% for (const inst of laravelInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (pint + phpstan + pest + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_DATABASE: ci_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql,pcntl,bcmath,intl
+          coverage: pcov
+      - run: composer install --no-interaction --prefer-dist
+      - run: ./vendor/bin/pint --test
+      - run: ./vendor/bin/phpstan analyse --no-progress --level=8
+      - run: ./vendor/bin/pest --coverage --min=80
 <% } %>
 <% for (const inst of frontendInstances) { %>
 

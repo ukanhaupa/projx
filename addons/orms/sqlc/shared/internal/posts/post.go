@@ -226,10 +226,14 @@ func (q *querier) BulkCreate(ctx context.Context, payloads [][]byte) ([]any, err
 	return out, nil
 }
 
-func (q *querier) BulkDelete(ctx context.Context, ids []string) error {
-	_, err := q.pool.ExecContext(ctx,
+func (q *querier) BulkDelete(ctx context.Context, ids []string) (int, error) {
+	res, err := q.pool.ExecContext(ctx,
 		`UPDATE posts SET deleted_at = NOW() WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`, ids)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 func scanPost(row *sql.Row) (any, error) {

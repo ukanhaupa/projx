@@ -18,6 +18,8 @@ const ORM_LABELS: Record<OrmProvider, string> = {
   gorm: 'GORM (Go)',
   sqlc: 'sqlc (Go)',
   ent: 'ent (Go)',
+  seaorm: 'SeaORM (Rust)',
+  eloquent: 'Eloquent (PHP)',
 };
 
 export const LABELS: Record<Component, { label: string; hint: string }> = {
@@ -25,6 +27,8 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastify: { label: 'Fastify', hint: 'Node.js — Prisma, TypeBox, TypeScript' },
   express: { label: 'Express', hint: 'Node.js — Express 5, TypeScript' },
   go: { label: 'Go', hint: 'Go — Chi + GORM, entity registry' },
+  rust: { label: 'Rust', hint: 'Rust (Axum + SeaORM)' },
+  laravel: { label: 'Laravel', hint: 'Laravel (PHP 8.3+)' },
   frontend: { label: 'Frontend', hint: 'React 19 + Vite + React Router' },
   mobile: { label: 'Mobile', hint: 'Flutter + Riverpod + GoRouter' },
   e2e: { label: 'E2E Tests', hint: 'Playwright' },

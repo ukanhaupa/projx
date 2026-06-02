@@ -224,14 +224,14 @@ func (q *querier) BulkCreate(ctx context.Context, payloads [][]byte) ([]any, err
 	return out, nil
 }
 
-func (q *querier) BulkDelete(ctx context.Context, ids []string) error {
+func (q *querier) BulkDelete(ctx context.Context, ids []string) (int, error) {
 	now := time.Now()
-	_, err := q.client.Post.Update().
+	n, err := q.client.Post.Update().
 		Where(post.IDIn(ids...), post.DeletedAtIsNil()).
 		SetDeletedAt(now).
 		Save(ctx)
-	if err != nil && ent.IsNotFound(err) {
-		return apperr.NotFound("post")
+	if err != nil {
+		return 0, err
 	}
-	return err
+	return n, nil
 }

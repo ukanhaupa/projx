@@ -72,16 +72,7 @@ __SOFT_DELETE_LIST_BLOCK__
 		}
 	}
 
-	for col, val := range p.Filters {
-		switch col {
-__FILTER_CASES__
-		default:
-			continue
-		}
-		where = append(where, fmt.Sprintf("%s::text = $%d", col, idx))
-		args = append(args, val)
-		idx++
-	}
+__FILTER_BLOCK__
 
 	whereClause := ""
 	if len(where) > 0 {
@@ -211,7 +202,7 @@ __CREATE_VALIDATION__
 	return out, nil
 }
 
-func (q *querier) BulkDelete(ctx context.Context, ids []string) error {
+func (q *querier) BulkDelete(ctx context.Context, ids []string) (int, error) {
 __BULK_DELETE_BODY__
 }
 
