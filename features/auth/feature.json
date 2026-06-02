@@ -1,8 +1,15 @@
 {
   "name": "auth",
   "summary": "Password + JWT auth with email verification, MFA, password reset, sessions",
-  "supports": ["fastify", "fastapi", "express", "go"],
-  "requires": { "fastify": [], "fastapi": [], "express": [], "go": [] },
+  "supports": ["fastify", "fastapi", "express", "go", "rust", "laravel"],
+  "requires": {
+    "fastify": [],
+    "fastapi": [],
+    "express": [],
+    "go": [],
+    "rust": [],
+    "laravel": []
+  },
   "requiresOrm": [
     "prisma",
     "drizzle",
@@ -10,7 +17,9 @@
     "typeorm",
     "gorm",
     "sqlc",
-    "ent"
+    "ent",
+    "seaorm",
+    "eloquent"
   ],
   "env": {
     "fastify": ["JWT_SECRET", "FRONTEND_URL", "AUTH_BACKGROUND_JOBS"],
@@ -30,6 +39,21 @@
       "MFA_ISSUER",
       "AUTH_BACKGROUND_JOBS",
       "AUTH_CLEANUP_INTERVAL_SECONDS"
+    ],
+    "rust": [
+      "JWT_SECRET",
+      "JWT_PROVIDER",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS",
+      "AUTH_CLEANUP_INTERVAL_SECONDS"
+    ],
+    "laravel": [
+      "JWT_SECRET",
+      "JWT_ALGORITHMS",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS"
     ]
   }
 }

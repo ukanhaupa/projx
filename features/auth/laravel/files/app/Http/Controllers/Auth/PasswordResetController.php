@@ -55,12 +55,7 @@ class PasswordResetController
             Log::error('Failed to send password reset email', ['err' => $exc->getMessage()]);
         }
 
-        $response = ['message' => $message];
-        if (strtolower((string) env('APP_ENV', '')) !== 'production') {
-            $response['reset_token'] = $rawToken;
-        }
-
-        return new JsonResponse($response);
+        return new JsonResponse(['message' => $message]);
     }
 
     public function confirm(PasswordResetConfirmRequest $request): JsonResponse

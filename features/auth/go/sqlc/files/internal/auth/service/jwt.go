@@ -72,11 +72,14 @@ func (s *Secrets) Verify(ctx context.Context, token string) (*Claims, error) {
 		return nil, err
 	}
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
 		if t.Method.Alg() != cfg.Algorithm {
 			return nil, errors.New("unexpected signing method")
 		}
 		return []byte(cfg.Secret), nil
-	})
+	}, jwt.WithValidMethods([]string{cfg.Algorithm}))
 	if err != nil {
 		return nil, err
 	}

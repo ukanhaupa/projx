@@ -9,9 +9,10 @@
 # Sections (auto-detected by which top-level dirs exist):
 #   secrets  cli  fastapi  fastify  express  frontend  e2e  infra  scaffold_matrix
 #
+# sec_e2e boots fastify/express + runs the full Playwright suite automatically when a
+# backend dir exists; it falls back to typecheck-only only when no backend is present.
+#
 # Environment knobs:
-#   E2E_REAL_BACKEND=1          boot fastify/express + run Playwright in sec_e2e
-#                               (default: typecheck only)
 #   E2E_BACKEND_PORT=auto       port the booted backend listens on (default: random free port)
 #   E2E_HEALTH_PATH=/api/health endpoint used for readiness polling
 #   LOGS_DIR=/tmp/foo           override per-section log directory
@@ -19,6 +20,10 @@
 set -uo pipefail
 
 unset VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS
+
+# CI marker — run every tool in deterministic CI mode (playwright retries/forbidOnly,
+# no reuse of dev servers). Mirrors what CI sets.
+export CI="${CI:-1}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ROOT_DIR
@@ -142,7 +147,8 @@ run_js_component() {
       run_step "$dir drizzle push" pm_exec drizzle-kit push --force
     fi
     run_step "$dir format" pm_exec prettier --write .
-    run_step "$dir lint" pm_exec eslint .
+    run_step "$dir lint" pm_exec eslint . --fix
+    git diff --quiet -- . 2>/dev/null || warn "$dir: prettier/eslint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
     run_step "$dir typecheck" pm_exec tsc --noEmit
     if [ -f package.json ] && node -e "const p=require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
       run_step "$dir build" pm_run build
@@ -154,23 +160,45 @@ run_js_component() {
   )
 }
 
+GITLEAKS_VERSION="8.21.2"
+
+ensure_gitleaks() {
+  local cache_dir="${HOME}/.cache/ci-local"
+  local bin="$cache_dir/gitleaks-${GITLEAKS_VERSION}"
+  if [ -x "$bin" ]; then GITLEAKS_BIN="$bin"; return 0; fi
+  command -v curl >/dev/null 2>&1 || { warn "curl missing — skipping secret scan"; return 1; }
+  command -v tar >/dev/null 2>&1 || { warn "tar missing — skipping secret scan"; return 1; }
+  mkdir -p "$cache_dir"
+  local os arch
+  os=$(uname -s | tr '[:upper:]' '[:lower:]')
+  case "$(uname -m)" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64) arch="x64" ;;
+    *) xfail "unsupported arch: $(uname -m)"; return 1 ;;
+  esac
+  local url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
+  log "fetching gitleaks ${GITLEAKS_VERSION} ($os/$arch)"
+  curl -sSL -o "$cache_dir/gitleaks.tar.gz" "$url" || { warn "gitleaks download failed — skipping secret scan"; return 1; }
+  tar -xzf "$cache_dir/gitleaks.tar.gz" -C "$cache_dir" gitleaks
+  mv "$cache_dir/gitleaks" "$bin"; chmod +x "$bin"; rm -f "$cache_dir/gitleaks.tar.gz"
+  GITLEAKS_BIN="$bin"
+}
+
 sec_secrets() {
   cd "$ROOT_DIR" || exit 1
-  if ! command -v gitleaks >/dev/null 2>&1; then
-    warn "gitleaks not installed — skipping secret scan (install via 'brew install gitleaks' or download a release)"
-    return 0
-  fi
+  ensure_gitleaks || return 0
   local cfg="$ROOT_DIR/.gitleaks.toml"
   local args=(detect --no-banner --no-git --redact)
   [ -f "$cfg" ] && args+=(--config "$cfg")
-  run_step "gitleaks (tracked + untracked)" gitleaks "${args[@]}" --source "$ROOT_DIR"
+  run_step "gitleaks (tracked + untracked)" "$GITLEAKS_BIN" "${args[@]}" --source "$ROOT_DIR"
 }
 
 sec_fastapi() {
   cd "$ROOT_DIR/fastapi" || exit 1
   run_step "fastapi install" uv sync --group dev
   run_step "fastapi format" uv run ruff format src tests
-  run_step "fastapi lint" uv run ruff check src tests
+  run_step "fastapi lint" uv run ruff check --fix src tests
+  git diff --quiet -- . 2>/dev/null || warn "fastapi: ruff rewrote files — commit them before push (CI runs check-mode on the committed tree)"
   run_step "fastapi typecheck" uv run mypy
   if [ -d tests ]; then
     run_step "fastapi tests" uv run pytest
@@ -182,7 +210,8 @@ sec_cli() {
   cd "$ROOT_DIR/cli" || exit 1
   run_step "cli install" pm_install
   run_step "cli format" pm_exec prettier --write .
-  run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
+  run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts' --fix
+  git diff --quiet -- . 2>/dev/null || warn "cli: prettier/eslint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
   run_step "cli tests" pm_exec vitest run --coverage
@@ -226,8 +255,9 @@ sec_rust() {
     return 0
   fi
   cd "$ROOT_DIR/rust" || exit 1
-  run_step "rust format" cargo fmt --check
-  run_step "rust lint" cargo clippy -- -D warnings
+  run_step "rust format" cargo fmt
+  run_step "rust lint" cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+  git diff --quiet -- . 2>/dev/null || warn "rust: cargo fmt/clippy rewrote files — commit them before push (CI runs check-mode on the committed tree)"
   run_step "rust test" cargo test --all-features
 }
 
@@ -239,7 +269,8 @@ sec_laravel() {
   fi
   cd "$ROOT_DIR/laravel" || exit 1
   run_step "laravel install" composer install --no-interaction
-  run_step "laravel format" ./vendor/bin/pint --test
+  run_step "laravel format" ./vendor/bin/pint
+  git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
   run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress
   run_step "laravel tests" ./vendor/bin/pest --no-coverage
 }
@@ -261,7 +292,7 @@ sec_e2e() {
     [ -d "$ROOT_DIR/$candidate" ] && backend_dir="$candidate" && break
   done
 
-  if [ -z "$backend_dir" ] || [ -z "${E2E_REAL_BACKEND:-}" ]; then
+  if [ -z "$backend_dir" ]; then
     run_js_component e2e
     return $?
   fi
@@ -300,7 +331,8 @@ sec_e2e() {
     run_step "e2e install" pm_install
     run_step "e2e playwright install" pm_exec playwright install --with-deps chromium
     run_step "e2e format" pm_exec prettier --write .
-    run_step "e2e lint" pm_exec eslint '**/*.ts'
+    run_step "e2e lint" pm_exec eslint '**/*.ts' --fix
+    git diff --quiet -- . 2>/dev/null || warn "e2e: prettier/eslint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
     run_step "e2e typecheck" pm_exec tsc --noEmit
     run_step "e2e playwright" pm_exec playwright test
   ) || rc=$?
@@ -423,7 +455,7 @@ run_wave() {
       xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
       exit 2
     fi
-    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background xfail warn go_format_fix); $fn"
+    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background log xfail warn ensure_gitleaks go_format_fix); $fn"
     NAMES+=("$s")
     printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
   done
