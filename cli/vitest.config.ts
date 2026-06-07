@@ -10,16 +10,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: [
-        'src/templates/**',
-        'src/index.ts',
-        'src/init.ts',
-        'src/update.ts',
-        'src/add.ts',
-        'src/diff.ts',
-        'src/gen.ts',
-        'src/doctor.ts',
-      ],
+      exclude: ['src/templates/**'],
       thresholds: {
         statements: 80,
         branches: 80,

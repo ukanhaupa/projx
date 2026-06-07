@@ -1,6 +1,6 @@
 # Feature Templates
 
-Optional, opt-in modules that overlay onto an existing component (e.g. `fastify`, `fastapi`, `frontend`, `mobile`). Triggered by a CLI flag at `create` or `add` time. First feature: `auth`. Future: `billing`, `audit`, `mfa`, etc.
+Optional, opt-in modules that overlay onto an existing component (e.g. `fastify`, `fastapi`, `frontend`, `mobile`). Triggered by a CLI flag at `create` or `add` time, and re-applied automatically on `update` from the `features` list recorded in each component's `.projx-component` marker. First feature: `auth`. Future: `billing`, `audit`, `mfa`, etc.
 
 ## Goals
 

@@ -58,6 +58,7 @@ cleanup() {
   done
   pkill -f "tsx.*src/server\\.ts" 2>/dev/null || true
   rm -rf "$LOGS_DIR"
+  rm -rf "$ROOT_DIR"/*/coverage-ci-* 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
@@ -148,7 +149,7 @@ run_js_component() {
       run_step "$dir build" pm_run build
     fi
     if [ -d tests ]; then
-      run_step "$dir tests" pm_exec vitest run --coverage
+      run_step "$dir tests" pm_exec vitest run --coverage --coverage.reportsDirectory="coverage-ci-$$"
     fi
     run_step "$dir audit" pm_audit
   )
@@ -185,7 +186,7 @@ sec_cli() {
   run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
-  run_step "cli tests" pm_exec vitest run --coverage
+  run_step "cli tests" pm_exec vitest run --coverage --coverage.reportsDirectory="coverage-ci-$$"
   run_step "cli audit" pm_audit
 }
 
