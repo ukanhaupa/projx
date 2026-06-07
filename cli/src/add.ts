@@ -6,6 +6,7 @@ import {
   type Component,
   type ComponentInstance,
   type ComponentPaths,
+  type Feature,
   type PackageManager,
   cleanupRepo,
   detectProjectName,
@@ -23,6 +24,7 @@ import {
   writeTemplateToDir,
   type GeneratorVars,
 } from './baseline.js';
+import { applyFeatures } from './features.js';
 
 export async function add(
   cwd: string,
@@ -30,6 +32,7 @@ export async function add(
   localRepo?: string,
   skipInstall = false,
   customName?: string,
+  features?: Partial<Record<Feature, string>>,
 ): Promise<void> {
   p.intro('projx add');
   const isLocal = !!localRepo;
@@ -132,6 +135,20 @@ export async function add(
       { realCwd: cwd },
     );
     spinner.stop('Components added.');
+
+    if (features && Object.keys(features).length > 0) {
+      const featSpinner = p.spinner();
+      featSpinner.start('Applying features');
+      await applyFeatures({
+        features,
+        repoDir,
+        components: allComponents,
+        instances,
+        dest: cwd,
+        vars,
+      });
+      featSpinner.stop('Features applied.');
+    }
 
     if (!skipInstall) {
       await installDeps(

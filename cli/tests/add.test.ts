@@ -72,6 +72,55 @@ describe('add', () => {
     expect(ci).toContain('frontend');
   });
 
+  describe('--auth feature', () => {
+    it('applies the auth feature to the target and records it in the marker', async () => {
+      dest = join(tmpdir(), `projx-add-auth-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['fastify'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+        false,
+      );
+
+      await add(dest, ['frontend'], REPO_DIR, true, undefined, {
+        auth: 'fastify',
+      });
+
+      expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+        true,
+      );
+
+      const marker = JSON.parse(
+        await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+      );
+      expect(marker.features).toContain('auth');
+    });
+
+    it('applies auth to a newly added backend instance', async () => {
+      dest = join(tmpdir(), `projx-add-auth-new-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['frontend'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      await add(dest, ['fastify'], REPO_DIR, true, undefined, {
+        auth: 'fastify',
+      });
+
+      expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+        true,
+      );
+      const marker = JSON.parse(
+        await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+      );
+      expect(marker.features).toContain('auth');
+    });
+  });
+
   describe('--name flag', () => {
     it('creates a second instance of the same type at a custom directory', async () => {
       dest = join(tmpdir(), `projx-add-name-${Date.now()}`);

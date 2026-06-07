@@ -50,6 +50,32 @@ describe('update', () => {
     expect(content).toContain('my controller');
   });
 
+  it('re-applies recorded features after a template update', async () => {
+    dest = join(tmpdir(), `projx-update-auth-${Date.now()}`);
+    await scaffold(
+      { name: 'my-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await add(dest, ['frontend'], REPO_DIR, true, undefined, {
+      auth: 'fastify',
+    });
+
+    const routes = join(dest, 'fastify/src/modules/auth/routes.ts');
+    expect(existsSync(routes)).toBe(true);
+    await rm(routes);
+    expect(existsSync(routes)).toBe(false);
+
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'remove auth route'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(existsSync(routes)).toBe(true);
+  });
+
   it('scaffold + immediate update is a no-op (no new commits)', async () => {
     dest = join(tmpdir(), `projx-update-${Date.now()}`);
     await scaffold(
