@@ -1,0 +1,5 @@
+.env
+uploads/*
+!uploads/.gitkeep
+extensions/*
+!extensions/.gitkeep

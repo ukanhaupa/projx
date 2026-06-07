@@ -29,8 +29,9 @@ server {
 
     resolver 127.0.0.11 valid=10s ipv6=off;
     set $backend_upstream backend;
-    set $keycloak_upstream keycloak;
-
+<% if (components.includes('admin-panel')) { %>
+    set $admin_panel_upstream admin-panel;
+<% } %>
     ssl_certificate     /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
@@ -45,10 +46,8 @@ server {
 
     client_max_body_size 10m;
 
-    # ── Security headers ────────────────────────────────────────
     include /etc/nginx/conf.d/security-headers.inc;
 
-    # ── Gzip ────────────────────────────────────────────────────
     gzip on;
     gzip_vary on;
     gzip_proxied any;
@@ -56,7 +55,6 @@ server {
     gzip_types text/plain text/css application/javascript application/json image/svg+xml application/xml text/xml;
     gzip_min_length 256;
 
-    # ── Auth rate limiting ───────────────────────────────────────
     location /api/v1/auth/login {
         limit_req zone=auth_limit burst=3 nodelay;
         limit_req_status 429;
@@ -68,7 +66,6 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
-    # ── API proxy ───────────────────────────────────────────────
     location /api/ {
         limit_req zone=api_limit burst=50 nodelay;
         proxy_pass http://$backend_upstream:8000;
@@ -81,20 +78,19 @@ server {
         proxy_read_timeout 30s;
         proxy_send_timeout 10s;
     }
-
-    # ── OIDC provider proxy (when running with auth) ────────────
-    location /auth/ {
-        proxy_pass http://$keycloak_upstream:8080;
+<% if (components.includes('admin-panel')) { %>
+    location /admin/ {
+        proxy_pass http://$admin_panel_upstream:8055/admin/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_buffer_size 128k;
-        proxy_buffers 4 256k;
-        proxy_busy_buffers_size 256k;
+        client_max_body_size 100m;
     }
-
-    # ── Static assets (hashed filenames — immutable) ────────────
+<% } %>
     location /assets/ {
         include /etc/nginx/conf.d/security-headers.inc;
         expires 1y;
@@ -111,7 +107,6 @@ server {
         try_files $uri =404;
     }
 
-    # ── Favicon and robots ──────────────────────────────────────
     location = /favicon.ico {
         expires 30d;
         log_not_found off;
@@ -123,7 +118,6 @@ server {
         access_log off;
     }
 
-    # ── SPA fallback ────────────────────────────────────────────
     location / {
         include /etc/nginx/conf.d/security-headers.inc;
         add_header Cache-Control "no-cache";

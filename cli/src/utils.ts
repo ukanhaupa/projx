@@ -25,6 +25,7 @@ export const COMPONENTS = [
   'mobile',
   'e2e',
   'infra',
+  'admin-panel',
 ] as const;
 
 export type Component = (typeof COMPONENTS)[number];

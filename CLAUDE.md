@@ -19,6 +19,7 @@ frontend/    React + Vite frontend template
 mobile/      Flutter app template
 e2e/         Playwright E2E template
 infra/       Terraform IaC template
+admin-panel/ Directus admin-panel template (Docker-only, no Node build; connects to the app Postgres)
 features/    Opt-in feature overlays applied via --<feature>=<targets> (e.g. --auth=fastify)
 addons/      Out-of-tree drop-ins (e.g. ORM addons in addons/orms/<orm>/)
 docs/        Design docs (feature templates, etc.)

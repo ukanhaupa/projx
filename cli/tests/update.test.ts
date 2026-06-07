@@ -125,6 +125,7 @@ describe('update', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
 
     await learnSkips(
@@ -165,6 +166,7 @@ describe('update', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
 
     await learnSkips(dest, ['docker-compose.yml', 'README.md'], paths);
@@ -195,6 +197,7 @@ describe('update', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
 
     await learnSkips(dest, ['fastify/src/new-file.ts'], paths);

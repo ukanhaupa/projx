@@ -121,6 +121,14 @@ else
   echo "<%= inst.display %> skipped (SDK not installed)."
 fi
 <% } %>
+<% for (const inst of adminPanelInstances) { %>
+
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
+echo "<%= inst.display %> configured (Docker — run 'docker compose up <%= inst.path %>')."
+<% } %>
 
 echo ""
 echo "Done. Ensure PostgreSQL is running locally, then run '<%= pm.runDev %>' (or 'uv run main.py') in each service."

@@ -40,6 +40,9 @@ jobs:
 <% for (const inst of infraInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
+<% for (const inst of adminPanelInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -74,6 +77,10 @@ jobs:
               - '<%= inst.path %>/**'
 <% } %>
 <% for (const inst of infraInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of adminPanelInstances) { %>
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
@@ -384,4 +391,20 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+<% } %>
+<% for (const inst of adminPanelInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (docker build)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - run: docker build -t <%= inst.path %>:ci .
 <% } %>
