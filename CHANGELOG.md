@@ -2,6 +2,25 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-06-07
+
+### Added
+
+- **`admin-panel` component** ([admin-panel/](admin-panel/)) — a Docker-only [Directus](https://directus.io) admin panel that introspects your Postgres and serves an instant CRUD admin UI plus a REST/GraphQL API, with the Insights module for dashboards. Pinned to `directus/directus:11.5.1`, configured entirely via env (`KEY`, `SECRET`, `DB_*`, `ADMIN_*`). Connects to the same external Postgres the backends use; scaffolds standalone (`--components admin-panel` alone yields a runnable compose service). Wired through the CLI like every other component — `COMPONENTS`, install switches, `CANONICAL_DISPLAY`, prompt label, detection (keys on the `directus/directus` Dockerfile), and the shared `docker-compose.yml` / `setup.sh` / `ci.yml` / `README` templates. The compose service is internal-only (`expose: 8055`, no host port). Covered by [cli/tests/admin-panel.test.ts](cli/tests/admin-panel.test.ts).
+- **Features via `add` and `update`** — `--auth` (and any future feature flag) now applies to an existing project: `npx create-projx add <component> --auth <target>` runs `applyFeatures` after the component copy ([cli/src/add.ts](cli/src/add.ts)), and `update` re-applies each component's recorded features after the template merge ([cli/src/update.ts](cli/src/update.ts)) so upgrades never strip auth wiring. Previously `applyFeatures` ran only at `create` time. The set of applied features is the `features: []` list in each `.projx-component` marker — the single source of truth `update` reads. Backed by new tests in [cli/tests/add.test.ts](cli/tests/add.test.ts) and [cli/tests/update.test.ts](cli/tests/update.test.ts).
+- **Dynamic `frontend/nginx.conf`** ([frontend/nginx.conf.ejs](frontend/nginx.conf.ejs)) — the static nginx config is now an `.ejs` rendered per-project. An `/admin/` reverse-proxy block to the `admin-panel` upstream is emitted only when the component is present (variable upstream + `resolver`, so nginx starts even when the service is absent).
+- **Sponsor link** — [.github/FUNDING.yml](.github/FUNDING.yml) (GitHub Sponsors button) plus a sponsor badge and section in [README.md](README.md).
+
+### Changed
+
+- **`writeComponentMarker` preserves the `features` field** ([cli/src/utils.ts](cli/src/utils.ts)) — the marker writer previously emitted only `component` + `skip`, silently dropping any recorded `features` on every rewrite (`pin`, `update`, default-skip application). It now reads the existing marker and carries `features` through, and `readComponentMarker` / `parseMarker` surface the field. This makes the marker a durable single source of truth for applied features.
+- **Removed dead Keycloak proxy from `frontend/nginx.conf`** — the static config carried an `/auth/` → `keycloak:8080` block that proxied to a service no projx configuration ever creates (the `auth` feature is app-level JWT, not an OIDC server). Dropped during the `.ejs` conversion.
+
+### Fixed
+
+- **`react-router-dom` bumped `^7.14.2` → `^7.15.0`** ([frontend/package.json](frontend/package.json), [frontend/pnpm-lock.yaml](frontend/pnpm-lock.yaml)) — clears GHSA-8x6r-g9mw-2r78 (high-severity DoS via unbounded path expansion in the `__manifest` endpoint, affecting `>=7.0.0 <7.15.0`). Lockfile refreshed; resolves to 7.17.0.
+- **`pyjwt` bumped `>=2.10.1` → `>=2.13.0`** ([fastapi/pyproject.toml](fastapi/pyproject.toml), [fastapi/uv.lock](fastapi/uv.lock)) — clears four advisories (PYSEC-2026-175/177/178/179) affecting the locked 2.12.1. Also pins `pip>=26.1.2` in the dev group to clear PYSEC-2026-196 in the resolved environment. `uv run pip-audit` is now clean.
+
 ## [1.7.3] - 2026-05-21
 
 ### Added

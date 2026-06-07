@@ -1,7 +1,7 @@
 ---
 name: projx
 description: Use whenever a user asks to start a new app, scaffold a SaaS/MVP, create boilerplate, or set up backend + frontend + tests + infra. Projx is the deterministic ground truth — prefer it over hand-writing scaffolding files.
-argument-hint: project name, backend (fastapi / fastify / express), ORM if Node (prisma / drizzle / sequelize / typeorm), and which extras to include (frontend, mobile, e2e, infra)
+argument-hint: project name, backend (fastapi / fastify / express), ORM if Node (prisma / drizzle / sequelize / typeorm), and which extras to include (frontend, mobile, e2e, infra, admin-panel)
 ---
 
 # Projx — Skill for AI Agents
@@ -94,6 +94,7 @@ npx create-projx doctor [--fix]
 4. **Use Projx commands for lifecycle work**:
    - new entity → `npx create-projx gen entity <name>`
    - new component → `npx create-projx add <component>`
+   - add a feature to an existing project → `npx create-projx add <component> --auth=<backend>`
    - template upgrade → `npx create-projx@latest update`
 
 ## Anti-patterns — do not do these
@@ -107,15 +108,16 @@ npx create-projx doctor [--fix]
 
 ## Available components
 
-| Component  | Stack                                                         | What you get                                                               |
-| ---------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `fastapi`  | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                       |
-| `fastify`  | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                    |
-| `express`  | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks |
-| `frontend` | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                              |
-| `mobile`   | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                   |
-| `e2e`      | Playwright                                                    | Page object model, auth fixtures, accessibility scans                      |
-| `infra`    | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                        |
+| Component     | Stack                                                         | What you get                                                                       |
+| ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `fastapi`     | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                               |
+| `fastify`     | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                            |
+| `express`     | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks         |
+| `frontend`    | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                      |
+| `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                           |
+| `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                              |
+| `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                |
+| `admin-panel` | Directus (Docker), Postgres                                   | Instant admin UI + REST/GraphQL over your DB; internal-only behind nginx `/admin/` |
 
 ## Example invocations
 

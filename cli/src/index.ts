@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   COMPONENTS,
   KNOWN_FEATURES,
@@ -21,9 +22,7 @@ import { doctor } from './doctor.js';
 import { diff } from './diff.js';
 import { gen } from './gen.js';
 
-const args = process.argv.slice(2);
-
-interface ParsedArgs {
+export interface ParsedArgs {
   command:
     | 'create'
     | 'update'
@@ -46,7 +45,7 @@ interface ParsedArgs {
   };
 }
 
-function matchFeatureFlag(
+export function matchFeatureFlag(
   arg: string,
   argv: string[],
   i: number,
@@ -73,7 +72,8 @@ function matchFeatureFlag(
   return null;
 }
 
-function parseArgs(): ParsedArgs {
+export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
+  const args = argv;
   let command: ParsedArgs['command'] = 'create';
   let name: string | undefined;
   let localRepo: string | undefined;
@@ -390,7 +390,13 @@ async function main(): Promise<void> {
   await scaffold(opts, dest, localRepo);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const isEntrypoint =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntrypoint) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

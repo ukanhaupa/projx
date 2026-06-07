@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,18 @@ import { add } from '../src/add.js';
 import { update, learnSkips } from '../src/update.js';
 import type { ComponentPaths } from '../src/utils.js';
 import { existsSync } from 'node:fs';
+
+vi.mock('@clack/prompts', async () => {
+  const actual =
+    await vi.importActual<typeof import('@clack/prompts')>('@clack/prompts');
+  return {
+    ...actual,
+    multiselect: vi.fn(),
+    isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
+  };
+});
+
+import * as p from '@clack/prompts';
 
 const REPO_DIR = join(import.meta.dirname, '../..');
 
@@ -610,5 +622,538 @@ describe('update — packageManager auto-sync', () => {
 
     const config = JSON.parse(await readFile(join(dest, '.projx'), 'utf-8'));
     expect(config.packageManager).toBe('pnpm');
+  });
+
+  it('records packageManager from lockfile when .projx has none', async () => {
+    dest = join(tmpdir(), `projx-pm-record-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'pm-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        packageManager: 'npm',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.packageManager;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+    await rm(join(dest, 'fastify/package-lock.json'), { force: true });
+    await writeFile(join(dest, 'fastify/pnpm-lock.yaml'), '');
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'drop pm'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    const config = JSON.parse(await readFile(projxPath, 'utf-8'));
+    expect(config.packageManager).toBe('pnpm');
+  });
+});
+
+describe('update — pinned file updates and feature edge cases', () => {
+  let dest: string;
+
+  afterEach(async () => {
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+  });
+
+  it('reports pinned root and component files that diverged from the template', async () => {
+    dest = join(tmpdir(), `projx-pinned-updates-${Date.now()}`);
+    await scaffold(
+      { name: 'pinned', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const { pin } = await import('../src/pin.js');
+    await pin(dest, ['README.md', 'fastify/package.json']);
+
+    await writeFile(join(dest, 'README.md'), '# diverged readme\n');
+    const pkgPath = join(dest, 'fastify/package.json');
+    const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
+    pkg.scripts = { ...(pkg.scripts ?? {}), custom: 'echo hi' };
+    await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'pin + diverge'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(await readFile(join(dest, 'README.md'), 'utf-8')).toBe(
+      '# diverged readme\n',
+    );
+    const after = JSON.parse(await readFile(pkgPath, 'utf-8'));
+    expect(after.scripts.custom).toBe('echo hi');
+  });
+
+  it('ignores non-string feature entries in component markers', async () => {
+    dest = join(tmpdir(), `projx-feat-nonstring-${Date.now()}`);
+    await scaffold(
+      { name: 'feat', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const markerPath = join(dest, 'fastify/.projx-component');
+    const marker = JSON.parse(await readFile(markerPath, 'utf-8'));
+    marker.features = [123, 'auth'];
+    await writeFile(markerPath, JSON.stringify(marker, null, 2) + '\n');
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'bad features'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+      true,
+    );
+  });
+});
+
+describe('findPinnedFilesWithUpdates — direct', () => {
+  let dest: string;
+
+  afterEach(async () => {
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+  });
+
+  async function buildArgs(): Promise<{
+    components: import('../src/utils.js').Component[];
+    componentPaths: ComponentPaths;
+    vars: import('../src/baseline.js').GeneratorVars;
+    version: string;
+  }> {
+    const utils = await import('../src/utils.js');
+    const { paths, components } =
+      await utils.discoverComponentsFromMarkers(dest);
+    const config = await utils.readProjxConfig(dest);
+    const pm = (config.packageManager as 'npm') ?? 'npm';
+    const vars = {
+      projectName: utils.detectProjectName(dest, components, paths),
+      components,
+      paths,
+      instances: components.map((c) => ({ type: c, path: paths[c] })),
+      pm: utils.pmCommands(pm),
+      orm: 'prisma' as const,
+    };
+    return { components, componentPaths: paths, vars, version: '9.9.9' };
+  }
+
+  it('returns an empty list when nothing is pinned', async () => {
+    dest = join(tmpdir(), `projx-pin-direct-none-${Date.now()}`);
+    await scaffold(
+      { name: 'pn', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.skip;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+
+    const { findPinnedFilesWithUpdates } = await import('../src/update.js');
+    const { components, componentPaths, vars, version } = await buildArgs();
+    const out = await findPinnedFilesWithUpdates(
+      dest,
+      REPO_DIR,
+      components,
+      componentPaths,
+      vars,
+      version,
+      {},
+      [],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('skips pinned root files absent from the template and glob component patterns', async () => {
+    dest = join(tmpdir(), `projx-pin-direct-skip-${Date.now()}`);
+    await scaffold(
+      { name: 'pn', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    projx.skip = ['user-only.txt'];
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+    await writeFile(join(dest, 'user-only.txt'), 'local\n');
+
+    const markerPath = join(dest, 'fastify/.projx-component');
+    const marker = JSON.parse(await readFile(markerPath, 'utf-8'));
+    marker.skip = ['src/**/*.ts'];
+    await writeFile(markerPath, JSON.stringify(marker, null, 2) + '\n');
+
+    const { findPinnedFilesWithUpdates } = await import('../src/update.js');
+    const { components, componentPaths, vars, version } = await buildArgs();
+    const out = await findPinnedFilesWithUpdates(
+      dest,
+      REPO_DIR,
+      components,
+      componentPaths,
+      vars,
+      version,
+      {},
+      [],
+    );
+    expect(out).toEqual([]);
+  });
+});
+
+describe('learnSkips — edge cases', () => {
+  let dest: string;
+
+  afterEach(async () => {
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+  });
+
+  it('skips components whose marker cannot be read', async () => {
+    dest = join(tmpdir(), `projx-learn-nomarker-${Date.now()}`);
+    await scaffold(
+      { name: 'lm', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await rm(join(dest, 'fastify/.projx-component'), { force: true });
+
+    const paths: ComponentPaths = {
+      fastapi: 'fastapi',
+      fastify: 'fastify',
+      express: 'express',
+      frontend: 'frontend',
+      mobile: 'mobile',
+      e2e: 'e2e',
+      infra: 'infra',
+      'admin-panel': 'admin-panel',
+    };
+
+    await expect(
+      learnSkips(dest, ['fastify/src/server.ts'], paths),
+    ).resolves.toBeUndefined();
+  });
+
+  it('seeds the root skip list when .projx has no skip array', async () => {
+    dest = join(tmpdir(), `projx-learn-noskip-${Date.now()}`);
+    await scaffold(
+      { name: 'ls', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.skip;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+
+    const paths: ComponentPaths = {
+      fastapi: 'fastapi',
+      fastify: 'fastify',
+      express: 'express',
+      frontend: 'frontend',
+      mobile: 'mobile',
+      e2e: 'e2e',
+      infra: 'infra',
+      'admin-panel': 'admin-panel',
+    };
+
+    await learnSkips(dest, ['docker-compose.yml'], paths);
+
+    const config = JSON.parse(await readFile(projxPath, 'utf-8'));
+    expect(config.skip).toContain('docker-compose.yml');
+  });
+});
+
+describe('update — git guards', () => {
+  let dest: string;
+
+  afterEach(async () => {
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+  });
+
+  it('exits when the directory is not a git repo', async () => {
+    dest = join(tmpdir(), `projx-update-nogit-${Date.now()}`);
+    await mkdir(dest, { recursive: true });
+    await writeFile(join(dest, '.projx'), JSON.stringify({ version: '1.0.0' }));
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(update(dest, REPO_DIR)).rejects.toThrow('exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    exitSpy.mockRestore();
+  });
+
+  it('exits when there are uncommitted changes', async () => {
+    dest = join(tmpdir(), `projx-update-dirty-${Date.now()}`);
+    await scaffold(
+      { name: 'dirty', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await writeFile(join(dest, 'fastify/src/dirty.ts'), '// dirty\n');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(update(dest, REPO_DIR)).rejects.toThrow('exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    exitSpy.mockRestore();
+  });
+
+  it('exits when no projx components are present', async () => {
+    dest = join(tmpdir(), `projx-update-nocomp-${Date.now()}`);
+    await mkdir(dest, { recursive: true });
+    execSync('git init -q', { cwd: dest, stdio: 'pipe' });
+    execSync('git config user.email test@test.com', {
+      cwd: dest,
+      stdio: 'pipe',
+    });
+    execSync('git config user.name Test', { cwd: dest, stdio: 'pipe' });
+    await writeFile(join(dest, '.projx'), JSON.stringify({ version: '1.0.0' }));
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -qm 'init'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(update(dest, REPO_DIR)).rejects.toThrow('exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    exitSpy.mockRestore();
+  });
+
+  it('warns and proceeds when .projx is empty but markers exist', async () => {
+    dest = join(tmpdir(), `projx-update-noprojx-${Date.now()}`);
+    await scaffold(
+      { name: 'noconf', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await writeFile(join(dest, '.projx'), '{}');
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'empty projx'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(existsSync(join(dest, 'fastify/.projx-component'))).toBe(true);
+  });
+
+  it('reports unknown version when .projx has keys but no version', async () => {
+    dest = join(tmpdir(), `projx-update-noversion-${Date.now()}`);
+    await scaffold(
+      { name: 'nover', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.version;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'drop version'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(existsSync(join(dest, 'fastify/.projx-component'))).toBe(true);
+  });
+});
+
+describe('update — promptSkipLearning via pending conflicts', () => {
+  let dest: string;
+  let ttyDescriptor: PropertyDescriptor | undefined;
+
+  afterEach(async () => {
+    if (ttyDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', ttyDescriptor);
+      ttyDescriptor = undefined;
+    }
+    vi.mocked(p.multiselect).mockReset();
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+  });
+
+  function setTTY(value: boolean): void {
+    ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value,
+      configurable: true,
+    });
+  }
+
+  const CONFLICT =
+    '<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> new projx template\n';
+
+  async function scaffoldWithWorkingTreeConflict(
+    relPaths: string[],
+  ): Promise<void> {
+    await scaffold(
+      { name: 'conf-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    for (const rel of relPaths) {
+      await writeFile(join(dest, rel), 'clean\n');
+    }
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'commit clean'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+    for (const rel of relPaths) {
+      await writeFile(join(dest, rel), CONFLICT);
+    }
+  }
+
+  it('returns early without prompting when stdin is not a TTY', async () => {
+    dest = join(tmpdir(), `projx-conf-notty-${Date.now()}`);
+    await scaffoldWithWorkingTreeConflict(['fastify/src/conflict.ts']);
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.version;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'drop version'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+    setTTY(false);
+
+    await update(dest, REPO_DIR);
+
+    expect(p.multiselect).not.toHaveBeenCalled();
+  });
+
+  it('leaves files untouched when the prompt is cancelled', async () => {
+    dest = join(tmpdir(), `projx-conf-cancel-${Date.now()}`);
+    await scaffoldWithWorkingTreeConflict(['fastify/src/conflict.ts']);
+    setTTY(true);
+    vi.mocked(p.multiselect).mockResolvedValue(
+      Symbol.for('clack.cancel') as never,
+    );
+
+    await update(dest, REPO_DIR);
+
+    expect(p.multiselect).toHaveBeenCalled();
+    const content = await readFile(
+      join(dest, 'fastify/src/conflict.ts'),
+      'utf-8',
+    );
+    expect(content).toContain('<<<<<<< HEAD');
+  });
+
+  it('discards all files and updates the skip list when nothing is kept', async () => {
+    dest = join(tmpdir(), `projx-conf-discardall-${Date.now()}`);
+    await scaffoldWithWorkingTreeConflict(['fastify/src/conflict.ts']);
+    setTTY(true);
+    vi.mocked(p.multiselect).mockResolvedValue([] as never);
+
+    await update(dest, REPO_DIR);
+
+    const restored = await readFile(
+      join(dest, 'fastify/src/conflict.ts'),
+      'utf-8',
+    );
+    expect(restored).not.toContain('<<<<<<< HEAD');
+
+    const marker = JSON.parse(
+      await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+    );
+    expect(marker.skip).toContain('src/conflict.ts');
+  });
+
+  it('keeps selected files and discards the rest', async () => {
+    dest = join(tmpdir(), `projx-conf-mixed-${Date.now()}`);
+    await scaffoldWithWorkingTreeConflict([
+      'fastify/src/keep.ts',
+      'fastify/src/drop.ts',
+    ]);
+    setTTY(true);
+    vi.mocked(p.multiselect).mockResolvedValue([
+      'fastify/src/keep.ts',
+    ] as never);
+
+    await update(dest, REPO_DIR);
+
+    const kept = await readFile(join(dest, 'fastify/src/keep.ts'), 'utf-8');
+    expect(kept).toContain('<<<<<<< HEAD');
+
+    const dropped = await readFile(join(dest, 'fastify/src/drop.ts'), 'utf-8');
+    expect(dropped).not.toContain('<<<<<<< HEAD');
+
+    const marker = JSON.parse(
+      await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+    );
+    expect(marker.skip).toContain('src/drop.ts');
+    expect(marker.skip ?? []).not.toContain('src/keep.ts');
+  });
+
+  it('skips .projx and component markers when computing changed files', async () => {
+    dest = join(tmpdir(), `projx-conf-markeronly-${Date.now()}`);
+    await scaffold(
+      { name: 'conf-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+    await writeFile(
+      join(dest, '.projx-component'),
+      '<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> new projx template\n',
+    );
+    execSync(
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'marker conflict'",
+      { cwd: dest, stdio: 'pipe' },
+    );
+    setTTY(true);
+
+    await update(dest, REPO_DIR);
+
+    expect(p.multiselect).not.toHaveBeenCalled();
   });
 });

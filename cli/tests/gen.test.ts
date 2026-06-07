@@ -230,6 +230,558 @@ describe('gen entity', () => {
     ).toBe(true);
   });
 
+  it('generates Sequelize model + router + test for an Express backend', async () => {
+    dest = join(tmpdir(), `projx-gen-express-sequelize-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['express'],
+        git: true,
+        install: false,
+        orm: 'sequelize',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+
+    const modelSrc = await readFile(
+      join(dest, 'express/src/models/invoice.ts'),
+      'utf-8',
+    );
+    expect(modelSrc).toContain('export class Invoice extends Model');
+    expect(modelSrc).toContain('Invoice.init(');
+    expect(modelSrc).toContain("tableName: 'invoices'");
+
+    const modelsIndex = await readFile(
+      join(dest, 'express/src/models/index.ts'),
+      'utf-8',
+    );
+    expect(modelsIndex).toContain("import { Invoice } from './invoice.js';");
+
+    const router = await readFile(
+      join(dest, 'express/src/modules/invoice/index.ts'),
+      'utf-8',
+    );
+    expect(router).toContain('model: Invoice,');
+
+    const appTs = await readFile(join(dest, 'express/src/app.ts'), 'utf-8');
+    expect(appTs).toContain(
+      "import { registerInvoiceEntity } from './modules/invoice/index.js';",
+    );
+    expect(appTs).toContain('registerInvoiceEntity(app);');
+
+    expect(existsSync(join(dest, 'express/tests/invoice.test.ts'))).toBe(true);
+  });
+
+  it('generates TypeORM entity + router + test for an Express backend', async () => {
+    dest = join(tmpdir(), `projx-gen-express-typeorm-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['express'],
+        git: true,
+        install: false,
+        orm: 'typeorm',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+
+    const entitySrc = await readFile(
+      join(dest, 'express/src/entities/invoice.ts'),
+      'utf-8',
+    );
+    expect(entitySrc).toContain("@Entity({ name: 'invoices' })");
+    expect(entitySrc).toContain('export class Invoice');
+
+    const entitiesIndex = await readFile(
+      join(dest, 'express/src/entities/index.ts'),
+      'utf-8',
+    );
+    expect(entitiesIndex).toContain("import { Invoice } from './invoice.js';");
+
+    const router = await readFile(
+      join(dest, 'express/src/modules/invoice/index.ts'),
+      'utf-8',
+    );
+    expect(router).toContain('entity: Invoice,');
+
+    const appTs = await readFile(join(dest, 'express/src/app.ts'), 'utf-8');
+    expect(appTs).toContain(
+      "import { registerInvoiceEntity } from './modules/invoice/index.js';",
+    );
+    expect(appTs).toContain('registerInvoiceEntity(app);');
+
+    expect(existsSync(join(dest, 'express/tests/invoice.test.ts'))).toBe(true);
+  });
+
+  const ALL_FIELDS =
+    'title:string,body:text,count:number,active:boolean,due:date,seen_at:datetime,meta:json';
+
+  it('maps every field type for FastAPI, frontend, and mobile', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-fastapi-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastapi', 'frontend', 'mobile'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS, 'fastapi');
+
+    const model = await readFile(
+      join(dest, 'fastapi/src/entities/record/_model.py'),
+      'utf-8',
+    );
+    expect(model).toContain('title = Column(String(255)');
+    expect(model).toContain('body = Column(Text');
+    expect(model).toContain('count = Column(Integer');
+    expect(model).toContain('active = Column(Boolean');
+    expect(model).toContain('due = Column(Date');
+    expect(model).toContain('seen_at = Column(DateTime');
+    expect(model).toContain('meta = Column(JSON');
+
+    const test = await readFile(
+      join(dest, 'fastapi/tests/test_record_entity.py'),
+      'utf-8',
+    );
+    expect(test).toContain('from datetime import date, datetime');
+    expect(test).toContain('date(2026, 1, 1)');
+    expect(test).toContain('datetime(2026, 1, 1, 0, 0, 0)');
+
+    const iface = await readFile(
+      join(dest, 'frontend/src/types/record.ts'),
+      'utf-8',
+    );
+    expect(iface).toContain('meta: Record<string, unknown>;');
+    expect(iface).toContain('due: string;');
+
+    const dart = await readFile(
+      join(dest, 'mobile/lib/entities/record/model.dart'),
+      'utf-8',
+    );
+    expect(dart).toContain('final Map<String, dynamic> meta;');
+    expect(dart).toContain('final DateTime due;');
+    expect(dart).toContain('final bool active;');
+  });
+
+  it('maps every field type for Fastify + Prisma', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-fastify-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS);
+
+    const schemas = await readFile(
+      join(dest, 'fastify/src/modules/record/schemas.ts'),
+      'utf-8',
+    );
+    expect(schemas).toContain("Type.String({ format: 'date' })");
+    expect(schemas).toContain("Type.String({ format: 'date-time' })");
+    expect(schemas).toContain('Type.Any()');
+    expect(schemas).toContain('Type.Boolean()');
+    expect(schemas).toContain('Type.Number()');
+
+    const prisma = await readFile(
+      join(dest, 'fastify/prisma/schema.prisma'),
+      'utf-8',
+    );
+    expect(prisma).toContain('Json');
+    expect(prisma).toContain('Boolean');
+    expect(prisma).toContain('DateTime');
+    expect(prisma).toContain('Int');
+
+    const test = await readFile(
+      join(dest, 'fastify/tests/modules/record.test.ts'),
+      'utf-8',
+    );
+    expect(test).toContain('describeCrudEntity({');
+  });
+
+  it('maps every field type for Express + Prisma', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-express-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['express'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS);
+
+    const schemas = await readFile(
+      join(dest, 'express/src/modules/record/schemas.ts'),
+      'utf-8',
+    );
+    expect(schemas).toContain('z.string().date()');
+    expect(schemas).toContain('z.string().datetime()');
+    expect(schemas).toContain('z.unknown()');
+    expect(schemas).toContain('z.boolean()');
+    expect(schemas).toContain('z.number()');
+  });
+
+  it('maps every field type for a Drizzle Express backend', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-drizzle-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['express'],
+        git: true,
+        install: false,
+        orm: 'drizzle',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS, undefined, REPO_DIR);
+
+    const schema = await readFile(
+      join(dest, 'express/src/db/schema.ts'),
+      'utf-8',
+    );
+    expect(schema).toContain("count: integer('count')");
+    expect(schema).toContain("active: boolean('active')");
+    expect(schema).toContain("due: date('due')");
+    expect(schema).toContain("seenAt: timestamp('seen_at'");
+    expect(schema).toContain("meta: jsonb('meta')");
+    expect(schema).toContain("body: text('body')");
+  });
+
+  it('maps every field type for a Sequelize Fastify backend', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-sequelize-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        orm: 'sequelize',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS, undefined, REPO_DIR);
+
+    const model = await readFile(
+      join(dest, 'fastify/src/models/record.ts'),
+      'utf-8',
+    );
+    expect(model).toContain('DataTypes.TEXT');
+    expect(model).toContain('DataTypes.BOOLEAN');
+    expect(model).toContain('DataTypes.DATEONLY');
+    expect(model).toContain('DataTypes.DATE');
+    expect(model).toContain('DataTypes.JSONB');
+    expect(model).toContain('DataTypes.INTEGER');
+  });
+
+  it('maps every field type for a TypeORM Fastify backend', async () => {
+    dest = join(tmpdir(), `projx-gen-alltypes-typeorm-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        orm: 'typeorm',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'record', ALL_FIELDS, undefined, REPO_DIR);
+
+    const entity = await readFile(
+      join(dest, 'fastify/src/entities/record.ts'),
+      'utf-8',
+    );
+    expect(entity).toContain("type: 'text'");
+    expect(entity).toContain("type: 'boolean'");
+    expect(entity).toContain("type: 'date'");
+    expect(entity).toContain("type: 'timestamptz'");
+    expect(entity).toContain("type: 'jsonb'");
+    expect(entity).toContain("type: 'integer'");
+  });
+
+  it('sweeps test-payload literal variants across leading field types', async () => {
+    dest = join(tmpdir(), `projx-gen-literals-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['fastapi'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'flag', 'enabled:boolean,seen:datetime,when:date');
+    await gen(dest, 'tally', 'amount:number,active:boolean');
+    await gen(dest, 'window', 'starts:date,count:number');
+    await gen(dest, 'moment', 'at:datetime,note:text');
+
+    const flag = await readFile(
+      join(dest, 'fastapi/tests/test_flag_entity.py'),
+      'utf-8',
+    );
+    expect(flag).toContain('update_payload = {"enabled": False}');
+    expect(flag).toContain('filter_field = "enabled"');
+
+    const tally = await readFile(
+      join(dest, 'fastapi/tests/test_tally_entity.py'),
+      'utf-8',
+    );
+    expect(tally).toContain('update_payload = {"amount": 100}');
+    expect(tally).toContain('filter_field = "amount"');
+
+    const window = await readFile(
+      join(dest, 'fastapi/tests/test_window_entity.py'),
+      'utf-8',
+    );
+    expect(window).toContain('update_payload = {"starts": "2026-01-01"}');
+    expect(window).toContain('filter_field = "count"');
+    expect(window).toContain('other_filter_value = 7');
+
+    const moment = await readFile(
+      join(dest, 'fastapi/tests/test_moment_entity.py'),
+      'utf-8',
+    );
+    expect(moment).toContain('update_payload = {"at": "2026-01-01T00:00:00"}');
+    expect(moment).toContain('filter_field = "note"');
+  });
+
+  it('sweeps Fastify and Express test-payload update literals', async () => {
+    dest = join(tmpdir(), `projx-gen-ts-literals-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'switch', 'enabled:boolean,label:string');
+    await gen(dest, 'gauge', 'reading:number,unit:string');
+    await gen(dest, 'slot', 'starts:date,owner:string');
+    await gen(dest, 'tick', 'at:datetime,owner:string');
+
+    expect(
+      await readFile(
+        join(dest, 'fastify/tests/modules/switch.test.ts'),
+        'utf-8',
+      ),
+    ).toContain('enabled: false,');
+    expect(
+      await readFile(
+        join(dest, 'fastify/tests/modules/gauge.test.ts'),
+        'utf-8',
+      ),
+    ).toContain('reading: 100,');
+    expect(
+      await readFile(join(dest, 'fastify/tests/modules/slot.test.ts'), 'utf-8'),
+    ).toContain("starts: '2026-01-01',");
+    expect(
+      await readFile(join(dest, 'fastify/tests/modules/tick.test.ts'), 'utf-8'),
+    ).toContain("at: '2026-01-01T00:00:00.000Z',");
+  });
+
+  it('generates an entity with no searchable fields', async () => {
+    dest = join(tmpdir(), `projx-gen-nosearch-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'counter', 'count:number,active:boolean');
+
+    const index = await readFile(
+      join(dest, 'fastify/src/modules/counter/index.ts'),
+      'utf-8',
+    );
+    expect(index).toContain('searchableFields: [],');
+  });
+
+  it('adds a second Drizzle table to the existing schema and wires it', async () => {
+    dest = join(tmpdir(), `projx-gen-drizzle-second-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        orm: 'drizzle',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+    await gen(
+      dest,
+      'product',
+      'title:string,stock:number',
+      undefined,
+      REPO_DIR,
+    );
+
+    const schema = await readFile(
+      join(dest, 'fastify/src/db/schema.ts'),
+      'utf-8',
+    );
+    expect(schema).toContain("export const invoices = pgTable('invoices'");
+    expect(schema).toContain("export const products = pgTable('products'");
+
+    const app = await readFile(join(dest, 'fastify/src/app.ts'), 'utf-8');
+    expect(app).toContain('await registerInvoiceEntity(app);');
+    expect(app).toContain('await registerProductEntity(app);');
+  });
+
+  it('is idempotent on a second Sequelize generation of the same entity', async () => {
+    dest = join(tmpdir(), `projx-gen-sequelize-idem-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        orm: 'sequelize',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+    const modelBefore = await readFile(
+      join(dest, 'fastify/src/models/invoice.ts'),
+      'utf-8',
+    );
+    const indexBefore = await readFile(
+      join(dest, 'fastify/src/models/index.ts'),
+      'utf-8',
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+
+    expect(
+      await readFile(join(dest, 'fastify/src/models/invoice.ts'), 'utf-8'),
+    ).toBe(modelBefore);
+    expect(
+      await readFile(join(dest, 'fastify/src/models/index.ts'), 'utf-8'),
+    ).toBe(indexBefore);
+  });
+
+  it('is idempotent on a second TypeORM generation of the same entity', async () => {
+    dest = join(tmpdir(), `projx-gen-typeorm-idem-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        orm: 'typeorm',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+    const entityBefore = await readFile(
+      join(dest, 'fastify/src/entities/invoice.ts'),
+      'utf-8',
+    );
+    const indexBefore = await readFile(
+      join(dest, 'fastify/src/entities/index.ts'),
+      'utf-8',
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'name:string,amount:number',
+      undefined,
+      REPO_DIR,
+    );
+
+    expect(
+      await readFile(join(dest, 'fastify/src/entities/invoice.ts'), 'utf-8'),
+    ).toBe(entityBefore);
+    expect(
+      await readFile(join(dest, 'fastify/src/entities/index.ts'), 'utf-8'),
+    ).toBe(indexBefore);
+  });
+
+  it('skips frontend types and mobile model on a second generation', async () => {
+    dest = join(tmpdir(), `projx-gen-skip-fe-mobile-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastify', 'frontend', 'mobile'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(dest, 'invoice', 'name:string,amount:number');
+
+    const typePath = join(dest, 'frontend/src/types/invoice.ts');
+    const modelPath = join(dest, 'mobile/lib/entities/invoice/model.dart');
+    expect(existsSync(typePath)).toBe(true);
+    expect(existsSync(modelPath)).toBe(true);
+
+    const typeBefore = await readFile(typePath, 'utf-8');
+    const modelBefore = await readFile(modelPath, 'utf-8');
+
+    await rm(join(dest, 'fastify/src/modules/invoice'), { recursive: true });
+    await gen(dest, 'invoice', 'name:string,amount:number,note:text');
+
+    expect(await readFile(typePath, 'utf-8')).toBe(typeBefore);
+    expect(await readFile(modelPath, 'utf-8')).toBe(modelBefore);
+  });
+
   it('generates TypeORM entity + router + test when a Node backend uses TypeORM', async () => {
     dest = join(tmpdir(), `projx-gen-typeorm-${Date.now()}`);
     await scaffold(

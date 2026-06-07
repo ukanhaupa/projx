@@ -348,4 +348,412 @@ describe('add — installDeps paths (mocked)', () => {
     expect(existsSync(join(dest, 'frontend/.env.example'))).toBe(true);
     expect(existsSync(join(dest, 'frontend/.env'))).toBe(true);
   });
+
+  it('runs fastify install when package manager is on PATH', async () => {
+    dest = join(tmpdir(), `projx-add-fastify-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'fy', components: ['frontend'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['fastify'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('npm install'))).toBe(true);
+  });
+
+  it('warns instead of installing fastify when package manager missing', async () => {
+    dest = join(tmpdir(), `projx-add-fastify-nopm-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: 'fy', components: ['frontend'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['fastify'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'fastify'))).toBe(true);
+  });
+
+  it('warns instead of installing express when package manager missing', async () => {
+    dest = join(tmpdir(), `projx-add-express-nopm-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: 'ex', components: ['frontend'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['express'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'express'))).toBe(true);
+  });
+
+  it('warns instead of installing frontend when package manager missing', async () => {
+    dest = join(tmpdir(), `projx-add-frontend-nopm-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: 'fe', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['frontend'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'frontend'))).toBe(true);
+  });
+
+  it('warns instead of installing e2e when package manager missing', async () => {
+    dest = join(tmpdir(), `projx-add-e2e-nopm-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: 'e', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['e2e'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'e2e'))).toBe(true);
+  });
+
+  it('warns when flutter is missing for a mobile add', async () => {
+    dest = join(tmpdir(), `projx-add-mobile-noflutter-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      { name: 'mob', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['mobile'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('flutter pub get'))).toBe(false);
+    expect(existsSync(join(dest, 'mobile'))).toBe(true);
+  });
+
+  it('installs flutter dependencies when flutter is on PATH', async () => {
+    dest = join(tmpdir(), `projx-add-mobile-flutter-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'mob', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['mobile'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('flutter pub get'))).toBe(true);
+  });
+
+  it('installs fastapi dependencies when uv is on PATH', async () => {
+    dest = join(tmpdir(), `projx-add-fastapi-uv-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'api', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['fastapi'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('uv sync'))).toBe(true);
+  });
+
+  it('is a no-op install for infra', async () => {
+    dest = join(tmpdir(), `projx-add-infra-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'inf', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['infra'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'infra'))).toBe(true);
+  });
+
+  it('is a no-op install for admin-panel', async () => {
+    dest = join(tmpdir(), `projx-add-admin-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'adm', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['admin-panel'], REPO_DIR, false);
+
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dest, 'admin-panel'))).toBe(true);
+  });
+
+  it('stops the spinner and continues when an install command throws', async () => {
+    dest = join(tmpdir(), `projx-add-install-throw-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'boom', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockImplementation(() => {
+      throw new Error('install failed');
+    });
+
+    await expect(
+      add(dest, ['frontend'], REPO_DIR, false),
+    ).resolves.toBeUndefined();
+    expect(existsSync(join(dest, 'frontend'))).toBe(true);
+  });
+
+  it('installs express dependencies when package manager is on PATH', async () => {
+    dest = join(tmpdir(), `projx-add-express-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'ex', components: ['frontend'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['express'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('npm install'))).toBe(true);
+  });
+
+  it('installs e2e dependencies when package manager is on PATH', async () => {
+    dest = join(tmpdir(), `projx-add-e2e-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'e', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['e2e'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('npm install'))).toBe(true);
+  });
+
+  it('installs the new instance via addInstance when using --name', async () => {
+    dest = join(tmpdir(), `projx-add-name-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'ni', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['fastify'], REPO_DIR, false, 'worker');
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('npm install'))).toBe(true);
+    expect(existsSync(join(dest, 'worker/.projx-component'))).toBe(true);
+  });
+
+  it('uses the bun binary when packageManager is bun', async () => {
+    dest = join(tmpdir(), `projx-add-bun-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      {
+        name: 'bun-app',
+        components: ['fastify'],
+        git: true,
+        install: false,
+        packageManager: 'bun',
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    execSpy.mockClear();
+    await add(dest, ['frontend'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('bun install'))).toBe(true);
+    expect(hasCommandSpy).toHaveBeenCalledWith('bun');
+  });
+
+  it('defaults to npm when .projx has no packageManager or orm', async () => {
+    dest = join(tmpdir(), `projx-add-defaults-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'defaults', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    delete projx.packageManager;
+    delete projx.orm;
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+
+    execSpy.mockClear();
+    await add(dest, ['frontend'], REPO_DIR, false);
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('npm install'))).toBe(true);
+  });
+
+  it('does not overwrite an existing .env for the new instance', async () => {
+    dest = join(tmpdir(), `projx-add-keepenv-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      { name: 'keepenv', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await add(dest, ['frontend'], REPO_DIR, true, 'web2');
+
+    const envPath = join(dest, 'web2/.env');
+    await writeFile(envPath, 'CUSTOM=1\n');
+
+    await add(dest, ['fastify'], REPO_DIR, true, 'api2');
+
+    expect(await readFile(envPath, 'utf-8')).toBe('CUSTOM=1\n');
+  });
+});
+
+describe('add — early exits and validation', () => {
+  let dest: string;
+
+  afterEach(async () => {
+    if (dest)
+      await rm(dest, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    vi.restoreAllMocks();
+  });
+
+  it('exits when no .projx file is present', async () => {
+    dest = join(tmpdir(), `projx-add-noprojx-${Date.now()}`);
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(dest, { recursive: true });
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(add(dest, ['frontend'], REPO_DIR, true)).rejects.toThrow(
+      'exit',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('rejects --name when adding more than one component type', async () => {
+    dest = join(tmpdir(), `projx-add-name-multi-${Date.now()}`);
+    await scaffold(
+      { name: 'multi', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await expect(
+      add(dest, ['frontend', 'e2e'], REPO_DIR, true, 'whatever'),
+    ).rejects.toThrow(/single component type/i);
+  });
+
+  it('warns about components that already exist', async () => {
+    dest = join(tmpdir(), `projx-add-already-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'dup',
+        components: ['fastify', 'frontend'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await add(dest, ['fastify', 'e2e'], REPO_DIR, true);
+
+    expect(existsSync(join(dest, 'e2e/.projx-component'))).toBe(true);
+  });
+
+  it('exits cleanly when there is nothing new to add', async () => {
+    dest = join(tmpdir(), `projx-add-nothing-${Date.now()}`);
+    await scaffold(
+      { name: 'noop', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(add(dest, ['fastify'], REPO_DIR, true)).rejects.toThrow(
+      'exit',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('exits when downloading the templates fails', async () => {
+    dest = join(tmpdir(), `projx-add-dlfail-${Date.now()}`);
+    await scaffold(
+      { name: 'dlfail', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    vi.spyOn(utilsModule, 'downloadRepo').mockRejectedValue(
+      new Error('network down'),
+    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+
+    await expect(add(dest, ['frontend'], REPO_DIR, true)).rejects.toThrow();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
 });

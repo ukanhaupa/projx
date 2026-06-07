@@ -7,9 +7,38 @@ import { tmpdir } from 'node:os';
 import { init } from '../src/init.js';
 import { detectComponents } from '../src/detect.js';
 import { discoverComponentPaths, upsertComponentMarker } from '../src/utils.js';
+import * as utilsModule from '../src/utils.js';
 import type { Component } from '../src/utils.js';
 
+vi.mock('@clack/prompts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@clack/prompts')>();
+  return {
+    ...actual,
+    confirm: vi.fn(),
+    select: vi.fn(),
+    isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
+  };
+});
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execSync: vi.fn(actual.execSync) };
+});
+
+import * as p from '@clack/prompts';
+
+const CANCEL = Symbol.for('clack.cancel');
+
 const REPO_DIR = join(import.meta.dirname, '../..');
+
+async function gitFixture(dir: string): Promise<void> {
+  execSync('git init --quiet', { cwd: dir });
+  execSync('git -c core.hooksPath=/dev/null add -A', { cwd: dir });
+  execSync(
+    'git -c core.hooksPath=/dev/null -c user.email=a@a -c user.name=a commit --allow-empty -m init --quiet',
+    { cwd: dir },
+  );
+}
 
 describe('init workflow', () => {
   let tmp: string;
@@ -183,6 +212,237 @@ describe('init — guard rails', () => {
     });
 
     await expect(init(tmp, REPO_DIR)).rejects.toThrow('EXIT');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('init — detected components', () => {
+  let tmp: string;
+  const origExit = process.exit;
+  const origIsTTY = process.stdin.isTTY;
+
+  afterEach(async () => {
+    if (tmp)
+      await rm(tmp, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    process.exit = origExit;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: origIsTTY,
+      configurable: true,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('registers a confirmed component and reports conflicts when a root file differs', async () => {
+    tmp = join(tmpdir(), `projx-init-confirm-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await writeFile(join(tmp, 'package-lock.json'), '{}');
+    await writeFile(
+      join(tmp, '.editorconfig'),
+      'root = false\n[*]\nindent_size = 8\n',
+    );
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+    const warnSpy = vi.spyOn(p.log, 'warn');
+
+    await init(tmp, REPO_DIR);
+
+    expect(p.confirm).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(tmp, 'fastify/.projx-component'))).toBe(true);
+    const marker = JSON.parse(
+      await readFile(join(tmp, 'fastify/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('fastify');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('differ from your code'),
+    );
+  });
+
+  it('configures core.hooksPath when .githooks exists after apply', async () => {
+    tmp = join(tmpdir(), `projx-init-hooks-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await writeFile(join(tmp, 'package-lock.json'), '{}');
+    await mkdir(join(tmp, '.githooks'), { recursive: true });
+    await writeFile(join(tmp, '.githooks/pre-commit'), '#!/bin/sh\n');
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+
+    await init(tmp, REPO_DIR);
+
+    const hooksPath = execSync('git config core.hooksPath', { cwd: tmp })
+      .toString()
+      .trim();
+    expect(hooksPath).toBe('.githooks');
+  });
+
+  it('applies a clean template when the detected dir does not collide (merged/clean path)', async () => {
+    tmp = join(tmpdir(), `projx-init-clean-${Date.now()}`);
+    await mkdir(join(tmp, 'infra'), { recursive: true });
+    await writeFile(join(tmp, 'infra/variables.tf'), 'variable "region" {}\n');
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+
+    await init(tmp, REPO_DIR);
+
+    expect(existsSync(join(tmp, 'infra/.projx-component'))).toBe(true);
+    expect(existsSync(join(tmp, 'infra/stack/versions.tf'))).toBe(true);
+  });
+
+  it('prompts for the package manager when no lockfile is present (TTY)', async () => {
+    tmp = join(tmpdir(), `projx-init-pm-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await gitFixture(tmp);
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+    vi.mocked(p.select).mockResolvedValue('pnpm' as never);
+
+    await init(tmp, REPO_DIR);
+
+    expect(p.select).toHaveBeenCalledTimes(1);
+    const cfg = JSON.parse(await readFile(join(tmp, '.projx'), 'utf-8'));
+    expect(cfg.packageManager).toBe('pnpm');
+  });
+
+  it('exits 0 when the package-manager prompt is cancelled', async () => {
+    tmp = join(tmpdir(), `projx-init-pm-cancel-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await gitFixture(tmp);
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+    vi.mocked(p.select).mockResolvedValue(CANCEL as never);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('EXIT');
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow('EXIT');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('warns and exits 0 when every detected component is rejected', async () => {
+    tmp = join(tmpdir(), `projx-init-reject-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(false as never);
+    const warnSpy = vi.spyOn(p.log, 'warn');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('EXIT');
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow('EXIT');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No components selected'),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('exits 0 when a component confirmation is cancelled', async () => {
+    tmp = join(tmpdir(), `projx-init-confirm-cancel-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(CANCEL as never);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('EXIT');
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow('EXIT');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('treats a project as clean when git status throws', async () => {
+    tmp = join(tmpdir(), `projx-init-status-throw-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+    await gitFixture(tmp);
+
+    const real = vi.mocked(execSync).getMockImplementation()!;
+    vi.mocked(execSync).mockImplementation(((cmd: unknown, opts?: unknown) => {
+      if (String(cmd).includes('status --porcelain')) {
+        throw new Error('git status failed');
+      }
+      return real(cmd as never, opts as never);
+    }) as typeof execSync);
+
+    await init(tmp, REPO_DIR);
+    vi.mocked(execSync).mockImplementation(real as typeof execSync);
+
+    expect(existsSync(join(tmp, '.projx'))).toBe(true);
+  });
+
+  it('exits 1 when template download fails for detected components', async () => {
+    tmp = join(tmpdir(), `projx-init-dl-fail-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await writeFile(join(tmp, 'package-lock.json'), '{}');
+    await gitFixture(tmp);
+
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+    vi.spyOn(utilsModule, 'downloadRepo').mockRejectedValue(
+      new Error('network down'),
+    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('EXIT');
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when template download fails for a bare init', async () => {
+    tmp = join(tmpdir(), `projx-init-dl-fail-bare-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+    await gitFixture(tmp);
+
+    vi.spyOn(utilsModule, 'downloadRepo').mockRejectedValue(
+      new Error('network down'),
+    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('EXIT');
+    });
+
+    await expect(init(tmp, REPO_DIR)).rejects.toThrow();
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });
