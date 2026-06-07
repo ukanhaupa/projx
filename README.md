@@ -4,6 +4,7 @@
 [![CI](https://github.com/ukanhaupa/projx/actions/workflows/ci.yml/badge.svg)](https://github.com/ukanhaupa/projx/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/ukanhaupa/projx)](https://github.com/ukanhaupa/projx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Sponsor](https://img.shields.io/github/sponsors/ukanhaupa?label=Sponsor&logo=GitHub)](https://github.com/sponsors/ukanhaupa)
 
 **Go from blank folder to production-ready project in 30 seconds.** Backend-only API, AI/ML app, mobile, full-stack, infra setup — pick what you need and get it wired with auth, database, Docker, CI/CD, hooks, and tests. All optional. All yours.
 
@@ -509,6 +510,12 @@ Add this to your project's README:
 ```md
 [![Built with Projx](https://img.shields.io/badge/Built%20with-Projx-blue)](https://github.com/ukanhaupa/projx)
 ```
+
+---
+
+## Sponsor
+
+Projx is free and MIT-licensed. If it saves you time, consider [sponsoring its development](https://github.com/sponsors/ukanhaupa) — it keeps the templates current and the roadmap moving.
 
 ---
 
