@@ -387,6 +387,7 @@ export interface ComponentInstance {
 export interface ComponentMarkerData {
   component: Component;
   skip: string[];
+  features?: string[];
 }
 
 function parseMarker(raw: string): ComponentMarkerData | null {
@@ -411,6 +412,11 @@ function parseMarker(raw: string): ComponentMarkerData | null {
     return {
       component,
       skip: Array.isArray(data.skip) ? data.skip : [],
+      features: Array.isArray(data.features)
+        ? data.features.filter(
+            (f: unknown): f is string => typeof f === 'string',
+          )
+        : undefined,
     };
   } catch {
     return null;
@@ -430,9 +436,25 @@ export async function writeComponentMarker(
   data: ComponentMarkerData,
 ): Promise<void> {
   const markerPath = join(dir, COMPONENT_MARKER);
+  const existing = await readFileOrNull(markerPath);
+  let preservedFeatures: string[] | undefined;
+  if (existing) {
+    try {
+      const prev = JSON.parse(existing) as { features?: unknown };
+      if (Array.isArray(prev.features)) {
+        preservedFeatures = prev.features.filter(
+          (f): f is string => typeof f === 'string',
+        );
+      }
+    } catch {
+      preservedFeatures = undefined;
+    }
+  }
+  const features = data.features ?? preservedFeatures;
   const out: ComponentMarkerData = {
     component: data.component,
     skip: Array.isArray(data.skip) ? data.skip : [],
+    ...(features && features.length > 0 ? { features } : {}),
   };
   await writeFile(markerPath, JSON.stringify(out, null, 2) + '\n');
 }

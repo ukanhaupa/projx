@@ -300,6 +300,7 @@ async function main(): Promise<void> {
       localRepo,
       options.install === false,
       customName,
+      options.features,
     );
     return;
   }

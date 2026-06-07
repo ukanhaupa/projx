@@ -7,6 +7,7 @@ import {
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
+  type Feature,
   type PackageManager,
   cleanupRepo,
   detectPackageManagerFromComponents,
@@ -25,6 +26,38 @@ import {
   saveBaselineRef,
   type GeneratorVars,
 } from './baseline.js';
+import { applyFeatures } from './features.js';
+
+async function collectRecordedFeatures(
+  cwd: string,
+  components: Component[],
+  componentPaths: ComponentPaths,
+): Promise<Partial<Record<Feature, string>>> {
+  const byFeature = new Map<Feature, string[]>();
+  for (const component of components) {
+    const dir = componentPaths[component] ?? component;
+    const raw = await readFile(join(cwd, dir, COMPONENT_MARKER), 'utf-8').catch(
+      () => null,
+    );
+    if (!raw) continue;
+    let features: unknown;
+    try {
+      features = (JSON.parse(raw) as { features?: unknown }).features;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(features)) continue;
+    for (const name of features) {
+      if (typeof name !== 'string') continue;
+      const list = byFeature.get(name as Feature) ?? [];
+      list.push(dir);
+      byFeature.set(name as Feature, list);
+    }
+  }
+  const out: Partial<Record<Feature, string>> = {};
+  for (const [feature, targets] of byFeature) out[feature] = targets.join(',');
+  return out;
+}
 
 export async function update(cwd: string, localRepo?: string): Promise<void> {
   p.intro('projx update');
@@ -177,6 +210,25 @@ export async function update(cwd: string, localRepo?: string): Promise<void> {
       extraInstances,
     );
     spinner.stop('Template applied.');
+
+    const recordedFeatures = await collectRecordedFeatures(
+      cwd,
+      components,
+      componentPaths,
+    );
+    if (Object.keys(recordedFeatures).length > 0) {
+      const featSpinner = p.spinner();
+      featSpinner.start('Re-applying recorded features');
+      await applyFeatures({
+        features: recordedFeatures,
+        repoDir,
+        components,
+        instances,
+        dest: cwd,
+        vars,
+      });
+      featSpinner.stop('Features re-applied.');
+    }
 
     const pinnedUpdates = await findPinnedFilesWithUpdates(
       cwd,
