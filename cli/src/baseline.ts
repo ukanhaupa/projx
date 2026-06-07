@@ -489,7 +489,11 @@ export async function writeTemplateToDir(
     return !existsSync(join(realCwd, file));
   };
 
-  if (hasBackend || components.includes('frontend')) {
+  if (
+    hasBackend ||
+    components.includes('frontend') ||
+    components.includes('admin-panel')
+  ) {
     if (shouldWrite('docker-compose.yml'))
       await writeFile(
         join(dest, 'docker-compose.yml'),

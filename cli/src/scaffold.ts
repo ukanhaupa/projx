@@ -197,6 +197,8 @@ async function installDeps(
           break;
         case 'infra':
           break;
+        case 'admin-panel':
+          break;
       }
     } catch {
       spinner.stop(`Failed to install ${component} dependencies.`);

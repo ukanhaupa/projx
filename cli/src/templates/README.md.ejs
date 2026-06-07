@@ -27,6 +27,9 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 <% if (components.includes('infra')) { %>
 | **<%= paths.infra %>/** | Terraform, AWS (EKS, RDS, VPC, CodePipeline) |
 <% } %>
+<% if (components.includes('admin-panel')) { %>
+| **<%= paths['admin-panel'] %>/** | Directus admin panel over Postgres |
+<% } %>
 | **Identity** | OIDC / JWT |
 | **Containers** | Docker, Docker Compose |
 
@@ -82,6 +85,20 @@ cd <%= paths.frontend %> && cp .env.example .env && <%= pm.install %> && <%= pm.
 ```bash
 cd <%= paths.mobile %> && cp .env.example .env && flutter pub get && flutter run
 ```
+<% } %>
+<% if (components.includes('admin-panel')) { %>
+
+### <%= paths['admin-panel'] %>/
+
+```bash
+cd <%= paths['admin-panel'] %> && cp .env.example .env   # set KEY, SECRET, ADMIN_PASSWORD, DB_*
+docker compose up --build <%= paths['admin-panel'] %>
+```
+<% if (components.includes('frontend')) { %>
+Internal-only — reach the admin UI at `https://localhost/admin/` through the frontend proxy.
+<% } else { %>
+Internal-only — publish the port for local admin work: `docker compose run --service-ports --rm <%= paths['admin-panel'] %>`.
+<% } %>
 <% } %>
 
 ## Testing

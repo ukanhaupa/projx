@@ -613,6 +613,7 @@ describe('tier 3: direct copy fallback', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
     const vars: GeneratorVars = {
       projectName: 't3-app',
@@ -649,6 +650,7 @@ describe('tier 3: direct copy fallback', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
     const vars: GeneratorVars = {
       projectName: 't3-app',
@@ -683,6 +685,7 @@ describe('tier 3: direct copy fallback', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
     const vars: GeneratorVars = {
       projectName: 't3-app',
@@ -883,6 +886,7 @@ describe('writeTemplateToDir — extraInstances', () => {
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
+      'admin-panel': 'admin-panel',
     };
     const vars: GeneratorVars = {
       projectName: 'multi-app',

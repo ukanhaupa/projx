@@ -28,6 +28,7 @@ const CANONICAL_DISPLAY: Record<Component, string> = {
   mobile: 'Flutter',
   e2e: 'E2E',
   infra: 'Terraform',
+  'admin-panel': 'Admin Panel',
 };
 
 function withInstances(vars: GeneratorVars): GeneratorVars {
@@ -57,6 +58,7 @@ function withInstances(vars: GeneratorVars): GeneratorVars {
     mobileInstances: byType('mobile'),
     e2eInstances: byType('e2e'),
     infraInstances: byType('infra'),
+    adminPanelInstances: byType('admin-panel'),
   };
 }
 

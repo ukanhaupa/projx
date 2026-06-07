@@ -17,6 +17,10 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   mobile: { label: 'Mobile', hint: 'Flutter + Riverpod + GoRouter' },
   e2e: { label: 'E2E Tests', hint: 'Playwright' },
   infra: { label: 'Infrastructure', hint: 'Terraform + AWS' },
+  'admin-panel': {
+    label: 'Admin Panel',
+    hint: 'Directus — instant admin over Postgres (Docker)',
+  },
 };
 
 const DEFAULTS: Component[] = ['fastify', 'frontend', 'e2e'];

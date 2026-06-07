@@ -22,6 +22,7 @@ describe('LABELS', () => {
     expect(LABELS).toHaveProperty('mobile');
     expect(LABELS).toHaveProperty('e2e');
     expect(LABELS).toHaveProperty('infra');
+    expect(LABELS).toHaveProperty('admin-panel');
   });
 });
 

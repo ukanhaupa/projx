@@ -42,6 +42,12 @@ describe('scaffold', () => {
     expect(existsSync(join(dest, '.projx'))).toBe(true);
     expect(existsSync(join(dest, 'fastify'))).toBe(true);
     expect(existsSync(join(dest, 'frontend'))).toBe(true);
+
+    expect(existsSync(join(dest, 'frontend/nginx.conf'))).toBe(true);
+    expect(existsSync(join(dest, 'frontend/nginx.conf.ejs'))).toBe(false);
+    const nginx = await readFile(join(dest, 'frontend/nginx.conf'), 'utf-8');
+    expect(nginx).not.toContain('keycloak');
+    expect(nginx).not.toContain('location /admin/');
   });
 
   it('scaffolds an Express backend with production wiring', async () => {
