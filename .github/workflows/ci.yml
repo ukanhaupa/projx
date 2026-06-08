@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      run_all:
+        description: Run every gate regardless of changed paths (used by the release gate).
+        type: boolean
+        default: false
 
 jobs:
   changes:
@@ -22,6 +28,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       e2e: ${{ steps.filter.outputs.e2e }}
       infra: ${{ steps.filter.outputs.infra }}
+      admin-panel: ${{ steps.filter.outputs.admin-panel }}
       addons: ${{ steps.filter.outputs.addons }}
       features: ${{ steps.filter.outputs.features }}
     steps:
@@ -46,6 +53,8 @@ jobs:
               - 'e2e/**'
             infra:
               - 'infra/**'
+            admin-panel:
+              - 'admin-panel/**'
             addons:
               - 'addons/**'
             features:
@@ -66,7 +75,7 @@ jobs:
   cli:
     name: CLI (lint + typecheck + build + test + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cli == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -94,10 +103,24 @@ jobs:
       - run: pnpm audit --prod
 
   fastapi:
-    name: FastAPI (format + lint + typecheck + audit)
+    name: FastAPI (format + lint + typecheck + test + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastapi == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastapi == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kanha
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: projx_test_fastapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: fastapi
@@ -115,6 +138,7 @@ jobs:
             exit 1
           fi
       - run: uv run lint-imports
+      - run: uv run pytest
       - name: Audit Python dependencies
         run: |
           run_pip_audit() {
@@ -131,10 +155,28 @@ jobs:
           run_pip_audit
 
   fastify:
-    name: Fastify (format + lint + typecheck + audit)
+    name: Fastify (format + lint + typecheck + test + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastify == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.fastify == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+      JWT_SECRET: ci-test-secret # gitleaks:allow
+      CRED_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # gitleaks:allow
     defaults:
       run:
         working-directory: fastify
@@ -153,12 +195,14 @@ jobs:
       - run: pnpm exec prettier --check .
       - run: pnpm exec eslint .
       - run: pnpm exec tsc --noEmit
+      - run: pnpm build
+      - run: pnpm exec vitest run --coverage
       - run: pnpm audit --prod
 
   frontend:
-    name: Frontend (format + lint + typecheck + audit)
+    name: Frontend (format + lint + typecheck + test + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -177,12 +221,14 @@ jobs:
       - run: pnpm exec prettier --check .
       - run: pnpm exec eslint 'src/**/*.{ts,tsx}'
       - run: pnpm exec tsc --noEmit
+      - run: pnpm build
+      - run: pnpm exec vitest run --coverage
       - run: pnpm audit --prod
 
   express:
     name: Express (format + lint + typecheck + build + test + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.express == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.express == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -227,7 +273,7 @@ jobs:
   mobile:
     name: Flutter (format + analyze + test + coverage)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.mobile == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -245,13 +291,33 @@ jobs:
       - run: bash scripts/check-coverage.sh
 
   e2e:
-    name: E2E (format + lint + typecheck + audit)
+    name: E2E (format + lint + typecheck + playwright + audit)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kanha
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: projx_test_fastapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:5173
+      SQLALCHEMY_DATABASE_URI: postgresql+asyncpg://kanha:root@localhost:5432/projx_test_fastapi
+      CORS_ALLOW_ORIGINS: http://localhost:5173
+      JWT_SECRET: test-secret-that-is-at-least-32-bytes-long # gitleaks:allow
+      CRED_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # gitleaks:allow
+      JWT_PROVIDER: shared_secret
+      JWT_ALGORITHMS: HS256
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -262,16 +328,67 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: e2e/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --check .
-      - run: pnpm exec eslint '**/*.ts'
-      - run: pnpm exec tsc --noEmit
-      - run: pnpm audit --prod
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: pnpm install --frozen-lockfile
+      - name: Check formatting
+        working-directory: e2e
+        run: pnpm exec prettier --check .
+      - name: Lint
+        working-directory: e2e
+        run: pnpm exec eslint '**/*.ts'
+      - name: Typecheck
+        working-directory: e2e
+        run: pnpm exec tsc --noEmit
+      - name: Install fastapi dependencies
+        working-directory: fastapi
+        run: uv sync --group dev
+      - name: Create database schema
+        working-directory: fastapi
+        run: uv run python migrate.py
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        working-directory: e2e
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Boot stack and run Playwright
+        run: |
+          set -euo pipefail
+          (cd fastapi && uv run main.py > /tmp/backend.log 2>&1 &)
+          (cd frontend && pnpm run dev > /tmp/frontend.log 2>&1 &)
+
+          wait_for() {
+            local url="$1" name="$2"
+            for _ in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::$name never became ready at $url"
+            return 1
+          }
+
+          if ! wait_for http://localhost:8000/api/health backend; then
+            echo "----- backend log -----"; cat /tmp/backend.log || true
+            exit 1
+          fi
+          if ! wait_for http://localhost:5173 frontend; then
+            echo "----- frontend log -----"; cat /tmp/frontend.log || true
+            exit 1
+          fi
+
+          cd e2e && pnpm exec playwright test --project=chromium
+      - name: Audit
+        working-directory: e2e
+        run: pnpm audit --prod
 
   infra:
     name: Terraform (fmt + validate)
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.infra == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -284,6 +401,42 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  admin-panel:
+    name: Admin Panel (fmt + vet + build + test + coverage)
+    needs: changes
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.admin-panel == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ci_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: admin-panel
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: admin-panel/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./... -coverpkg=./... -coverprofile=cover.out
+      - run: bash scripts/check-coverage.sh cover.out 80
 
   scaffold-matrix:
     name: Scaffold matrix (${{ matrix.framework }}/${{ matrix.orm }})

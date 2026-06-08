@@ -86,16 +86,16 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 
 ## What you get
 
-| Component     | Stack                                                         | What it gives you                                                          |
-| ------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `fastapi`     | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                       |
-| `fastify`     | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                    |
-| `express`     | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks |
-| `frontend`    | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                              |
-| `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                   |
-| `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                      |
-| `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                        |
-| `admin-panel` | Directus (Docker), Postgres                                   | Instant admin UI + REST/GraphQL over your DB, internal-only behind nginx   |
+| Component     | Stack                                                         | What it gives you                                                                            |
+| ------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `fastapi`     | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                                         |
+| `fastify`     | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                                      |
+| `express`     | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks                   |
+| `frontend`    | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                |
+| `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                                     |
+| `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                                        |
+| `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                          |
+| `admin-panel` | Go, HTMX (Docker), Postgres                                   | Auth-gated table browser over any Postgres, read-only by default, internal-only behind nginx |
 
 Plus, in every project: Docker Compose for dev + prod, GitHub Actions CI per component (path-filtered), pre-commit hooks, secret detection, VS Code settings, and 80% test coverage enforced.
 

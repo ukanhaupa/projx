@@ -1,0 +1,73 @@
+# Admin Panel
+
+A standalone admin panel for **<%= projectName %>** — point it at any Postgres database and get an auth-gated UI to browse, filter, sort, search, edit, and export your tables. Single static Go binary, server-rendered with HTMX, no build step.
+
+It has its own admin accounts (separate from your application's users) and stores them in a dedicated `admin_panel` schema, so it never collides with your application data.
+
+## What it does
+
+- **Admin auth** — email + password login with argon2id hashing and server-side sessions. Admin accounts live in `admin_panel.admin_users`, isolated from your app's users.
+- **Role + write-window gate** — two layers protect writes:
+  - **Role** (`admin_users.role` ∈ `read_only` / `read_write`) — only `read_write` admins ever see the write-mode toggle. Read-only admins get a 403 if they forge a POST.
+  - **Write window** — clicking *Enable write* sets `admin_sessions.write_mode_until = NOW() + 30 min`. A sticky red banner runs for the duration with the auto-revert time. Click again to revert early.
+- **Self-protection** — admins can't change their own role and can't delete themselves. Combined with the role gate, the system is mathematically impossible to lock out as long as one admin exists.
+- **Schema picker** — topbar dropdown lists every non-system schema (excluding `pg_catalog`, `information_schema`, `pg_toast`, `pg_temp_*`). `admin_panel` is intentionally browseable so admins can manage their own user records.
+- **Type-aware editing** — booleans render as checkboxes, JSON as textareas, numbers and timestamps as the right inputs. UUIDs, bytea, inet, mac, intervals, arrays all render as their canonical string forms. Values are coerced to the column's type on write.
+- **Filter / sort / search / count** — every column gets a type-aware operator menu (`eq`, `gt`, `ilike`, `in`, `between`, `is_null`, `contains_key` for jsonb, `has` for arrays). Free-text search across every text-ish column. Multi-key sort. Accurate "X of Y" pagination via COUNT(\*). URLs are shareable.
+- **CSV export** — `/tables/<name>.csv?<query>` streams the current filtered/sorted view, capped at 10 000 rows.
+- **Foreign-key links** — FK columns render as clickable links to the target row.
+- **Append-only audit log** — every insert/update/delete is logged to `admin_panel.write_audit_log` with a sha256 hash chain. Tamper-evident.
+- **Safe by default** — identifiers come only from live schema introspection so they can't be injected; values are always parameterized.
+
+## Configuration
+
+All configuration is via environment variables (`.env`):
+
+| Variable         | Required  | Default  | Purpose                                                            |
+| ---------------- | --------- | -------- | ------------------------------------------------------------------ |
+| `DATABASE_URL`   | yes       | —        | Postgres connection string. **pgx-compatible** `sslmode` only.     |
+| `SESSION_SECRET` | yes       | —        | ≥ 32 bytes random; loader refuses anything shorter.                |
+| `ADMIN_EMAIL`    | first run | —        | Seeds the first admin (role = `read_write`) if none exists.        |
+| `ADMIN_PASSWORD` | first run | —        | Password for the bootstrap admin. Rotate via UI after first login. |
+| `PORT`           | no        | `8055`   | Listen port.                                                       |
+| `BASE_PATH`      | no        | `/admin` | URL prefix it mounts under. Set to `/` to serve at the root.       |
+
+Schema selection is **not** an env var — admins pick it from the topbar dropdown. The selection is stored in an `admin_schema` cookie (HttpOnly, SameSite=Lax) per session.
+
+## Run it locally
+
+```bash
+cp .env.example .env          # set DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+go run ./cmd/admin
+```
+
+Then open <http://localhost:8055/admin>.
+
+On first boot it applies its own migrations (the `admin_panel` schema with `admin_users`, `admin_sessions`, `write_audit_log`, `schema_migrations`), seeds the bootstrap admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, and starts serving. Migrations are advisory-locked and tracked in `schema_migrations` — safe to boot multiple replicas concurrently and idempotent across restarts.
+
+## In the project
+
+As part of **<%= projectName %>**, the admin panel is a service in the root `docker-compose.yml`, internal-only (not published to the host), and reverse-proxied by the frontend nginx at `/admin/`. Bring it up with the rest of the stack:
+
+```bash
+docker compose up --build admin-panel
+```
+
+It connects to the same Postgres your backend uses, via the `DATABASE_URL` in `./admin-panel/.env`.
+
+## Promoting more admins
+
+Log in as the bootstrap admin (seeded `read_write`), enable write mode, switch the schema picker to `admin_panel`, open the `admin_users` table, click **New row**, and set the new admin's `email`, `password_hash` (you'll need to generate the argon2id hash yourself), and `role`. New admins land as `read_only` by default; promote them by editing the row and changing `role` to `read_write`. You cannot change your own role — a deliberate safeguard.
+
+## Quality gates
+
+```
+gofmt -l .                            # format check
+go vet ./...                          # built-in static analysis
+golangci-lint run --timeout=5m ./...  # extended lint (errcheck, staticcheck, gosec, …)
+govulncheck ./...                     # vuln scan against the call graph
+gosec -severity medium ./...          # security findings (with documented exclusions)
+go build ./...                        # compile
+go test ./...                         # unit + integration (integration needs TEST_DATABASE_URL)
+bash scripts/check-coverage.sh cover.out 80
+```

@@ -19,7 +19,7 @@ frontend/    React + Vite frontend template
 mobile/      Flutter app template
 e2e/         Playwright E2E template
 infra/       Terraform IaC template
-admin-panel/ Directus admin-panel template (Docker-only, no Node build; connects to the app Postgres)
+admin-panel/ Go + HTMX admin-panel template (Docker-only static binary; auth-gated table browser over any Postgres via DATABASE_URL)
 features/    Opt-in feature overlays applied via --<feature>=<targets> (e.g. --auth=fastify)
 addons/      Out-of-tree drop-ins (e.g. ORM addons in addons/orms/<orm>/)
 docs/        Design docs (feature templates, etc.)
@@ -108,17 +108,18 @@ node cli/dist/index.js my-app --components fastify --no-install --no-git --local
 
 Each template has its own test suite that must stay green on the projx repo itself (not just in scaffolded projects):
 
-| Template    | Format      | Lint                         | Typecheck      | Test                   | Coverage                                                           |
-| ----------- | ----------- | ---------------------------- | -------------- | ---------------------- | ------------------------------------------------------------------ |
-| `cli/`      | prettier    | eslint                       | `tsc --noEmit` | vitest                 | v8 ≥80%                                                            |
-| `fastify/`  | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres) | v8 ≥80%                                                            |
-| `express/`  | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres) | v8 ≥80%                                                            |
-| `fastapi/`  | ruff format | ruff check                   | mypy           | pytest                 | pytest-cov ≥80%                                                    |
-| `frontend/` | prettier    | eslint                       | `tsc --noEmit` | vitest                 | v8 ≥80%                                                            |
-| `mobile/`   | dart format | `dart analyze --fatal-infos` | (in analyze)   | flutter test           | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80% |
-| `e2e/`      | prettier    | eslint                       | `tsc --noEmit` | n/a                    | n/a                                                                |
+| Template       | Format      | Lint                         | Typecheck      | Test                      | Coverage                                                                                     |
+| -------------- | ----------- | ---------------------------- | -------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
+| `cli/`         | prettier    | eslint                       | `tsc --noEmit` | vitest                    | v8 ≥80%                                                                                      |
+| `fastify/`     | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres)    | v8 ≥80%                                                                                      |
+| `express/`     | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres)    | v8 ≥80%                                                                                      |
+| `fastapi/`     | ruff format | ruff check                   | mypy           | pytest                    | pytest-cov ≥80%                                                                              |
+| `frontend/`    | prettier    | eslint                       | `tsc --noEmit` | vitest                    | v8 ≥80%                                                                                      |
+| `mobile/`      | dart format | `dart analyze --fatal-infos` | (in analyze)   | flutter test              | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80%                           |
+| `e2e/`         | prettier    | eslint                       | `tsc --noEmit` | n/a                       | n/a                                                                                          |
+| `admin-panel/` | gofmt       | `go vet`                     | (in build)     | `go test` (real Postgres) | [scripts/check-coverage.sh](admin-panel/scripts/check-coverage.sh) ≥80%, entrypoint excluded |
 
-CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `frontend`, `e2e`, `infra`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo.
+CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `frontend`, `e2e`, `infra`, `admin_panel`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo. The `admin-panel` Go tests self-skip the integration suite when `TEST_DATABASE_URL` is unset (unit tests still run).
 
 Prettier config is unified across `cli/`, `fastify/`, `express/`, `frontend/`, `e2e/`: `{semi: true, singleQuote: true, trailingComma: "all", printWidth: 80, tabWidth: 2}` — frontend keeps `jsxSingleQuote` + `bracketSameLine` as overrides. All four `.prettierignore` files cover `node_modules`, `dist`, `coverage`, and all three lockfile names (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`).
 

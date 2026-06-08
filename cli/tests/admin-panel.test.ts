@@ -61,7 +61,10 @@ describe('admin-panel component', () => {
     expect(compose).toContain('admin-panel:');
     expect(compose).toContain('./admin-panel/.env');
     expect(compose).toContain('"8055"');
+    expect(compose).toContain('["CMD", "/admin", "healthcheck"]');
     expect(compose).not.toMatch(/admin-panel:[\s\S]*?\n {4}ports:/);
+    expect(compose).not.toContain('/directus/uploads');
+    expect(compose).not.toContain('/directus/extensions');
   });
 
   it('writes docker-compose for admin-panel even without a backend or frontend', async () => {
@@ -120,7 +123,7 @@ describe('admin-panel component', () => {
     expect(setup).toContain('admin-panel/.env created from .env.example.');
 
     const readme = await readFile(join(dest, 'README.md'), 'utf-8');
-    expect(readme).toContain('Directus admin panel over Postgres');
+    expect(readme).toContain('Go + HTMX admin panel');
     expect(readme).toContain('admin-panel/');
   });
 
