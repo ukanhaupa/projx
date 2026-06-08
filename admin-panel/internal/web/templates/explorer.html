@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Tables</h2>
+    <ul>
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}" {{if eq . $.Table}}class="active"{{end}}>{{.}}</a></li>{{end}}
+    </ul>
+  </nav>
+  <section class="content">
+    <div class="content-head">
+      <h1>{{.Table}}</h1>
+      {{if .CanWrite}}<a class="btn" href="{{.Base}}/tables/{{.Table}}/new">New row</a>{{else}}<span class="badge">read-only</span>{{end}}
+    </div>
+    <div class="table-scroll">
+      <table class="grid">
+        <thead><tr>{{range .Page.Columns}}<th>{{.}}</th>{{end}}<th></th></tr></thead>
+        <tbody>
+          {{range $row := .Page.Rows}}
+          <tr>
+            {{range $col := $.Page.Columns}}<td>{{index $row $col | cell}}</td>{{end}}
+            <td class="actions">{{if and $.CanWrite $.PrimaryKey}}<a href="{{$.Base}}/tables/{{$.Table}}/{{index $row $.PrimaryKey | cell}}">edit</a>{{end}}</td>
+          </tr>
+          {{else}}
+          <tr><td colspan="99" class="muted">No rows.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      {{if gt .Page.Offset 0}}<a href="{{.Base}}/tables/{{.Table}}?offset={{.PrevOffset}}">← Prev</a>{{end}}
+      {{if .Page.HasNext}}<a href="{{.Base}}/tables/{{.Table}}?offset={{.NextOffset}}">Next →</a>{{end}}
+    </div>
+  </section>
+</div>
+{{end}}

@@ -1,0 +1,58 @@
+# Admin Panel
+
+A standalone admin panel for **<%= projectName %>** — point it at any Postgres database and get an auth-gated UI to browse and edit your tables. Single static Go binary, server-rendered with HTMX, no build step.
+
+It has its own admin accounts (separate from your application's users) and stores them in a dedicated `admin_panel` schema, so it never collides with your application data.
+
+## What it does
+
+- **Admin auth** — email + password login with argon2id hashing and server-side sessions. Admin accounts live in `admin_panel.admin_users`, isolated from your app's users.
+- **Table browser** — introspects the database and lists every table in the browsed schema (`public` by default). Browse, paginate, view, and edit rows.
+- **Type-aware editing** — booleans render as checkboxes, JSON as textareas (validated), numbers and timestamps as the right inputs. Values are coerced to the column's type on write.
+- **Safe by default** — every table is **read-only** until you explicitly allow writes via `WRITE_TABLES`. Identifiers come only from live schema introspection, so they can't be injected.
+
+## Configuration
+
+All configuration is via environment variables (`.env`):
+
+| Variable         | Required | Default  | Purpose                                                      |
+| ---------------- | -------- | -------- | ------------------------------------------------------------ |
+| `DATABASE_URL`   | yes      | —        | Postgres connection string. The only thing it really needs.  |
+| `SESSION_SECRET` | yes      | —        | 32+ byte random string for session signing.                  |
+| `ADMIN_EMAIL`    | first run | —       | Seeds the first admin account if none exists.                |
+| `ADMIN_PASSWORD` | first run | —       | Password for the bootstrap admin.                            |
+| `PORT`           | no       | `8055`   | Listen port.                                                 |
+| `BASE_PATH`      | no       | `/admin` | URL prefix it mounts under. Set to `/` to serve at the root. |
+| `BROWSE_SCHEMA`  | no       | `public` | Which schema's tables to browse. Cannot be a system schema.  |
+| `WRITE_TABLES`   | no       | (none)   | Comma-separated tables that allow writes. Everything else is read-only. |
+
+## Run it locally
+
+```bash
+cp .env.example .env          # set DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+go run ./cmd/admin
+```
+
+Then open <http://localhost:8055/admin>.
+
+On first boot it applies its own migrations (the `admin_panel` schema), seeds the admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD`, and starts serving.
+
+## In the project
+
+As part of **<%= projectName %>**, the admin panel is a service in the root `docker-compose.yml`, internal-only (not published to the host), and reverse-proxied by the frontend nginx at `/admin/`. Bring it up with the rest of the stack:
+
+```bash
+docker compose up --build admin-panel
+```
+
+It connects to the same Postgres your backend uses, via the `DATABASE_URL` in `./admin-panel/.env`.
+
+## Allowing writes
+
+By default every table is read-only — you can browse and inspect, but not change anything. To allow edits on specific tables, list them:
+
+```bash
+WRITE_TABLES=users,orders,products
+```
+
+Each table you add becomes editable in the UI. The migration history of this value is your audit trail of what became writable when.

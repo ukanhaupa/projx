@@ -1,0 +1,18 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Admin</title>
+  <link rel="stylesheet" href="{{.Base}}/static/style.css">
+  <script src="{{.Base}}/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{.Base}}/">Admin</a>
+    {{if .User}}<span class="user">{{.User}}</span>
+    <form method="post" action="{{.Base}}/logout" class="logout"><button type="submit">Log out</button></form>{{end}}
+  </header>
+  <main>{{template "content" .}}</main>
+</body>
+</html>{{end}}

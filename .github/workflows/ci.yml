@@ -22,6 +22,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       e2e: ${{ steps.filter.outputs.e2e }}
       infra: ${{ steps.filter.outputs.infra }}
+      admin-panel: ${{ steps.filter.outputs.admin-panel }}
       addons: ${{ steps.filter.outputs.addons }}
       features: ${{ steps.filter.outputs.features }}
     steps:
@@ -46,6 +47,8 @@ jobs:
               - 'e2e/**'
             infra:
               - 'infra/**'
+            admin-panel:
+              - 'admin-panel/**'
             addons:
               - 'addons/**'
             features:
@@ -284,6 +287,42 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  admin-panel:
+    name: Admin Panel (fmt + vet + build + test + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.admin-panel == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ci_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: admin-panel
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: admin-panel/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./... -coverpkg=./... -coverprofile=cover.out
+      - run: bash scripts/check-coverage.sh cover.out 80
 
   scaffold-matrix:
     name: Scaffold matrix (${{ matrix.framework }}/${{ matrix.orm }})

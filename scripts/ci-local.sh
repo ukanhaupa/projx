@@ -264,6 +264,20 @@ sec_infra() {
   run_step "terraform validate" terraform validate
 }
 
+sec_admin_panel() {
+  cd "$ROOT_DIR/admin-panel" || exit 1
+  if ! command -v go >/dev/null 2>&1; then
+    warn "go not installed — skipping admin-panel section (install via 'brew install go')"
+    return 0
+  fi
+  run_step "admin-panel gofmt" bash scripts/check-gofmt.sh
+  run_step "admin-panel vet" go vet ./...
+  run_step "admin-panel build" go build ./...
+  run_step "admin-panel tests" go test ./... -coverpkg=./... -coverprofile=cover.out
+  run_step "admin-panel coverage" bash scripts/check-coverage.sh cover.out 80
+  rm -f cover.out
+}
+
 sec_scaffold_matrix() {
   cd "$ROOT_DIR/cli" || exit 1
   run_step "cli build for matrix" pm_run build
@@ -293,6 +307,7 @@ available_sections() {
   [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
+  [ -d "$ROOT_DIR/admin-panel" ] && found+=("admin_panel")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
   compgen -G "$ROOT_DIR/scripts/*.test.sh" >/dev/null 2>&1 && found+=("scripts")
   printf '%s\n' "${found[@]}"
@@ -322,6 +337,7 @@ elif [[ "${1:-}" == "changed" ]]; then
     case "$s" in
       secrets) SECTIONS+=("$s") ;;
       infra) has_changes_in "infra/" && SECTIONS+=("$s") ;;
+      admin_panel) has_changes_in "admin-panel/" && SECTIONS+=("$s") ;;
       scaffold_matrix)
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
       scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;

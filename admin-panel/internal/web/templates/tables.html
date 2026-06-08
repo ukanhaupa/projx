@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Tables</h2>
+    <ul>
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}">{{.}}</a></li>{{end}}
+    </ul>
+  </nav>
+  <section class="content">
+    <h1>{{.Title}}</h1>
+    <p class="muted">{{len .Tables}} tables in <code>public</code>. Select one to browse.</p>
+  </section>
+</div>
+{{end}}

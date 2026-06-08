@@ -2,6 +2,12 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-06-08
+
+### Changed
+
+- **`admin-panel` rebuilt as a Go + HTMX service** ([admin-panel/](admin-panel/)) — replaces the Directus component shipped in 1.7.4 with a self-contained, single-static-binary admin panel. Point it at any Postgres via `DATABASE_URL` and it serves an auth-gated table browser: introspects the schema, lists every table, and supports paginated browse plus type-aware row editing (booleans → checkboxes, JSON → validated textareas, numbers/timestamps coerced to the column type on write). It owns its own admin accounts (argon2id, server-side sessions) in a dedicated `admin_panel` schema, isolated from application data and bootstrapped from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Every table is **read-only by default**; writes are opt-in per table via `WRITE_TABLES`. Identifiers come exclusively from live `information_schema` introspection, so they can't be injected. Mounts under a configurable `BASE_PATH` (default `/admin`) and browses a configurable `BROWSE_SCHEMA` (default `public`, system schemas rejected). Internal-only compose service (`expose: 8055`, no host port, distroless image, binary `healthcheck` subcommand), reverse-proxied by the frontend nginx at `/admin/`. Tested against a real Postgres ([admin-panel/internal/web/integration_test.go](admin-panel/internal/web/integration_test.go) + unit tests) at 83% coverage. CLI detection now keys on the `adminpanel` Go module instead of the Directus Dockerfile. **Breaking for anyone who scaffolded the 1.7.4 Directus version**: the env contract (`DATABASE_URL`/`SESSION_SECRET` vs `KEY`/`SECRET`/`DB_*`), the on-disk schema, and the REST/GraphQL API all change — re-scaffold rather than `update`.
+
 ## [1.7.4] - 2026-06-07
 
 ### Added

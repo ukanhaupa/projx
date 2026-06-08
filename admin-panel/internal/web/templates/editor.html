@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Tables</h2>
+    <ul>
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}" {{if eq . $.Table}}class="active"{{end}}>{{.}}</a></li>{{end}}
+    </ul>
+  </nav>
+  <section class="content">
+    <div class="content-head">
+      <h1>{{if .IsNew}}New row in {{.Table}}{{else}}Edit {{.Table}}{{end}}</h1>
+      <a class="btn ghost" href="{{.Base}}/tables/{{.Table}}">Back</a>
+    </div>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <form method="post" action="{{.Action}}" class="row-form">
+      {{range .Fields}}
+      <label>
+        <span>{{.Name}} <small class="muted">{{.DataType}}</small></span>
+        {{if eq (printf "%s" .Input) "checkbox"}}
+          <input type="hidden" name="{{.Name}}" value="false">
+          <input type="checkbox" name="{{.Name}}" value="true" {{if .Checked}}checked{{end}} {{if .ReadOnly}}disabled{{end}}>
+        {{else if eq (printf "%s" .Input) "textarea"}}
+          <textarea name="{{.Name}}" rows="4" {{if .ReadOnly}}readonly{{end}}>{{.Value}}</textarea>
+        {{else if eq (printf "%s" .Input) "number"}}
+          <input type="number" step="any" name="{{.Name}}" value="{{.Value}}" {{if .ReadOnly}}readonly{{end}}>
+        {{else}}
+          <input name="{{.Name}}" value="{{.Value}}" {{if .ReadOnly}}readonly{{end}}>
+        {{end}}
+      </label>
+      {{end}}
+      <div class="form-actions">
+        <button type="submit">Save</button>
+        {{if not .IsNew}}<button type="submit" formaction="{{.Base}}/tables/{{.Table}}/{{.ID}}/delete" class="danger">Delete</button>{{end}}
+      </div>
+    </form>
+  </section>
+</div>
+{{end}}
