@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Tables in {{.Schema}}</h2>
+    <ul>
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}">{{.}}</a></li>{{end}}
+    </ul>
+  </nav>
+  <section class="content tables-page">
+    <div class="content-head">
+      <h1>{{.Title}}</h1>
+      <span class="total">{{len .Tables}} in <code>{{.Schema}}</code></span>
+    </div>
+    <p>Pick a table to browse, filter, sort, export, or edit.</p>
+    <ul class="tables-list">
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}">{{.}}</a></li>{{end}}
+    </ul>
+  </section>
+</div>
+{{end}}

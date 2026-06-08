@@ -112,13 +112,13 @@ async function scanDirectory(
     });
   }
 
-  const dockerfile = await readFileOrNull(join(dir, 'Dockerfile'));
-  if (dockerfile && /^FROM\s+directus\/directus/m.test(dockerfile)) {
+  const goMod = await readFileOrNull(join(dir, 'go.mod'));
+  if (goMod && /^module\s+adminpanel\b/m.test(goMod)) {
     results.push({
       component: 'admin-panel',
       directory: relPath,
       confidence: 'high',
-      evidence: 'Dockerfile builds from directus/directus image',
+      evidence: 'Go module "adminpanel" found',
     });
   }
 

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -11,8 +12,19 @@ import {
 } from './helpers/migration-checksum.js';
 
 export default async function globalSetup(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      'DATABASE_URL is not set. Configure .env.test (or the environment) so tests run against a real database.',
+    );
+  }
+
+  execFileSync(
+    'prisma',
+    ['db', 'push', '--skip-generate', '--accept-data-loss'],
+    { stdio: 'inherit' },
+  );
+
   if (process.env.SKIP_MIGRATION_DRIFT_CHECK === '1') return;
-  if (!process.env.DATABASE_URL) return;
 
   const migrationsDir = join(process.cwd(), 'prisma/migrations');
   if (!existsSync(migrationsDir)) return;

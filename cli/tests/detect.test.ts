@@ -160,4 +160,18 @@ describe('detectComponents', () => {
     const results = await detectComponents(tmp);
     expect(results).toHaveLength(0);
   });
+
+  it('detects admin-panel from the Go module', async () => {
+    await mkdir(join(tmp, 'admin-panel'));
+    await writeFile(
+      join(tmp, 'admin-panel/go.mod'),
+      'module adminpanel\n\ngo 1.26\n',
+    );
+
+    const results = await detectComponents(tmp);
+    expect(results).toHaveLength(1);
+    expect(results[0].component).toBe('admin-panel');
+    expect(results[0].directory).toBe('admin-panel');
+    expect(results[0].confidence).toBe('high');
+  });
 });

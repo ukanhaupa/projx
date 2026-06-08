@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Tables in {{.Schema}}</h2>
+    <ul>
+      {{range .Tables}}<li><a href="{{$.Base}}/tables/{{.}}" {{if eq . $.Table}}class="active"{{end}}>{{.}}</a></li>{{end}}
+    </ul>
+  </nav>
+  <section class="content">
+    <div class="content-head">
+      <h1>{{.Table}}</h1>
+      <div class="content-head-actions">
+        <a class="btn ghost" href="{{.ExportURL}}">Export CSV</a>
+        {{if .WriteMode}}<a class="btn" href="{{.Base}}/tables/{{.Table}}/new">New row</a>{{else}}<span class="badge">read-only</span>{{end}}
+      </div>
+    </div>
+
+    {{template "table-region" .}}
+  </section>
+</div>
+{{end}}

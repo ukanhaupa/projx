@@ -1,0 +1,125 @@
+{{define "table-region"}}
+<div id="table-region" class="table-region">
+  <div class="region-head">
+    <span class="total">{{.Total}} {{if eq .Total 1}}row{{else}}rows{{end}}</span>
+  </div>
+
+  <form class="query-bar"
+        hx-get="{{.Base}}/tables/{{.Table}}"
+        hx-target="#table-region"
+        hx-swap="outerHTML"
+        hx-push-url="true"
+        hx-trigger="submit, keyup changed delay:300ms from:.search">
+    <input class="search" type="search" name="q" placeholder="Search all text columns…" value="{{.Search}}" autocomplete="off">
+    {{range .ActiveFilter}}<input type="hidden" name="f.{{.Column}}.{{.Operator}}" value="{{index .Values 0}}">{{end}}
+    {{range .Sort}}<input type="hidden" name="sort" value="{{if .Desc}}-{{end}}{{.Column}}">{{end}}
+    <button type="submit">Apply</button>
+    {{if or .Search .ActiveFilter}}
+    <a class="btn ghost"
+       href="{{.Base}}/tables/{{.Table}}"
+       hx-get="{{.Base}}/tables/{{.Table}}"
+       hx-target="#table-region"
+       hx-swap="outerHTML"
+       hx-push-url="true">Clear</a>
+    {{end}}
+  </form>
+
+  {{if .ActiveFilter}}
+  <div class="active-filters">
+    <span class="muted">Filters:</span>
+    {{range $i, $f := .ActiveFilter}}
+    <span class="chip">
+      {{$f.Column}} {{$f.Operator}} {{index $f.Values 0}}
+      <a href="?{{removeFilterURL $ $i}}"
+         hx-get="{{$.Base}}/tables/{{$.Table}}?{{removeFilterURL $ $i}}"
+         hx-target="#table-region"
+         hx-swap="outerHTML"
+         hx-push-url="true"
+         title="Remove">×</a>
+    </span>
+    {{end}}
+  </div>
+  {{end}}
+
+  <details class="filter-builder">
+    <summary>+ Add a filter</summary>
+    <form class="filter-form"
+          hx-get="{{.Base}}/tables/{{.Table}}/_filter"
+          hx-target="#table-region"
+          hx-swap="outerHTML"
+          hx-push-url="true">
+      <input type="hidden" name="q" value="{{.Search}}">
+      {{range .ActiveFilter}}<input type="hidden" name="f.{{.Column}}.{{.Operator}}" value="{{index .Values 0}}">{{end}}
+      {{range .Sort}}<input type="hidden" name="sort" value="{{if .Desc}}-{{end}}{{.Column}}">{{end}}
+      <select name="filter_col">
+        {{range .Columns}}<option value="{{.Name}}">{{.Name}} <small>{{.DataType}}</small></option>{{end}}
+      </select>
+      <select name="filter_op">
+        <option value="eq">=</option>
+        <option value="neq">!=</option>
+        <option value="ilike">contains</option>
+        <option value="starts_with">starts with</option>
+        <option value="ends_with">ends with</option>
+        <option value="gt">&gt;</option>
+        <option value="gte">&gt;=</option>
+        <option value="lt">&lt;</option>
+        <option value="lte">&lt;=</option>
+        <option value="in">in</option>
+        <option value="is_null">is null</option>
+        <option value="is_not_null">is not null</option>
+      </select>
+      <input type="text" name="filter_val" placeholder="value">
+      <button type="submit">Add</button>
+    </form>
+  </details>
+
+  <div class="table-scroll" data-table-key="{{.Schema}}.{{.Table}}">
+    <table class="grid">
+      <thead><tr>
+        {{range .Page.Columns}}
+        <th>
+          <a class="col-sort"
+             href="?{{sortToggleURL $ .}}"
+             hx-get="{{$.Base}}/tables/{{$.Table}}?{{sortToggleURL $ .}}"
+             hx-target="#table-region"
+             hx-swap="outerHTML"
+             hx-push-url="true">
+            {{.}}{{sortIndicator $ .}}
+          </a>
+          <span class="col-resizer" data-col="{{.}}"></span>
+        </th>
+        {{end}}
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {{range $row := .Page.Rows}}
+        <tr>
+          {{range $col := $.Page.Columns}}<td>{{renderCell $ $row $col}}</td>{{end}}
+          <td class="actions">{{if and $.WriteMode $.PrimaryKey}}<a href="{{$.Base}}/tables/{{$.Table}}/{{index $row $.PrimaryKey | cell | urlquery}}">edit</a>{{end}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="99" class="muted empty">No rows.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <span class="muted">{{add .Page.Offset 1}}–{{addPageLen .Page}} of {{.Total}}</span>
+    {{if gt .Page.Offset 0}}
+    <a href="{{.PrevURL}}"
+       hx-get="{{.PrevURL}}"
+       hx-target="#table-region"
+       hx-swap="outerHTML"
+       hx-push-url="true">← Prev</a>
+    {{end}}
+    {{if .Page.HasNext}}
+    <a href="{{.NextURL}}"
+       hx-get="{{.NextURL}}"
+       hx-target="#table-region"
+       hx-swap="outerHTML"
+       hx-push-url="true">Next →</a>
+    {{end}}
+  </div>
+</div>
+{{end}}

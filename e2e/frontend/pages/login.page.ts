@@ -16,8 +16,10 @@ export class LoginPage extends BasePage {
     this.usernameInput = page.getByLabel('Username');
     this.passwordInput = page.locator('#login-password');
     this.submitButton = page.getByRole('button', { name: 'Sign In' });
-    this.errorAlert = page.getByRole('alert');
-    this.passwordToggle = page.getByLabel(/password$/i);
+    this.errorAlert = this.form.getByRole('alert');
+    this.passwordToggle = page.getByRole('button', {
+      name: /^(Show|Hide) password$/,
+    });
   }
 
   async goto(): Promise<void> {
