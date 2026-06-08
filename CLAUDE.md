@@ -194,7 +194,9 @@ When adapting code from sister projects (docusift, ops-pilot, memoria), strip bu
 
 ## Releasing
 
-Versions live in [cli/package.json](cli/package.json). `prepublishOnly` builds. CI runs on push to `main`. Manual publish: `cd cli && npm publish`. CHANGELOG entry + version bump on the same commit.
+Versions live in [cli/package.json](cli/package.json). `prepublishOnly` builds. CHANGELOG entry + version bump on the same commit.
+
+**Publishing is tag-triggered, not manual.** Pushing a `v*` tag fires [.github/workflows/release.yml](.github/workflows/release.yml), which lint/typecheck/build/tests then runs `pnpm publish` to npm using `secrets.NPM_TOKEN` — no local `npm publish` needed. It also cuts a GitHub Release with an auto-generated changelog. Tags matching `-(alpha|beta|rc)` publish under the `next` dist-tag; all others under `latest`. The version published is taken from the tag (`npm version ${TAG#v}`), so the tag and `cli/package.json` must agree. Net: bump version + CHANGELOG on a commit, then tag `vX.Y.Z` and push the tag — the rest is automatic.
 
 ## Common gotchas
 
