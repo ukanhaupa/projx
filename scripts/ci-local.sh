@@ -10,9 +10,10 @@
 #   secrets  cli  fastapi  fastify  express  frontend  e2e  infra  scaffold_matrix
 #
 # Environment knobs:
-#   E2E_REAL_BACKEND=1          boot fastify/express + run Playwright in sec_e2e
-#                               (default: typecheck only)
+#   E2E_SKIP_REAL=1             skip real backend/frontend boot + Playwright in sec_e2e
+#                               (default: deterministic local boot + Playwright)
 #   E2E_BACKEND_PORT=auto       port the booted backend listens on (default: random free port)
+#   E2E_FRONTEND_PORT=auto      port the booted frontend listens on (default: random free port)
 #   E2E_HEALTH_PATH=/api/health endpoint used for readiness polling
 #   LOGS_DIR=/tmp/foo           override per-section log directory
 
@@ -32,7 +33,9 @@ pick_free_port() {
   python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
 }
 E2E_BACKEND_PORT="${E2E_BACKEND_PORT:-$(pick_free_port)}"
+E2E_FRONTEND_PORT="${E2E_FRONTEND_PORT:-$(pick_free_port)}"
 export E2E_BACKEND_PORT
+export E2E_FRONTEND_PORT
 
 BOLD=$'\033[1m'
 DIM=$'\033[2m'
@@ -202,33 +205,79 @@ sec_frontend() {
 
 sec_e2e() {
   if [ ! -d "$ROOT_DIR/e2e" ]; then return 0; fi
-  local backend_dir=""
-  for candidate in fastify express; do
-    [ -d "$ROOT_DIR/$candidate" ] && backend_dir="$candidate" && break
-  done
-
-  if [ -z "$backend_dir" ] || [ -z "${E2E_REAL_BACKEND:-}" ]; then
+  if [ -n "${E2E_SKIP_REAL:-}" ]; then
     run_js_component e2e
     return $?
   fi
 
-  (cd "$ROOT_DIR/$backend_dir" && pm_install) || return 1
-  if [ -f "$ROOT_DIR/$backend_dir/prisma/schema.prisma" ]; then
-    (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma generate) || return 1
+  local backend_kind=""
+  local port="$E2E_BACKEND_PORT"
+  local frontend_port="$E2E_FRONTEND_PORT"
+  local health_path="${E2E_HEALTH_PATH:-/api/health}"
+  local e2e_jwt_secret="${E2E_JWT_SECRET:-}" # pragma: allowlist secret
+
+  if [ -d "$ROOT_DIR/fastapi" ]; then
+    backend_kind="fastapi"
+  elif [ -d "$ROOT_DIR/fastify" ]; then
+    backend_kind="fastify"
+  elif [ -d "$ROOT_DIR/express" ]; then
+    backend_kind="express"
   fi
 
-  cd "$ROOT_DIR/$backend_dir" || return 1
-  start_background "e2e-backend" bash -c \
-    "$(declare -f pm_exec detect_pm); PORT=$E2E_BACKEND_PORT pm_exec tsx src/server.ts"
-  local backend_pid="$LAST_PID"
-  cd "$ROOT_DIR" || return 1
+  if [ -z "$backend_kind" ]; then
+    xfail "no backend directory found for e2e (expected fastapi, fastify, or express)"
+    return 1
+  fi
 
-  local port="$E2E_BACKEND_PORT"
-  local health_path="${E2E_HEALTH_PATH:-/api/health}"
+  if [ "$backend_kind" = "fastapi" ]; then
+    if ! command -v uv >/dev/null 2>&1; then
+      xfail "uv not installed — cannot boot fastapi backend for e2e"
+      return 1
+    fi
+    [ -f "$ROOT_DIR/fastapi/.env.test" ] || {
+      xfail "fastapi/.env.test missing — cannot boot fastapi backend for e2e"
+      return 1
+    }
+    (cd "$ROOT_DIR/fastapi" && uv sync --group dev) || return 1
+    if [ -z "$e2e_jwt_secret" ]; then
+      e2e_jwt_secret="$(
+        bash -c "set -a; . '$ROOT_DIR/fastapi/.env.test'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
+      )"
+    fi
+    start_background "e2e-backend" bash -c \
+      "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export CORS_ALLOW_ORIGINS='http://127.0.0.1:$frontend_port' && exec uv run main.py --host 127.0.0.1 --port '$port' --workers 2"
+  elif [ "$backend_kind" = "fastify" ]; then
+    (cd "$ROOT_DIR/fastify" && pm_install) || return 1
+    if [ -f "$ROOT_DIR/fastify/prisma/schema.prisma" ]; then
+      (cd "$ROOT_DIR/fastify" && pm_exec prisma generate) || return 1
+      (cd "$ROOT_DIR/fastify" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
+    fi
+    [ -f "$ROOT_DIR/fastify/.env" ] || {
+      xfail "fastify/.env missing — cannot boot fastify backend for e2e"
+      return 1
+    }
+    if [ -z "$e2e_jwt_secret" ]; then
+      e2e_jwt_secret="$(
+        bash -c "set -a; . '$ROOT_DIR/fastify/.env'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
+      )"
+    fi
+    start_background "e2e-backend" bash -c \
+      "cd '$ROOT_DIR/fastify' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx --env-file=.env src/server.ts"
+  else
+    (cd "$ROOT_DIR/express" && pm_install) || return 1
+    if [ -f "$ROOT_DIR/express/prisma/schema.prisma" ]; then
+      (cd "$ROOT_DIR/express" && pm_exec prisma generate) || return 1
+      (cd "$ROOT_DIR/express" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
+    fi
+    start_background "e2e-backend" bash -c \
+      "cd '$ROOT_DIR/express' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx src/server.ts"
+  fi
+  local backend_pid="$LAST_PID"
+
   if ! command -v curl >/dev/null 2>&1; then
     warn "curl missing — skipping backend healthcheck"
   else
-    local tries=30
+    local tries=60
     until curl -fsS "http://127.0.0.1:$port$health_path" >/dev/null 2>&1; do
       tries=$((tries - 1))
       if [ "$tries" -le 0 ]; then
@@ -240,17 +289,57 @@ sec_e2e() {
     done
   fi
 
+  [ -d "$ROOT_DIR/frontend" ] || {
+    xfail "frontend directory missing — cannot run e2e"
+    kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
+    return 1
+  }
+
+  (
+    cd "$ROOT_DIR/frontend" || exit 1
+    run_step "frontend install (e2e)" pm_install
+    run_step "frontend build (e2e)" bash -c \
+      "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' pm_exec vite build"
+  ) || {
+    kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
+    return 1
+  }
+
+  start_background "e2e-frontend" bash -c \
+    "cd '$ROOT_DIR/frontend' && $(declare -f pm_exec detect_pm); pm_exec vite preview --host 127.0.0.1 --port '$frontend_port' --strictPort"
+  local frontend_pid="$LAST_PID"
+
+  if command -v curl >/dev/null 2>&1; then
+    local ui_tries=60
+    until curl -fsS "http://127.0.0.1:$frontend_port" >/dev/null 2>&1; do
+      ui_tries=$((ui_tries - 1))
+      if [ "$ui_tries" -le 0 ]; then
+        xfail "e2e frontend never became healthy on :$frontend_port"
+        kill -- "-$frontend_pid" 2>/dev/null || kill "$frontend_pid" 2>/dev/null || true
+        kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
+        return 1
+      fi
+      sleep 1
+    done
+  fi
+
   local rc=0
   (
     cd "$ROOT_DIR/e2e" || exit 1
     run_step "e2e install" pm_install
-    run_step "e2e playwright install" pm_exec playwright install --with-deps chromium
+    run_step "e2e playwright install" pm_exec playwright install --with-deps chromium firefox webkit
     run_step "e2e format" pm_exec prettier --write .
     run_step "e2e lint" pm_exec eslint '**/*.ts'
     run_step "e2e typecheck" pm_exec tsc --noEmit
+    export CI=1
+    export BASE_URL="http://127.0.0.1:$frontend_port"
+    export E2E_JWT_SECRET="$e2e_jwt_secret"
     run_step "e2e playwright" pm_exec playwright test
   ) || rc=$?
 
+  kill -- "-$frontend_pid" 2>/dev/null || kill "$frontend_pid" 2>/dev/null || true
+  sleep 1
+  kill -9 -- "-$frontend_pid" 2>/dev/null || kill -9 "$frontend_pid" 2>/dev/null || true
   kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
   sleep 1
   kill -9 -- "-$backend_pid" 2>/dev/null || kill -9 "$backend_pid" 2>/dev/null || true
@@ -262,6 +351,39 @@ sec_infra() {
   run_step "terraform fmt" terraform fmt -check -recursive
   run_step "terraform init" terraform init -backend=false -reconfigure
   run_step "terraform validate" terraform validate
+}
+
+sec_mobile() {
+  cd "$ROOT_DIR/mobile" || exit 1
+  if ! command -v flutter >/dev/null 2>&1; then
+    warn "flutter not installed — skipping mobile section (install Flutter SDK)"
+    return 0
+  fi
+  run_step "mobile pub get" flutter pub get
+  run_step "mobile format" dart format --set-exit-if-changed .
+  run_step "mobile analyze" dart analyze --fatal-infos
+  run_step "mobile tests" flutter test --coverage
+  run_step "mobile coverage" bash scripts/check-coverage.sh 80
+}
+
+sec_admin_panel() {
+  cd "$ROOT_DIR/admin-panel" || exit 1
+  if ! command -v go >/dev/null 2>&1; then
+    warn "go not installed — skipping admin-panel section (install via 'brew install go')"
+    return 0
+  fi
+  run_step "admin-panel gofmt" bash scripts/check-gofmt.sh
+  run_step "admin-panel vet" go vet ./...
+  run_step "admin-panel build" go build ./...
+  local pg_user pg_host pg_port db
+  pg_user="${PGUSER:-$(whoami)}"
+  pg_host="${PGHOST:-localhost}"
+  pg_port="${PGPORT:-5432}"
+  createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_test_admin_panel 2>/dev/null || true
+  db="postgresql://${pg_user}@${pg_host}:${pg_port}/projx_test_admin_panel?sslmode=disable"
+  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" go test ./... -p 1 -coverpkg=./... -coverprofile=cover.out
+  run_step "admin-panel coverage" bash scripts/check-coverage.sh cover.out 80
+  rm -f cover.out
 }
 
 sec_scaffold_matrix() {
@@ -291,8 +413,10 @@ available_sections() {
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
   [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
+  [ -d "$ROOT_DIR/mobile" ] && found+=("mobile")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
+  [ -d "$ROOT_DIR/admin-panel" ] && found+=("admin_panel")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
   compgen -G "$ROOT_DIR/scripts/*.test.sh" >/dev/null 2>&1 && found+=("scripts")
   printf '%s\n' "${found[@]}"
@@ -322,6 +446,7 @@ elif [[ "${1:-}" == "changed" ]]; then
     case "$s" in
       secrets) SECTIONS+=("$s") ;;
       infra) has_changes_in "infra/" && SECTIONS+=("$s") ;;
+      admin_panel) has_changes_in "admin-panel/" && SECTIONS+=("$s") ;;
       scaffold_matrix)
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
       scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;

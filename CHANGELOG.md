@@ -2,6 +2,14 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-06-08
+
+### Changed
+
+- **E2E Playwright suite now actually runs in CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) — the `e2e` job previously stopped at format + lint + typecheck + audit and never launched a browser. It now provisions a `postgres:16` service, runs `migrate.py` (alembic `upgrade head`) to create the schema, boots the FastAPI backend on `:8000` and the Vite frontend on `:5173`, waits on both health endpoints, installs the Chromium browser, and runs `playwright test --project=chromium` with `CI=true` (so `playwright.config.ts` consumes the already-running servers instead of booting its own). The existing `if:` change-gate is unchanged.
+- **`scripts/ci-local.sh` runs the real E2E backend by default** ([scripts/ci-local.sh](scripts/ci-local.sh)) — `sec_e2e` no longer requires `E2E_REAL_BACKEND=1` to boot a sibling `fastify/`/`express/` and run the full Playwright matrix; that is now the default whenever a backend dir exists. Set `E2E_SKIP_REAL=1` to fall back to typecheck-only.
+- **`admin-panel` rebuilt as a Go + HTMX service** ([admin-panel/](admin-panel/)) — replaces the Directus component shipped in 1.7.4 with a self-contained, single-static-binary admin panel. Point it at any Postgres via `DATABASE_URL` and it serves an auth-gated table browser: introspects the schema, lists every table, and supports paginated browse plus type-aware row editing (booleans → checkboxes, JSON → validated textareas, numbers/timestamps coerced to the column type on write). It owns its own admin accounts (argon2id, server-side sessions) in a dedicated `admin_panel` schema, isolated from application data and bootstrapped from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Every table is **read-only by default**; writes are opt-in per table via `WRITE_TABLES`. Identifiers come exclusively from live `information_schema` introspection, so they can't be injected. Mounts under a configurable `BASE_PATH` (default `/admin`) and browses a configurable `BROWSE_SCHEMA` (default `public`, system schemas rejected). Internal-only compose service (`expose: 8055`, no host port, distroless image, binary `healthcheck` subcommand), reverse-proxied by the frontend nginx at `/admin/`. Tested against a real Postgres ([admin-panel/internal/web/integration_test.go](admin-panel/internal/web/integration_test.go) + unit tests) at 83% coverage. CLI detection now keys on the `adminpanel` Go module instead of the Directus Dockerfile. **Breaking for anyone who scaffolded the 1.7.4 Directus version**: the env contract (`DATABASE_URL`/`SESSION_SECRET` vs `KEY`/`SECRET`/`DB_*`), the on-disk schema, and the REST/GraphQL API all change — re-scaffold rather than `update`.
+
 ## [1.7.4] - 2026-06-07
 
 ### Added

@@ -41,6 +41,7 @@ E2E_TS=$(echo "$STAGED_FILES" | grep '^e2e/.*\.ts$' || true)
 E2E_ALL=$(echo "$STAGED_FILES" | grep '^e2e/' || true)
 MOBILE_DART=$(echo "$STAGED_FILES" | grep '^mobile/.*\.dart$' || true)
 INFRA_TF=$(echo "$STAGED_FILES" | grep '^infra/.*\.tf$' || true)
+ADMIN_PANEL_GO=$(echo "$STAGED_FILES" | grep '^admin-panel/.*\.go$' || true)
 CLI_SRC_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
 CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/.*\.ts$' || true)
 CLI_ALL=$(echo "$STAGED_FILES" | grep '^cli/' || true)
@@ -138,6 +139,18 @@ if [ -n "$INFRA_TF" ]; then
     echo "$INFRA_TF" | xargs git add
   else
     echo "Skipping infra lint (terraform not installed)"
+  fi
+fi
+
+# ── Admin Panel ───────────────────────────────────────────────────
+if [ -n "$ADMIN_PANEL_GO" ]; then
+  if command -v go &> /dev/null; then
+    echo "Checking admin-panel..."
+    echo "$ADMIN_PANEL_GO" | sed 's|^admin-panel/||' | (cd admin-panel && xargs gofmt -w)
+    (cd admin-panel && go vet ./...)
+    echo "$ADMIN_PANEL_GO" | xargs git add
+  else
+    echo "Skipping admin-panel checks (go not installed)"
   fi
 fi
 

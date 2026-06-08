@@ -1,6 +1,12 @@
-FROM directus/directus:11.5.1
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /admin ./cmd/admin
 
-ENV DB_CLIENT=pg
-
-COPY --chown=node:node extensions ./extensions
-COPY --chown=node:node uploads ./uploads
+FROM gcr.io/distroless/static:nonroot
+COPY --from=build /admin /admin
+EXPOSE 8055
+USER nonroot:nonroot
+ENTRYPOINT ["/admin"]

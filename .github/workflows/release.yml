@@ -7,10 +7,19 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+    with:
+      run_all: true
+    secrets: inherit
+
   release:
     name: Release & Publish to npm
+    needs: ci
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -69,15 +78,8 @@ jobs:
       - name: Set version from tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
 
-      - name: Configure git for tests
-        run: |
-          git config --global user.name "CI"
-          git config --global user.email "ci@projx.dev"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec eslint 'src/**/*.ts'
-      - run: pnpm exec tsc --noEmit
       - run: pnpm build
-      - run: pnpm test
       - run: pnpm publish --access public --tag ${{ steps.prerelease.outputs.npm_tag }} --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

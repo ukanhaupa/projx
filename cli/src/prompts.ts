@@ -19,7 +19,7 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   infra: { label: 'Infrastructure', hint: 'Terraform + AWS' },
   'admin-panel': {
     label: 'Admin Panel',
-    hint: 'Directus — instant admin over Postgres (Docker)',
+    hint: 'Go + HTMX — auth-gated table browser over any Postgres',
   },
 };
 

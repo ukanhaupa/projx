@@ -28,7 +28,7 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 | **<%= paths.infra %>/** | Terraform, AWS (EKS, RDS, VPC, CodePipeline) |
 <% } %>
 <% if (components.includes('admin-panel')) { %>
-| **<%= paths['admin-panel'] %>/** | Directus admin panel over Postgres |
+| **<%= paths['admin-panel'] %>/** | Go + HTMX admin panel — auth-gated table browser over Postgres |
 <% } %>
 | **Identity** | OIDC / JWT |
 | **Containers** | Docker, Docker Compose |
@@ -91,7 +91,7 @@ cd <%= paths.mobile %> && cp .env.example .env && flutter pub get && flutter run
 ### <%= paths['admin-panel'] %>/
 
 ```bash
-cd <%= paths['admin-panel'] %> && cp .env.example .env   # set KEY, SECRET, ADMIN_PASSWORD, DB_*
+cd <%= paths['admin-panel'] %> && cp .env.example .env   # set DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose up --build <%= paths['admin-panel'] %>
 ```
 <% if (components.includes('frontend')) { %>
