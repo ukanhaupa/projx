@@ -2,9 +2,9 @@
 # Enforces line-coverage threshold against coverage/lcov.info.
 # Usage: bash scripts/check-coverage.sh [threshold]
 #
-# Excludes integration-only files from the unit-coverage gate:
+# Excludes only code that cannot be unit-tested:
 #   - generated code (*.g.dart, *.freezed.dart)
-#   - Isar storage layer (entities/base/offline/) — needs in-memory Isar
+#   - generated localizations (l10n/)
 #   - app entry points (main.dart, app.dart)
 #
 set -euo pipefail
@@ -17,7 +17,7 @@ if [ ! -f "$LCOV" ]; then
   exit 1
 fi
 
-EXCLUDE_PATTERNS='\.g\.dart$|\.freezed\.dart$|/entities/base/offline/|/main\.dart$|/app\.dart$|/core/providers/core_providers\.dart$|/core/network/.*_interceptor\.dart$|/entities/base/base_repository\.dart$|/entities/base/entity_providers\.dart$'
+EXCLUDE_PATTERNS='\.g\.dart$|\.freezed\.dart$|/l10n/|/main\.dart$|/app\.dart$'
 
 LF=$(awk -v exc="$EXCLUDE_PATTERNS" '
   /^SF:/ { skip = ($0 ~ exc); next }

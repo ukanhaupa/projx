@@ -1,0 +1,54 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Admin</title>
+  <link rel="stylesheet" href="{{.Base}}/static/style.css">
+  <script src="{{.Base}}/static/htmx.min.js" defer></script>
+  <script src="{{.Base}}/static/admin.js" defer></script>
+</head>
+<body class="{{if .WriteMode}}write-mode{{end}}">
+  <header class="topbar">
+    <a class="brand" href="{{.Base}}/">Admin</a>
+    {{if .User}}
+    {{if .Schemas}}
+    <form method="post" action="{{.Base}}/schema" class="schema-form">
+      <label for="schema-select" class="muted">Schema</label>
+      <select id="schema-select" name="schema" class="schema-auto-submit">
+        {{range .Schemas}}<option value="{{.}}" {{if eq . $.Schema}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <noscript><button type="submit">Switch</button></noscript>
+    </form>
+    {{end}}
+    {{if .CanWrite}}
+    <form method="post" action="{{.Base}}/mode" class="mode-form">
+      {{if .WriteMode}}
+        <input type="hidden" name="write" value="off">
+        <button type="submit" class="mode-btn mode-on" title="Switch back to read-only">Write mode: ON</button>
+      {{else}}
+        <input type="hidden" name="write" value="on">
+        <button type="submit" class="mode-btn mode-off" title="Enable editing (30-min window)">Read-only — enable write</button>
+      {{end}}
+    </form>
+    {{else}}
+    <span class="badge">read-only account</span>
+    {{end}}
+    <button type="button" class="density-toggle">Density</button>
+    <span class="user">{{.User}}</span>
+    <form method="post" action="{{.Base}}/logout" class="logout"><button type="submit">Log out</button></form>
+    {{end}}
+  </header>
+  {{if .WriteMode}}
+  <div class="write-banner" role="alert">
+    <strong>WRITE MODE</strong>
+    <span>Changes are live{{if .WriteExpires}} · auto-revert at {{.WriteExpires}}{{end}}.</span>
+    <form method="post" action="{{.Base}}/mode" class="inline">
+      <input type="hidden" name="write" value="off">
+      <button type="submit">Switch back to read-only</button>
+    </form>
+  </div>
+  {{end}}
+  <main>{{template "content" .}}</main>
+</body>
+</html>{{end}}

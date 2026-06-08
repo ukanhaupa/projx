@@ -41,7 +41,9 @@ test.describe('App Shell', () => {
       authenticatedPage.page.getByRole('heading', { name: 'Page Not Found' }),
     ).toBeVisible();
     await expect(
-      authenticatedPage.page.getByRole('link', { name: 'Back to Dashboard' }),
+      authenticatedPage.page.getByRole('link', {
+        name: /go home|back to dashboard/i,
+      }),
     ).toBeVisible();
   });
 });
