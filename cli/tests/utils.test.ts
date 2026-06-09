@@ -14,9 +14,24 @@ import {
   replaceInDir,
   detectPackageManager,
   pmCommands,
+  suggestComponent,
   COMPONENT_MARKER,
   type Component,
 } from '../src/utils.js';
+
+describe('suggestComponent', () => {
+  it('suggests the closest component for a near-miss typo', () => {
+    expect(suggestComponent('admiin-panel')).toBe('admin-panel');
+    expect(suggestComponent('frontnd')).toBe('frontend');
+    expect(suggestComponent('fastapy')).toBe('fastapi');
+    expect(suggestComponent('FASTIFY')).toBe('fastify');
+  });
+
+  it('returns null when nothing is close enough', () => {
+    expect(suggestComponent('kubernetes')).toBeNull();
+    expect(suggestComponent('xyz')).toBeNull();
+  });
+});
 
 describe('toKebab', () => {
   it('converts camelCase', () => {

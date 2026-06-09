@@ -91,15 +91,21 @@ describe('parseArgs', () => {
     expect(parsed.name).toBe('my-app');
   });
 
-  it('parses --components and filters invalid entries', () => {
+  it('parses a valid --components list', () => {
     expect(parseArgs(['--components', 'fastify,frontend,e2e']).options).toEqual(
       {
         components: ['fastify', 'frontend', 'e2e'],
       },
     );
-    expect(
-      parseArgs(['--components', 'fastify,bogus']).options.components,
-    ).toEqual(['fastify']);
+  });
+
+  it('throws on an unknown --components entry with a suggestion', () => {
+    expect(() => parseArgs(['--components', 'fastify,admiin-panel'])).toThrow(
+      /admiin-panel \(did you mean admin-panel\?\)/,
+    );
+    expect(() => parseArgs(['--components', 'bogusxyz'])).toThrow(
+      /Invalid --components/,
+    );
   });
 
   it('ignores --components with no value', () => {
@@ -270,13 +276,25 @@ describe('main dispatch', () => {
     );
   });
 
-  it('exits 1 when add has no valid components', async () => {
+  it('exits 2 with a suggestion when add gets an unknown component', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => {}) as never);
-    await runMain(['add', 'bogus']);
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await runMain(['add', 'admiin-panel']);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('did you mean admin-panel?'),
+    );
+  });
+
+  it('exits 2 when add is given no components at all', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => {}) as never);
+    await runMain(['add']);
+    expect(exitSpy).toHaveBeenCalledWith(2);
     expect(errSpy).toHaveBeenCalled();
   });
 
