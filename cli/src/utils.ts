@@ -30,6 +30,43 @@ export const COMPONENTS = [
 
 export type Component = (typeof COMPONENTS)[number];
 
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dist = Array.from({ length: rows }, () =>
+    new Array<number>(cols).fill(0),
+  );
+  for (let i = 0; i < rows; i++) dist[i][0] = i;
+  for (let j = 0; j < cols; j++) dist[0][j] = j;
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dist[i][j] = Math.min(
+        dist[i - 1][j] + 1,
+        dist[i][j - 1] + 1,
+        dist[i - 1][j - 1] + cost,
+      );
+    }
+  }
+  return dist[a.length][b.length];
+}
+
+export function suggestComponent(input: string): Component | null {
+  const needle = input.toLowerCase();
+  let best: Component | null = null;
+  let bestDistance = Infinity;
+  for (const c of COMPONENTS) {
+    const d = editDistance(needle, c);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = c;
+    }
+  }
+  if (best === null) return null;
+  const maxAllowed = Math.min(3, Math.floor(best.length / 2));
+  return bestDistance <= maxAllowed ? best : null;
+}
+
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 
