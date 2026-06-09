@@ -6,6 +6,7 @@ import {
   COMPONENTS,
   KNOWN_FEATURES,
   ORM_PROVIDERS,
+  suggestComponent,
   type Component,
   type Feature,
   type OrmProvider,
@@ -120,9 +121,22 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
     if (arg === '--components') {
       const val = args[++i];
       if (val) {
-        options.components = val
-          .split(',')
-          .filter((c): c is Component => COMPONENTS.includes(c as Component));
+        const requested = val.split(',').map((c) => c.trim());
+        const invalid = requested.filter(
+          (c) => !COMPONENTS.includes(c as Component),
+        );
+        if (invalid.length > 0) {
+          const hints = invalid
+            .map((c) => {
+              const guess = suggestComponent(c);
+              return guess ? `${c} (did you mean ${guess}?)` : c;
+            })
+            .join(', ');
+          throw new Error(
+            `Invalid --components: ${hints}. Available: ${COMPONENTS.join(', ')}`,
+          );
+        }
+        options.components = requested as Component[];
       }
       continue;
     }
@@ -276,14 +290,29 @@ async function main(): Promise<void> {
   }
 
   if (command === 'add') {
-    const components = extraArgs.filter((c): c is Component =>
+    const positionals = extraArgs.filter((a) => !a.startsWith('-'));
+    const components = positionals.filter((c): c is Component =>
       COMPONENTS.includes(c as Component),
     );
+    const unknown = positionals.filter(
+      (c) => !COMPONENTS.includes(c as Component),
+    );
+    if (unknown.length > 0) {
+      for (const u of unknown) {
+        const guess = suggestComponent(u);
+        console.error(
+          guess
+            ? `Error: unknown component ${u} — did you mean ${guess}?`
+            : `Error: unknown component ${u}. Available: ${COMPONENTS.join(', ')}`,
+        );
+      }
+      process.exit(2);
+    }
     if (components.length === 0) {
       console.error(
         `Error: specify components to add. Available: ${COMPONENTS.join(', ')}`,
       );
-      process.exit(1);
+      process.exit(2);
     }
     const customName = extraArgs
       .find((a) => a.startsWith('--name='))

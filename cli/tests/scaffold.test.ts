@@ -103,6 +103,9 @@ describe('scaffold', () => {
 
     const ciLocal = await readFile(join(dest, 'scripts/ci-local.sh'), 'utf-8');
     expect(ciLocal).toContain('run_js_component express');
+    expect(ciLocal).toContain('gitleaks (tracked + untracked)');
+    expect(ciLocal).toContain('--source "$ROOT_DIR"');
+    expect(ciLocal).not.toContain('--files-from=-');
 
     const readme = await readFile(join(dest, 'README.md'), 'utf-8');
     expect(readme).toContain('Express 5, TypeScript');

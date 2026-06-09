@@ -99,11 +99,10 @@ describe('admin-panel component', () => {
     );
 
     const nginx = await readFile(join(dest, 'frontend/nginx.conf'), 'utf-8');
-    expect(nginx).toContain('location /admin/');
+    expect(nginx).toContain('location ^~ /admin/');
     expect(nginx).toContain('set $admin_panel_upstream admin-panel;');
-    expect(nginx).toContain(
-      'proxy_pass http://$admin_panel_upstream:8055/admin/;',
-    );
+    expect(nginx).toContain('proxy_pass http://$admin_panel_upstream:8055;');
+    expect(nginx).toContain('proxy_set_header X-Forwarded-Prefix /admin;');
   });
 
   it('emits an admin-panel setup block and README entry', async () => {
