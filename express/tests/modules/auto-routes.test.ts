@@ -193,7 +193,7 @@ describe('Express registerEntityRoutes', () => {
     const { app } = buildRouteApp();
     const res = await request(app).post('/api/v1/widgets').send({});
     expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('validation_error');
+    expect(res.body.code).toBe('validation_error');
   });
 
   it('maps duplicate Prisma errors to 409', async () => {
@@ -219,7 +219,7 @@ describe('Express registerEntityRoutes', () => {
       .send({ name: 'second', code: 'W1' });
 
     expect(duplicate.status).toBe(409);
-    expect(duplicate.body.error).toMatchObject({
+    expect(duplicate.body).toMatchObject({
       code: 'conflict',
       target: ['code'],
     });
@@ -413,7 +413,7 @@ describe('Express registerEntityRoutes', () => {
         '/api/v1/widgets/00000000-0000-0000-0000-000000000000',
       );
       expect(res.status).toBe(404);
-      expect(res.body.error.code).toBe('not_found');
+      expect(res.body.code).toBe('not_found');
     });
 
     it('PATCH /:id returns 400 when the body is empty', async () => {
@@ -425,7 +425,7 @@ describe('Express registerEntityRoutes', () => {
         .patch(`/api/v1/widgets/${created.body.id}`)
         .send({});
       expect(res.status).toBe(400);
-      expect(res.body.error.code).toBe('empty_body');
+      expect(res.body.code).toBe('empty_body');
     });
 
     it('PATCH /:id returns 422 when the payload fails validation', async () => {
@@ -437,7 +437,7 @@ describe('Express registerEntityRoutes', () => {
         .patch(`/api/v1/widgets/${created.body.id}`)
         .send({ name: 123 });
       expect(res.status).toBe(422);
-      expect(res.body.error.code).toBe('validation_error');
+      expect(res.body.code).toBe('validation_error');
     });
   });
 
@@ -448,7 +448,7 @@ describe('Express registerEntityRoutes', () => {
         .post('/api/v1/widgets/bulk')
         .send({ items: [{ name: 123 }] });
       expect(res.status).toBe(422);
-      expect(res.body.error.code).toBe('validation_error');
+      expect(res.body.code).toBe('validation_error');
     });
 
     it('DELETE /bulk removes the requested ids', async () => {
@@ -472,7 +472,7 @@ describe('Express registerEntityRoutes', () => {
         .delete('/api/v1/widgets/bulk')
         .send({ ids: ['not-a-uuid'] });
       expect(res.status).toBe(422);
-      expect(res.body.error.code).toBe('validation_error');
+      expect(res.body.code).toBe('validation_error');
     });
 
     it('POST /bulk returns 404 when bulkOperations is disabled', async () => {

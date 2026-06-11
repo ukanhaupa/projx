@@ -22,6 +22,9 @@ type AsyncHandler = (
   next: NextFunction,
 ) => Promise<void>;
 
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
+
 function asyncHandler(handler: AsyncHandler) {
   return (req: Request, res: Response, next: NextFunction): void => {
     handler(req, res, next).catch(next);
@@ -32,8 +35,11 @@ function parseRawQuery(req: Request): QueryParams {
   const rawUrl = new URL(req.originalUrl, 'http://localhost');
   const page = Math.max(1, Number(rawUrl.searchParams.get('page')) || 1);
   const pageSize = Math.min(
-    100,
-    Math.max(1, Number(rawUrl.searchParams.get('page_size')) || 10),
+    MAX_PAGE_SIZE,
+    Math.max(
+      1,
+      Number(rawUrl.searchParams.get('page_size')) || DEFAULT_PAGE_SIZE,
+    ),
   );
 
   const result: QueryParams = {
@@ -57,7 +63,7 @@ function parseBody(
   schema: EntitySchema,
   body: unknown,
 ): Record<string, unknown> {
-  const result = schema.safeParse(body);
+  const result = schema.strict().safeParse(body);
   if (!result.success) {
     throw new ApiError(422, z.prettifyError(result.error), 'validation_error');
   }
@@ -136,7 +142,8 @@ export function registerEntityRoutes(
       '/bulk',
       asyncHandler(async (req, res) => {
         const result = z
-          .object({ items: z.array(entityConfig.createSchema) })
+          .object({ items: z.array(entityConfig.createSchema.strict()) })
+          .strict()
           .safeParse(req.body);
         if (!result.success) {
           throw new ApiError(
@@ -154,7 +161,7 @@ export function registerEntityRoutes(
         const created = await service.bulkCreate(
           result.data.items as Record<string, unknown>[],
         );
-        res.status(201).json({ data: created, count: created.count });
+        res.status(201).json({ count: created.count });
       }),
     );
 
@@ -163,6 +170,7 @@ export function registerEntityRoutes(
       asyncHandler(async (req, res) => {
         const result = z
           .object({ ids: z.array(z.string().uuid()) })
+          .strict()
           .safeParse(req.body);
         if (!result.success) {
           throw new ApiError(

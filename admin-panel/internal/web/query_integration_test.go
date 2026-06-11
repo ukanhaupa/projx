@@ -51,7 +51,7 @@ func queryPool(t *testing.T) *pgxpool.Pool {
 func TestSearchFiltersTextColumns(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/customers?q=alpha", token).Body.String()
 	if !strings.Contains(body, "Alpha Industries") {
@@ -65,7 +65,7 @@ func TestSearchFiltersTextColumns(t *testing.T) {
 func TestFilterEqualOperator(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/customers?f.tier.eq=gold", token).Body.String()
 	if !strings.Contains(body, "Alpha Industries") || !strings.Contains(body, "Gamma Ltd") {
@@ -79,7 +79,7 @@ func TestFilterEqualOperator(t *testing.T) {
 func TestFilterGreaterThan(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/orders?f.amount.gt=500", token).Body.String()
 	if !strings.Contains(body, "9999") {
@@ -93,7 +93,7 @@ func TestFilterGreaterThan(t *testing.T) {
 func TestFilterIsNull(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/customers?f.tier.is_null=1", token).Body.String()
 	if !strings.Contains(body, "No rows") {
@@ -104,7 +104,7 @@ func TestFilterIsNull(t *testing.T) {
 func TestSortDescendingByColumn(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/customers?sort=-name", token).Body.String()
 	gIdx := strings.Index(body, "Gamma Ltd")
@@ -117,7 +117,7 @@ func TestSortDescendingByColumn(t *testing.T) {
 func TestUnknownSortColumnRejected(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/customers?sort=injected_col", token)
 	if rec.Code != http.StatusBadRequest {
@@ -128,7 +128,7 @@ func TestUnknownSortColumnRejected(t *testing.T) {
 func TestUnknownFilterColumnRejected(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/customers?f.bogus.eq=value", token)
 	if rec.Code != http.StatusBadRequest {
@@ -139,7 +139,7 @@ func TestUnknownFilterColumnRejected(t *testing.T) {
 func TestTotalCountReflectsFilters(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/customers", token).Body.String()
 	if !strings.Contains(body, "4 rows") {
@@ -154,7 +154,7 @@ func TestTotalCountReflectsFilters(t *testing.T) {
 func TestForeignKeyRendersAsLink(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/tables/orders", token).Body.String()
 	if !strings.Contains(body, `class="fk-link"`) {
@@ -168,7 +168,7 @@ func TestForeignKeyRendersAsLink(t *testing.T) {
 func TestCSVExport(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/customers.csv?f.tier.eq=gold", token)
 	if rec.Code != http.StatusOK {
@@ -192,7 +192,7 @@ func TestCSVExport(t *testing.T) {
 func TestAuditLogRecordsWrites(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	create := authedPost(h, "/admin/tables/customers/new", token,
@@ -215,7 +215,7 @@ func TestAuditLogRecordsWrites(t *testing.T) {
 func TestAuditLogChainsHashes(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	for i := 0; i < 3; i++ {
@@ -258,7 +258,7 @@ func TestAuditLogChainsHashes(t *testing.T) {
 func TestAuditLogStripsRoleOnSelf(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	var selfID int64
@@ -290,7 +290,7 @@ func TestAuditLogStripsRoleOnSelf(t *testing.T) {
 func TestAddFilterRedirectAppendsToURL(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/customers/_filter?filter_col=tier&filter_op=eq&filter_val=gold", token)
 	if rec.Code != http.StatusSeeOther {
@@ -305,7 +305,7 @@ func TestAddFilterRedirectAppendsToURL(t *testing.T) {
 func TestAddFilterRejectsUnknownColumn(t *testing.T) {
 	pool := queryPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/customers/_filter?filter_col=injected&filter_op=eq&filter_val=x", token)
 	if rec.Code != http.StatusBadRequest {

@@ -28,8 +28,9 @@ pnpm dev
 
 The server starts at `http://localhost:3000` by default.
 
-- Swagger UI: `http://localhost:3000/docs`
-- Health check: `GET /api/health`
+- Swagger UI: `http://localhost:3000/docs` (only when `EXPOSE_API_DOCS=true`)
+- Liveness: `GET /api/health/live` (process only, no database)
+- Readiness: `GET /api/health/ready` (checks the database); `GET /api/health` is an alias
 
 ## Project Structure
 

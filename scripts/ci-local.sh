@@ -59,7 +59,7 @@ cleanup() {
     kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
     pkill -TERM -P "$pid" 2>/dev/null || true
   done
-  pkill -f "tsx.*src/server\\.ts" 2>/dev/null || true
+  pkill -f "$ROOT_DIR/[^ ]*.*tsx.*src/server\\.ts" 2>/dev/null || true
   rm -rf "$LOGS_DIR"
   rm -rf "$ROOT_DIR"/*/coverage-ci-* 2>/dev/null || true
 }
@@ -146,7 +146,8 @@ run_js_component() {
       run_step "$dir drizzle push" pm_exec drizzle-kit push --force
     fi
     run_step "$dir format" pm_exec prettier --write .
-    run_step "$dir lint" pm_exec eslint .
+    run_step "$dir lint" pm_exec eslint . --fix
+    git diff --quiet -- . || warn "$dir: formatters/linters rewrote files — commit them before push (CI checks, doesn't fix)"
     run_step "$dir typecheck" pm_exec tsc --noEmit
     if [ -f package.json ] && node -e "const p=require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
       run_step "$dir build" pm_run build
@@ -158,16 +159,39 @@ run_js_component() {
   )
 }
 
+ensure_gitleaks() {
+  local version="8.21.2"
+  local cache_dir="${HOME}/.cache/ci-local"
+  GITLEAKS_BIN="$cache_dir/gitleaks-${version}"
+  [ -x "$GITLEAKS_BIN" ] && return 0
+  command -v curl >/dev/null 2>&1 || { xfail "curl required to fetch gitleaks"; return 1; }
+  command -v tar >/dev/null 2>&1 || { xfail "tar required to fetch gitleaks"; return 1; }
+  mkdir -p "$cache_dir"
+  local os arch
+  os=$(uname -s | tr '[:upper:]' '[:lower:]')
+  case "$(uname -m)" in
+    arm64 | aarch64) arch="arm64" ;;
+    x86_64) arch="x64" ;;
+    *)
+      xfail "unsupported arch for gitleaks: $(uname -m)"
+      return 1
+      ;;
+  esac
+  curl -sSL -o "$cache_dir/gitleaks.tar.gz" \
+    "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_${os}_${arch}.tar.gz"
+  tar -xzf "$cache_dir/gitleaks.tar.gz" -C "$cache_dir" gitleaks
+  mv "$cache_dir/gitleaks" "$GITLEAKS_BIN"
+  chmod +x "$GITLEAKS_BIN"
+  rm -f "$cache_dir/gitleaks.tar.gz"
+}
+
 sec_secrets() {
   cd "$ROOT_DIR" || exit 1
-  if ! command -v gitleaks >/dev/null 2>&1; then
-    warn "gitleaks not installed — skipping secret scan (install via 'brew install gitleaks' or download a release)"
-    return 0
-  fi
+  ensure_gitleaks || return 1
   local cfg="$ROOT_DIR/.gitleaks.toml"
   local args=(detect --no-banner --no-git --redact)
   [ -f "$cfg" ] && args+=(--config "$cfg")
-  run_step "gitleaks (tracked + untracked)" gitleaks "${args[@]}" --source "$ROOT_DIR"
+  run_step "gitleaks (tracked + untracked)" "$GITLEAKS_BIN" "${args[@]}" --source "$ROOT_DIR"
 }
 
 sec_fastapi() {
@@ -186,7 +210,8 @@ sec_cli() {
   cd "$ROOT_DIR/cli" || exit 1
   run_step "cli install" pm_install
   run_step "cli format" pm_exec prettier --write .
-  run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts'
+  run_step "cli lint" pm_exec eslint 'src/**/*.ts' 'tests/**/*.ts' --fix
+  git diff --quiet -- . || warn "cli: formatters/linters rewrote files — commit them before push (CI checks, doesn't fix)"
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
   run_step "cli tests" pm_exec vitest run --coverage --coverage.reportsDirectory="coverage-ci-$$"
@@ -194,7 +219,58 @@ sec_cli() {
 }
 
 sec_fastify() { run_js_component fastify; }
-sec_express() { run_js_component express; }
+
+express_boot_smoke() {
+  cd "$ROOT_DIR/express" || exit 1
+  [ -f .env.test ] || {
+    xfail "express/.env.test missing — cannot boot express for smoke"
+    return 1
+  }
+  command -v curl >/dev/null 2>&1 || {
+    xfail "curl required for express boot smoke"
+    return 1
+  }
+  if [ -f prisma/schema.prisma ]; then
+    run_step "express prisma db push" bash -c \
+      "set -a; . ./.env.test; set +a; $(declare -f pm_exec detect_pm); pm_exec prisma db push --skip-generate --accept-data-loss"
+  elif [ -f drizzle.config.ts ]; then
+    run_step "express drizzle push" bash -c \
+      "set -a; . ./.env.test; set +a; $(declare -f pm_exec detect_pm); pm_exec drizzle-kit push --force"
+  elif [ -f scripts/db-sync.ts ]; then
+    run_step "express db sync" bash -c \
+      "set -a; . ./.env.test; set +a; $(declare -f pm_exec detect_pm); pm_exec tsx scripts/db-sync.ts"
+  fi
+  local port
+  port="$(pick_free_port)"
+  printf '\n==> %s\n' "express boot smoke (:$port/api/health)"
+  start_background "express-boot" bash -c \
+    "cd '$ROOT_DIR/express' && set -a && . ./.env.test && set +a && $(declare -f pm_exec detect_pm); PORT='$port' HOST='127.0.0.1' pm_exec tsx src/server.ts"
+  local boot_pid="$LAST_PID"
+  local tries=60
+  local rc=0
+  until curl -fsS "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; do
+    if ! kill -0 "$boot_pid" 2>/dev/null; then
+      xfail "express boot smoke: server exited before becoming healthy"
+      tail -25 "$LOGS_DIR/express-boot.log" >&2 || true
+      return 1
+    fi
+    tries=$((tries - 1))
+    if [ "$tries" -le 0 ]; then
+      xfail "express boot smoke: never healthy on :$port/api/health"
+      tail -25 "$LOGS_DIR/express-boot.log" >&2 || true
+      rc=1
+      break
+    fi
+    sleep 1
+  done
+  kill -- "-$boot_pid" 2>/dev/null || kill "$boot_pid" 2>/dev/null || true
+  return "$rc"
+}
+
+sec_express() {
+  run_js_component express || return 1
+  express_boot_smoke
+}
 
 sec_frontend() {
   run_js_component frontend
@@ -299,14 +375,14 @@ sec_e2e() {
     cd "$ROOT_DIR/frontend" || exit 1
     run_step "frontend install (e2e)" pm_install
     run_step "frontend build (e2e)" bash -c \
-      "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' pm_exec vite build"
+      "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' pm_exec vite build --outDir dist-e2e"
   ) || {
     kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
     return 1
   }
 
   start_background "e2e-frontend" bash -c \
-    "cd '$ROOT_DIR/frontend' && $(declare -f pm_exec detect_pm); pm_exec vite preview --host 127.0.0.1 --port '$frontend_port' --strictPort"
+    "cd '$ROOT_DIR/frontend' && $(declare -f pm_exec detect_pm); pm_exec vite preview --outDir dist-e2e --host 127.0.0.1 --port '$frontend_port' --strictPort"
   local frontend_pid="$LAST_PID"
 
   if command -v curl >/dev/null 2>&1; then
@@ -329,7 +405,8 @@ sec_e2e() {
     run_step "e2e install" pm_install
     run_step "e2e playwright install" pm_exec playwright install --with-deps chromium firefox webkit
     run_step "e2e format" pm_exec prettier --write .
-    run_step "e2e lint" pm_exec eslint '**/*.ts'
+    run_step "e2e lint" pm_exec eslint '**/*.ts' --fix
+    git diff --quiet -- . || warn "e2e: formatters/linters rewrote files — commit them before push (CI checks, doesn't fix)"
     run_step "e2e typecheck" pm_exec tsc --noEmit
     export CI=1
     export BASE_URL="http://127.0.0.1:$frontend_port"
@@ -364,12 +441,14 @@ sec_mobile() {
   run_step "mobile analyze" dart analyze --fatal-infos
   run_step "mobile tests" flutter test --coverage
   run_step "mobile coverage" bash scripts/check-coverage.sh 80
+  warn "mobile integration_test SKIPPED — requires a connected device or simulator."
+  warn "Run manually: cd mobile && flutter test integration_test/"
 }
 
 sec_admin_panel() {
   cd "$ROOT_DIR/admin-panel" || exit 1
   if ! command -v go >/dev/null 2>&1; then
-    warn "go not installed — skipping admin-panel section (install via 'brew install go')"
+    warn "go not installed — skipping admin-panel section (install Go from go.dev)"
     return 0
   fi
   run_step "admin-panel gofmt" bash scripts/check-gofmt.sh
@@ -491,7 +570,7 @@ run_wave() {
       xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
       exit 2
     fi
-    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background xfail warn); $fn"
+    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background ensure_gitleaks xfail warn express_boot_smoke pick_free_port); $fn"
     NAMES+=("$s")
     printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
   done

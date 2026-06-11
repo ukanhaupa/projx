@@ -1,0 +1,64 @@
+# <%= displayName %> Runbook
+
+Single source of truth for production recovery, deploys, rollbacks, and incident response.
+
+## Architecture at a glance
+
+- Single EC2 (Ubuntu 24.04, `<%= awsRegion %>`) running Docker Compose
+- RDS Postgres, isolated subnets, PITR enabled, `deletion_protection=true`
+- Container registry: ECR
+- IaC: Terraform in [`infra/`](infra/), state in S3 + DynamoDB lock
+
+## Deploy
+
+GitHub Actions builds + pushes ECR + SSM SendCommand to the EC2. Operator runs migrate by hand:
+
+```
+aws ssm start-session --target $EC2_INSTANCE_ID
+cd /opt/<%= projectName %>
+docker compose run --rm migrate
+```
+
+## Rollback (target RTO < 2 minutes)
+
+1. Pick last-known-good `main-<sha>` tag in ECR.
+2. `scripts/rollback.sh <sha>` — re-tags ECR + SSM-invokes deploy.
+3. `curl https://<%= productionDomain %>/api/health` must return 200.
+
+## DB restore (point-in-time)
+
+Last tested: not yet rehearsed.
+
+```
+aws rds restore-db-instance-to-point-in-time \
+  --source-db-instance-identifier <%= projectName %>-1 \
+  --target-db-instance-identifier <%= projectName %>-1-restore-$(date +%Y%m%d) \
+  --restore-time <iso8601-utc>
+```
+
+Then update `/<%= projectName %>/backend/env` `DATABASE_URL` SSM parameter; `docker compose restart backend`.
+
+## Certificate renewal
+
+Let's Encrypt via certbot at `/etc/cron.d/<%= projectName %>-certbot`, daily 03:00.
+
+## Incident channels
+
+- Internal alarms: `<%= projectName %>-alerts` SNS topic (subscribe via `var.alert_emails`)
+- Application crashes: Sentry (Node backends: `service_configs` row with purpose `sentry`; FastAPI/frontend: `SENTRY_DSN` / `VITE_SENTRY_DSN` env)
+- Customer-facing: TBD
+
+## Known recovery cliffs (open items)
+
+- **Single-AZ RDS** — failover takes minutes until `multi_az=true` flipped.
+- **DR untested** — restore procedure above is theoretical until rehearsed.
+- **`docker container prune` + `docker image prune -a` on every deploy** — `scripts/deploy.sh` aggressively cleans the local Docker store after each successful deploy. This keeps the disk small but means **rollback to a previous image always requires a fresh `docker pull`** rather than a local-cache hit. On a slow link or during a registry outage that blocks the pull, rollback time stretches by however long the pull takes. If the rollback target is more than two deploys old it will not be in the registry's hot cache either. **Mitigation:** for the highest-risk deploys (database migrations, auth surface, payment paths), keep the previous container running on a parallel port for the first 15 minutes post-deploy so an in-place revert does not need any pull at all. Skip the prune step on the deploy host for those windows.
+
+## Common ops
+
+| Task                       | Command                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| SSH-equivalent             | `aws ssm start-session --target $EC2_INSTANCE_ID`                                    |
+| Tail backend logs          | `docker logs --tail 200 -f backend`                                                  |
+| Run a one-off migration    | `docker compose run --rm migrate`                                                    |
+| Re-issue certbot           | `sudo certbot certonly --nginx --keep-until-expiring -d <%= productionDomain %>`     |

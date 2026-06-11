@@ -2,5 +2,5 @@
   "type": "text",
   "file": "src/app.ts",
   "anchor": "// projx-anchor: plugins",
-  "insert": "  app.use('/auth', authRouter(app.locals.sequelize));\n  initMailer(() => getServiceConfig(app.locals.sequelize, 'smtp'), { info: console.log, warn: console.warn, error: console.error }).catch((err) => console.error('initMailer failed', err));\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(app.locals.sequelize, { info: console.log, warn: console.warn, error: console.error });\n  }\n"
+  "insert": "  app.use('/auth', authRouter(app.locals.sequelize));\n  initMailer(\n    () => getServiceConfig(app.locals.sequelize, SMTP_PURPOSE),\n    { info: console.log, warn: console.warn, error: console.error },\n  ).catch((err) => console.error('initMailer failed', err));\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(app.locals.sequelize, {\n      info: console.log,\n      warn: console.warn,\n      error: console.error,\n    });\n  }\n"
 }

@@ -1,4 +1,8 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyReply,
+} from 'fastify';
 import prismaPlugin from '../../src/plugins/prisma.js';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
@@ -40,20 +44,26 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   );
 
   app.get(
-    '/api/health',
+    '/api/health/live',
     { config: { public: true } },
-    async (_request, reply) => {
-      const checks: Record<string, string> = { app: 'ok' };
-      try {
-        await app.prisma.$queryRaw`SELECT 1`;
-        checks.database = 'ok';
-      } catch (e) {
-        checks.database = `error: ${e instanceof Error ? e.message : String(e)}`;
-        return reply.status(503).send({ status: 'unhealthy', checks });
-      }
-      return reply.send({ status: 'healthy', checks });
-    },
+    async (_request, reply) => reply.send({ status: 'healthy' }),
   );
+
+  const readiness = async (request: FastifyRequest, reply: FastifyReply) => {
+    const checks: Record<string, string> = { app: 'ok' };
+    try {
+      await app.prisma.$queryRaw`SELECT 1`;
+      checks.database = 'ok';
+    } catch (e) {
+      request.log.error({ err: e }, 'readiness database check failed');
+      checks.database = 'error';
+      return reply.status(503).send({ status: 'unhealthy', checks });
+    }
+    return reply.send({ status: 'healthy', checks });
+  };
+
+  app.get('/api/health/ready', { config: { public: true } }, readiness);
+  app.get('/api/health', { config: { public: true } }, readiness);
 
   await app.ready();
   return app;

@@ -1,9 +1,8 @@
 from typing import Any, Generic, TypeVar, cast
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 from starlette.responses import Response
-from starlette.status import HTTP_201_CREATED
 
 from src.middlewares import compute_scope_filters
 
@@ -21,10 +20,8 @@ class BaseController(Generic[ServiceT]):
         self.router = APIRouter()
         self.service = cast("ServiceT", cast("Any", service)())
 
-        self.router.post("/", status_code=HTTP_201_CREATED)(self.create)
         self.router.get("/")(self.list)
         self.router.get("/{id}")(self.get)
-        self.router.patch("/{id}")(self.patch)
         self.router.delete("/{id}")(self.delete)
 
     def _service(self) -> ServiceT:
@@ -48,7 +45,7 @@ class BaseController(Generic[ServiceT]):
             return items
         return await ExpandResolver.resolve(items, expand_fields, self._service().repository.model)
 
-    async def create(self, request: Request, data: dict = Body(...)):
+    async def create(self, request: Request, data: dict):
         logger.debug(f"{self._service().repository.model.__name__}: Create called")
         service = self._service()
         scope_filters = await self._get_scope_filters(request)
@@ -107,7 +104,7 @@ class BaseController(Generic[ServiceT]):
             return data[0]
         return result
 
-    async def patch(self, id: int, request: Request, data: dict = Body(...)):
+    async def patch(self, id: int, request: Request, data: dict):
         logger.debug(f"{self._service().repository.model.__name__}: Patch id: {id}")
         service = self._service()
         if not data:

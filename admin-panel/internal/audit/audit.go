@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,24 +46,26 @@ func (l *Logger) Log(ctx context.Context, e Entry) error {
 		return err
 	}
 
-	var prevHash *string
-	var prev string
-	err = l.pool.QueryRow(ctx,
-		`SELECT row_hash FROM admin_panel.write_audit_log ORDER BY id DESC LIMIT 1`,
-	).Scan(&prev)
-	if err == nil {
-		prevHash = &prev
-	}
+	return pgx.BeginTxFunc(ctx, l.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
+		var prevHash *string
+		var prev string
+		err := tx.QueryRow(ctx,
+			`SELECT row_hash FROM admin_panel.write_audit_log ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+		).Scan(&prev)
+		if err == nil {
+			prevHash = &prev
+		}
 
-	rowHash := computeHash(prevHash, e, oldJSON, newJSON)
+		rowHash := computeHash(prevHash, e, oldJSON, newJSON)
 
-	_, err = l.pool.Exec(ctx, `
-		INSERT INTO admin_panel.write_audit_log
-		  (performed_by, table_schema, table_name, record_id, action, old_value, new_value, prev_hash, row_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, e.PerformedBy, e.TableSchema, e.TableName, e.RecordID, string(e.Action),
-		oldJSON, newJSON, prevHash, rowHash)
-	return err
+		_, err = tx.Exec(ctx, `
+			INSERT INTO admin_panel.write_audit_log
+			  (performed_by, table_schema, table_name, record_id, action, old_value, new_value, prev_hash, row_hash)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`, e.PerformedBy, e.TableSchema, e.TableName, e.RecordID, string(e.Action),
+			oldJSON, newJSON, prevHash, rowHash)
+		return err
+	})
 }
 
 func computeHash(prevHash *string, e Entry, oldJSON, newJSON []byte) string {

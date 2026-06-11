@@ -38,7 +38,7 @@ function buildClient() {
     datasourceUrl: augmentUrl(url),
     log: [
       { level: 'query', emit: 'event' },
-      { level: 'error', emit: 'stdout' },
+      { level: 'error', emit: 'event' },
     ],
   });
 }

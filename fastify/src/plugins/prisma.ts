@@ -1,6 +1,10 @@
 import fp from 'fastify-plugin';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { disposePrismaClient, getPrismaClient } from '../lib/prisma-client.js';
+import {
+  getRequestUserId,
+  setRequestUserId,
+} from '../utils/request-context.js';
 
 const AUDIT_ACTIONS: Record<string, string> = {
   create: 'INSERT',
@@ -10,7 +14,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
 
 const SKIP_MODELS = new Set(['AuditLog']);
 
-let _currentUser = 'system';
+const SYSTEM_ACTOR = 'system';
 
 function serializeJson(
   value: unknown,
@@ -30,7 +34,7 @@ function buildExtendedClient(base: PrismaClient, log: LogFn) {
           return query(args);
         }
 
-        const user = _currentUser;
+        const user = getRequestUserId() ?? SYSTEM_ACTOR;
         const delegate = (
           base as unknown as Record<
             string,
@@ -121,7 +125,7 @@ export default fp(async (fastify) => {
   fastify.decorate('prisma', prisma);
 
   fastify.addHook('onRequest', async (request) => {
-    _currentUser = request.authUser?.email ?? request.authUser?.sub ?? 'system';
+    setRequestUserId(request.authUser?.email ?? request.authUser?.sub);
   });
 
   fastify.addHook('onClose', async () => {

@@ -97,7 +97,7 @@ resource "kubernetes_config_map_v1" "realm_import" {
   }
 
   data = {
-    "${var.keycloak_realm_file_name}" = local.keycloak_realm_json
+    (var.keycloak_realm_file_name) = local.keycloak_realm_json
   }
 }
 
@@ -249,7 +249,7 @@ resource "helm_release" "keycloak" {
       ]
 
       configuration = {
-        "${var.keycloak_realm_file_name}" = local.keycloak_realm_json
+        (var.keycloak_realm_file_name) = local.keycloak_realm_json
       }
     }
 

@@ -92,6 +92,45 @@ export async function generateReadme(vars: GeneratorVars): Promise<string> {
   return renderShared('README.md.ejs', withInstances(vars));
 }
 
+function infraTemplateVars(vars: GeneratorVars): GeneratorVars {
+  const projectName = vars.projectName;
+  const productionDomain =
+    (vars.productionDomain as string | undefined) ??
+    `${projectName}.example.com`;
+  const awsRegion = (vars.awsRegion as string | undefined) ?? 'us-east-1';
+  const githubOwner = (vars.githubOwner as string | undefined) ?? 'TODO';
+  const ecrRepos = (vars.ecrRepos as string[] | undefined) ?? [
+    `${projectName}/backend`,
+    `${projectName}/frontend`,
+  ];
+  const hasBackendMigrations = vars.components.some(
+    (c) => c === 'fastify' || c === 'express',
+  );
+  const hasAdminPanelMigrations = vars.components.includes('admin-panel');
+  return {
+    ...vars,
+    productionDomain,
+    awsRegion,
+    githubOwner,
+    ecrRepos,
+    hasBackendMigrations,
+    hasAdminPanelMigrations,
+    displayName: projectName.charAt(0).toUpperCase() + projectName.slice(1),
+  };
+}
+
+export async function generateRollback(vars: GeneratorVars): Promise<string> {
+  return renderShared('rollback.sh.ejs', infraTemplateVars(vars));
+}
+
+export async function generateCodeowners(vars: GeneratorVars): Promise<string> {
+  return renderShared('codeowners.ejs', infraTemplateVars(vars));
+}
+
+export async function generateRunbook(vars: GeneratorVars): Promise<string> {
+  return renderShared('runbook.md.ejs', infraTemplateVars(vars));
+}
+
 export function generateVscodeSettings(vars: GeneratorVars): string {
   const settings: Record<string, unknown> = {};
 

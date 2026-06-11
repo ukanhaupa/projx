@@ -11,6 +11,8 @@ _AUTHN_ONLY_PREFIXES: tuple[str, ...] = (
 _PUBLIC_EXACT: tuple[str, ...] = (
     "/api/",
     "/api/health",
+    "/api/health/live",
+    "/api/health/ready",
     # projx-anchor: public-exact
 )
 

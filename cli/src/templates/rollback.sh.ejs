@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Roll <%= projectName %> back to a previous main-<sha> image tag in ECR.
+#
+# Usage:
+#   scripts/rollback.sh <previous-sha>
+#
+# Required env on the operator workstation:
+#   AWS_REGION       (default <%= awsRegion %>)
+#   ECR_REGISTRY     (account-id.dkr.ecr.<%= awsRegion %>.amazonaws.com)
+#   EC2_INSTANCE_ID  (the <%= projectName %>-web instance)
+#   DOMAIN           (default <%= productionDomain %>)
+
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <previous-sha>" >&2
+  exit 2
+fi
+
+PREV_SHA="$1"
+AWS_REGION="${AWS_REGION:-<%= awsRegion %>}"
+DOMAIN="${DOMAIN:-<%= productionDomain %>}"
+TAG="main-${PREV_SHA}"
+
+if [[ -z "${ECR_REGISTRY:-}" ]]; then
+  echo "ECR_REGISTRY is required" >&2
+  exit 2
+fi
+if [[ -z "${EC2_INSTANCE_ID:-}" ]]; then
+  echo "EC2_INSTANCE_ID is required" >&2
+  exit 2
+fi
+
+REPOS=(<% for (const r of ecrRepos) { %>
+  <%= r %><% } %>
+)
+
+echo "==> Confirming target image exists in ECR for every service"
+for repo in "${REPOS[@]}"; do
+  if ! aws ecr describe-images --region "$AWS_REGION" --repository-name "$repo" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+    echo "FATAL: $repo does not have image tag $TAG in ECR" >&2
+    exit 3
+  fi
+done
+
+echo "==> Re-tagging $TAG as main-latest for every service"
+for repo in "${REPOS[@]}"; do
+  manifest=$(aws ecr batch-get-image --region "$AWS_REGION" --repository-name "$repo" --image-ids imageTag="$TAG" --query 'images[].imageManifest' --output text)
+  if [[ -z "$manifest" ]]; then
+    echo "FATAL: failed to read manifest for $repo:$TAG" >&2
+    exit 4
+  fi
+  aws ecr put-image --region "$AWS_REGION" --repository-name "$repo" --image-tag "main-latest" --image-manifest "$manifest" >/dev/null
+  echo "  re-tagged $repo -> main-latest"
+done
+
+echo "==> Triggering deploy on $EC2_INSTANCE_ID with IMAGE_TAG=$TAG"
+COMMAND_ID=$(aws ssm send-command \
+  --region "$AWS_REGION" \
+  --instance-ids "$EC2_INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --comment "<%= projectName %> rollback to $TAG" \
+  --parameters commands="[\"IMAGE_TAG=$TAG AWS_REGION=$AWS_REGION ECR_REGISTRY=$ECR_REGISTRY DOMAIN=$DOMAIN bash /opt/<%= projectName %>/scripts/deploy-on-ec2.sh\"]" \
+  --query 'Command.CommandId' \
+  --output text)
+
+echo "==> SSM command id: $COMMAND_ID"
+echo "Tail logs with:"
+echo "  aws ssm get-command-invocation --region $AWS_REGION --instance-id $EC2_INSTANCE_ID --command-id $COMMAND_ID"

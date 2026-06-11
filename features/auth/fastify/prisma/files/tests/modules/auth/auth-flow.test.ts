@@ -1,18 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
-import rateLimit from '@fastify/rate-limit';
-import prismaPlugin from '../../../src/plugins/prisma.js';
-import errorHandler from '../../../src/plugins/error-handler.js';
-import authPlugin from '../../../src/plugins/auth.js';
-import requestIdPlugin from '../../../src/plugins/request-id.js';
-import { authRoutes } from '../../../src/modules/auth/index.js';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import Fastify, { type FastifyInstance } from "fastify";
+import rateLimit from "@fastify/rate-limit";
+import prismaPlugin from "../../../src/plugins/prisma.js";
+import errorHandler from "../../../src/plugins/error-handler.js";
+import authPlugin from "../../../src/plugins/auth.js";
+import requestIdPlugin from "../../../src/plugins/request-id.js";
+import { authRoutes } from "../../../src/modules/auth/index.js";
 
 async function buildAuthApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
-    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    genReqId: (req) =>
+      (req.headers["x-request-id"] as string) || crypto.randomUUID(),
   });
-  await app.register(rateLimit, { max: 1000, timeWindow: '1 minute' });
+  await app.register(rateLimit, { max: 1000, timeWindow: "1 minute" });
   await app.register(prismaPlugin);
   await app.register(errorHandler);
   await app.register(requestIdPlugin);
@@ -21,10 +22,11 @@ async function buildAuthApp(): Promise<FastifyInstance> {
   return app;
 }
 
-describe('auth signup → login → me flow', () => {
+describe("auth signup → login → me flow", () => {
   let app: FastifyInstance;
   const email = `test-${Date.now()}@example.com`;
-  const password = 'P@ssw0rd!2025'; // pragma: allowlist secret
+  const raceEmail = `race-${Date.now()}@example.com`;
+  const password = "P@ssw0rd!2025"; // pragma: allowlist secret
 
   beforeAll(async () => {
     app = await buildAuthApp();
@@ -34,15 +36,17 @@ describe('auth signup → login → me flow', () => {
   });
 
   afterAll(async () => {
-    await app.prisma.user.deleteMany({ where: { email } });
+    await app.prisma.user.deleteMany({
+      where: { email: { in: [email, raceEmail] } },
+    });
     await app.close();
   });
 
-  it('POST /auth/signup creates a user', async () => {
+  it("POST /auth/signup creates a user", async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
-      payload: { email, name: 'Test User', password },
+      method: "POST",
+      url: "/auth/signup",
+      payload: { email, name: "Test User", password },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -51,10 +55,10 @@ describe('auth signup → login → me flow', () => {
     expect(body.refresh_token).toBeTruthy();
   });
 
-  it('POST /auth/login returns tokens', async () => {
+  it("POST /auth/login returns tokens", async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
+      method: "POST",
+      url: "/auth/login",
       payload: { email, password },
     });
     expect(res.statusCode).toBe(200);
@@ -64,29 +68,29 @@ describe('auth signup → login → me flow', () => {
     expect(body.user.email).toBe(email);
   });
 
-  it('POST /auth/login rejects wrong password with request_id', async () => {
+  it("POST /auth/login rejects wrong password with request_id", async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
-      payload: { email, password: 'wrong-password' }, // pragma: allowlist secret
+      method: "POST",
+      url: "/auth/login",
+      payload: { email, password: "wrong-password" }, // pragma: allowlist secret
     });
     expect(res.statusCode).toBe(401);
     const body = res.json();
-    expect(body.detail).toBe('Invalid credentials');
+    expect(body.detail).toBe("Invalid credentials");
     expect(body.request_id).toBeTruthy();
   });
 
-  it('GET /auth/me returns current user', async () => {
+  it("GET /auth/me returns current user", async () => {
     const loginRes = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
+      method: "POST",
+      url: "/auth/login",
       payload: { email, password },
     });
     const { access_token } = loginRes.json();
 
     const res = await app.inject({
-      method: 'GET',
-      url: '/auth/me',
+      method: "GET",
+      url: "/auth/me",
       headers: { authorization: `Bearer ${access_token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -94,17 +98,17 @@ describe('auth signup → login → me flow', () => {
     expect(body.email).toBe(email);
   });
 
-  it('POST /auth/refresh rotates the refresh token', async () => {
+  it("POST /auth/refresh rotates the refresh token", async () => {
     const loginRes = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
+      method: "POST",
+      url: "/auth/login",
       payload: { email, password },
     });
     const { refresh_token: oldRefresh } = loginRes.json();
 
     const res = await app.inject({
-      method: 'POST',
-      url: '/auth/refresh',
+      method: "POST",
+      url: "/auth/refresh",
       payload: { refresh_token: oldRefresh },
     });
     expect(res.statusCode).toBe(200);
@@ -113,27 +117,54 @@ describe('auth signup → login → me flow', () => {
     expect(body.refresh_token).not.toBe(oldRefresh);
   });
 
-  it('POST /auth/refresh detects replay of revoked token', async () => {
+  it("POST /auth/refresh detects replay of revoked token", async () => {
     const loginRes = await app.inject({
-      method: 'POST',
-      url: '/auth/login',
+      method: "POST",
+      url: "/auth/login",
       payload: { email, password },
     });
     const { refresh_token } = loginRes.json();
 
     const first = await app.inject({
-      method: 'POST',
-      url: '/auth/refresh',
+      method: "POST",
+      url: "/auth/refresh",
       payload: { refresh_token },
     });
     expect(first.statusCode).toBe(200);
 
     const replay = await app.inject({
-      method: 'POST',
-      url: '/auth/refresh',
+      method: "POST",
+      url: "/auth/refresh",
       payload: { refresh_token },
     });
     expect(replay.statusCode).toBe(401);
-    expect(replay.json().detail).toBe('token_replay_detected');
+    expect(replay.json().detail).toBe("token_replay_detected");
+  });
+
+  it("POST /auth/refresh lets exactly one concurrent rotation win", async () => {
+    const signupRes = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { email: raceEmail, name: "Race User", password },
+    });
+    const { refresh_token } = signupRes.json();
+
+    const attempts = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        app.inject({
+          method: "POST",
+          url: "/auth/refresh",
+          payload: { refresh_token },
+        }),
+      ),
+    );
+
+    const winners = attempts.filter((r) => r.statusCode === 200);
+    const losers = attempts.filter((r) => r.statusCode === 401);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(attempts.length - 1);
+    for (const loser of losers) {
+      expect(loser.json().detail).toBe("token_replay_detected");
+    }
   });
 });

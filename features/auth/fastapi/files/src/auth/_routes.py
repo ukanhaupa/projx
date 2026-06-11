@@ -543,7 +543,7 @@ async def refresh_session(
     ):
         return _err(request, 401, "Unauthorized")
 
-    if token_row.rotated_to is not None or token_row.revoked_at is not None:
+    async def handle_replay() -> Any:
         now = _now()
         await db_session.execute(
             update(RefreshToken)
@@ -565,6 +565,9 @@ async def refresh_session(
         )
         return _err(request, 401, "token_replay_detected")
 
+    if token_row.rotated_to is not None or token_row.revoked_at is not None:
+        return await handle_replay()
+
     if token_row.expires_at.astimezone(UTC) < _now():
         return _err(request, 401, "Unauthorized")
 
@@ -582,6 +585,21 @@ async def refresh_session(
     }
     tokens = sign_tokens(payload)
     new_expires_at = _now() + timedelta(seconds=REFRESH_TTL_SECONDS)
+
+    claimed = await db_session.execute(
+        update(RefreshToken)
+        .where(
+            and_(
+                RefreshToken.id == token_row.id,
+                RefreshToken.rotated_to.is_(None),
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+        .values(revoked_at=_now())
+    )
+    if claimed.rowcount == 0:
+        return await handle_replay()
+
     new_token = RefreshToken(
         user_id=token_row.user_id,
         session_id=token_row.session_id,
@@ -594,7 +612,7 @@ async def refresh_session(
     await db_session.flush()
 
     await db_session.execute(
-        update(RefreshToken).where(RefreshToken.id == token_row.id).values(rotated_to=new_token.id, revoked_at=_now())
+        update(RefreshToken).where(RefreshToken.id == token_row.id).values(rotated_to=new_token.id)
     )
     await db_session.commit()
     return {

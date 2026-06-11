@@ -175,7 +175,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
-      JWT_SECRET: ci-test-secret # gitleaks:allow
+      JWT_SECRET: test-secret-that-is-at-least-32-bytes-long # gitleaks:allow
       CRED_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # gitleaks:allow
     defaults:
       run:
@@ -204,6 +204,10 @@ jobs:
     needs: changes
     if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    env:
+      VITE_OIDC_URL: http://localhost:8080
+      VITE_OIDC_REALM: master
+      VITE_OIDC_CLIENT_ID: frontend
     defaults:
       run:
         working-directory: frontend
@@ -246,7 +250,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
-      JWT_SECRET: ci-test-secret # gitleaks:allow
+      JWT_SECRET: test-secret-that-is-at-least-32-bytes-long # gitleaks:allow
       CRED_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # gitleaks:allow
     defaults:
       run:
@@ -318,6 +322,9 @@ jobs:
       CRED_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= # gitleaks:allow
       JWT_PROVIDER: shared_secret
       JWT_ALGORITHMS: HS256
+      VITE_OIDC_URL: http://localhost:8080
+      VITE_OIDC_REALM: master
+      VITE_OIDC_CLIENT_ID: frontend
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4

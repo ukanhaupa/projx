@@ -12,21 +12,34 @@ import { computeScopeFilters } from '../../plugins/authz.js';
 import type { AuthUser } from '../../plugins/auth.js';
 import * as querystring from 'node:querystring';
 
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
+
 const ErrorSchema = Type.Object({
   detail: Type.String(),
   request_id: Type.Optional(Type.String()),
 });
 
-const BulkDeleteSchema = Type.Object({
-  ids: Type.Array(Type.String({ format: 'uuid' })),
-});
+const BulkDeleteSchema = Type.Object(
+  {
+    ids: Type.Array(Type.String({ format: 'uuid' })),
+  },
+  { additionalProperties: false },
+);
+
+function strict<T extends ReturnType<typeof Type.Object>>(schema: T): T {
+  return { ...schema, additionalProperties: false } as T;
+}
 
 function parseRawQuery(request: FastifyRequest): QueryParams {
   const rawQs = request.url.split('?')[1] ?? '';
   const parsed = querystring.parse(rawQs);
 
   const page = Math.max(1, Number(parsed.page) || 1);
-  const page_size = Math.min(100, Math.max(1, Number(parsed.page_size) || 10));
+  const page_size = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Number(parsed.page_size) || DEFAULT_PAGE_SIZE),
+  );
 
   const result: QueryParams = {
     page,
@@ -139,7 +152,7 @@ export function registerEntityRoutes(
     {
       schema: {
         tags: tag,
-        body: entityConfig.createSchema,
+        body: strict(entityConfig.createSchema),
         response: {
           201: entityConfig.schema,
           409: ErrorSchema,
@@ -180,7 +193,7 @@ export function registerEntityRoutes(
       schema: {
         tags: tag,
         params: Type.Object({ id: Type.String({ format: 'uuid' }) }),
-        body: entityConfig.updateSchema,
+        body: strict(entityConfig.updateSchema),
         response: {
           200: entityConfig.schema,
           404: ErrorSchema,
@@ -284,11 +297,14 @@ export function registerEntityRoutes(
     {
       schema: {
         tags: tag,
-        body: Type.Object({
-          items: Type.Array(entityConfig.createSchema),
-        }),
+        body: Type.Object(
+          {
+            items: Type.Array(strict(entityConfig.createSchema)),
+          },
+          { additionalProperties: false },
+        ),
         response: {
-          201: Type.Object({ data: Type.Any(), count: Type.Number() }),
+          201: Type.Object({ count: Type.Number() }),
           409: ErrorSchema,
         },
       },
@@ -305,7 +321,7 @@ export function registerEntityRoutes(
       const result = await service.bulkCreate(items);
       return reply
         .status(201)
-        .send({ data: result, count: (result as { count: number }).count });
+        .send({ count: (result as { count: number }).count });
     },
   );
 
