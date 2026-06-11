@@ -299,7 +299,9 @@ describe('BaseRepository.bulkDelete', () => {
 
   it('swallows soft-delete failures so missing ids do not abort the batch', async () => {
     const prisma = createMockPrisma('Widget');
-    prisma._delegate.update.mockRejectedValue(new Error('Record not found'));
+    prisma._delegate.update.mockRejectedValue(
+      Object.assign(new Error('Record not found'), { code: 'P2025' }),
+    );
     const repo = new BaseRepository(prisma, 'Widget', {
       ...defaultOptions,
       columnNames: [...defaultOptions.columnNames, 'deleted_at'],

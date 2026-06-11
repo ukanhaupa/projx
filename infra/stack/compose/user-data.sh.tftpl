@@ -1,11 +1,64 @@
 #!/bin/bash
 set -euo pipefail
 
-# ── Install Docker + Compose + PostgreSQL client ──────────────────────────────
-dnf install -y docker postgresql15
+dnf install -y \
+  docker \
+  postgresql15 \
+  amazon-cloudwatch-agent \
+  amazon-ssm-agent \
+  fail2ban \
+  chrony \
+  logrotate \
+  dnf-automatic \
+  jq \
+  unzip
+
 systemctl enable --now docker
+systemctl enable --now amazon-ssm-agent
+systemctl enable --now chronyd
+systemctl enable --now fail2ban
+systemctl enable --now dnf-automatic.timer
+
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'DOCKERD'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" },
+  "storage-driver": "overlay2",
+  "live-restore": true
+}
+DOCKERD
+systemctl restart docker
+
+mkdir -p /etc/buildkit
+cat > /etc/buildkit/buildkitd.toml <<'BUILDKIT'
+[worker.oci.gcpolicy]
+  keepBytes = "10gb"
+  keepDuration = "720h"
+  all = true
+BUILDKIT
+
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
   -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose
+
+cat > /etc/logrotate.d/docker-containers <<'LOGROTATE'
+/var/lib/docker/containers/*/*.log {
+  daily
+  rotate 7
+  compress
+  delaycompress
+  missingok
+  copytruncate
+}
+LOGROTATE
 
 # ── Bootstrap databases and users ────────────────────────────────────────────
 export PGPASSWORD="${db_master_password}"
@@ -171,7 +224,7 @@ services:
     ports:
       - "127.0.0.1:${backend_port}:${backend_port}"
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:${backend_port}/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:${backend_port}/api/health/live || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -256,6 +309,26 @@ services:
         awslogs-stream: nginx
 COMPOSE
 
+cat > /etc/systemd/system/projx-stack.service <<'SYSTEMD'
+[Unit]
+Description=projx compose stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt
+ExecStart=/usr/local/bin/docker-compose -f /opt/docker-compose.yml up -d
+ExecStop=/usr/local/bin/docker-compose -f /opt/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD
+
+systemctl daemon-reload
+systemctl enable projx-stack.service
 docker-compose -f /opt/docker-compose.yml down 2>/dev/null || true
 docker-compose -f /opt/docker-compose.yml up -d
 %{ if backend_image == "" || frontend_image == "" ~}

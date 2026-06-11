@@ -13,6 +13,10 @@ class RetryInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (!_isIdempotentMethod(err.requestOptions.method) &&
+        err.requestOptions.headers['Idempotency-Key'] == null) {
+      return handler.next(err);
+    }
     if (!_shouldRetry(err)) {
       return handler.next(err);
     }
@@ -50,6 +54,11 @@ class RetryInterceptor extends Interceptor {
     } on DioException catch (e) {
       handler.next(e);
     }
+  }
+
+  bool _isIdempotentMethod(String method) {
+    final m = method.toUpperCase();
+    return m == 'GET' || m == 'HEAD' || m == 'PUT' || m == 'DELETE';
   }
 
   bool _shouldRetry(DioException err) {

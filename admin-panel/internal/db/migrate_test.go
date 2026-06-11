@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +28,21 @@ func migrateTestPool(t *testing.T) *pgxpool.Pool {
 		_, _ = pool.Exec(c, `DROP SCHEMA IF EXISTS admin_panel CASCADE`)
 	})
 	return pool
+}
+
+func embeddedMigrationCount(t *testing.T) int {
+	t.Helper()
+	entries, err := migrations.ReadDir("migrations")
+	if err != nil {
+		t.Fatalf("read embedded migrations: %v", err)
+	}
+	n := 0
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".sql") {
+			n++
+		}
+	}
+	return n
 }
 
 func TestMigrateCreatesSchemaMigrationsTable(t *testing.T) {
@@ -80,8 +96,8 @@ func TestMigrateIsIdempotentAcrossReruns(t *testing.T) {
 	).Scan(&count); err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected exactly 1 recorded migration after 3 reruns, got %d", count)
+	if expected := embeddedMigrationCount(t); count != expected {
+		t.Fatalf("expected exactly %d recorded migrations after 3 reruns, got %d", expected, count)
 	}
 }
 
@@ -110,8 +126,8 @@ func TestMigrateConcurrentBootsAreSafe(t *testing.T) {
 	).Scan(&count); err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 recorded migration after 5 concurrent boots, got %d", count)
+	if expected := embeddedMigrationCount(t); count != expected {
+		t.Fatalf("expected %d recorded migrations after 5 concurrent boots, got %d", expected, count)
 	}
 }
 

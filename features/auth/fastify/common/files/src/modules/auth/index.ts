@@ -1,7 +1,7 @@
-export { default as authRoutes } from './routes.js';
+export { default as authRoutes } from "./routes.js";
 export {
   cleanupAuthArtifacts,
   sendInitialVerificationEmail,
   startVerificationJobs,
-} from './verification-jobs.js';
-export { initMailer } from './mailer.js';
+} from "./verification-jobs.js";
+export { initMailer, SMTP_PURPOSE } from "./mailer.js";

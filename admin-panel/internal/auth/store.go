@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	sessionTTL   = 12 * time.Hour
-	WriteModeTTL = 30 * time.Minute
+	sessionTTL              = 12 * time.Hour
+	WriteModeTTL            = 30 * time.Minute
+	MinBootstrapPasswordLen = 12
 )
 
 const (
@@ -60,6 +61,9 @@ func (s *Store) EnsureBootstrap(ctx context.Context, email, password string) err
 	}
 	if count > 0 {
 		return nil
+	}
+	if len(password) < MinBootstrapPasswordLen {
+		return errors.New("ADMIN_PASSWORD must be at least 12 characters")
 	}
 	hash, err := HashPassword(password)
 	if err != nil {

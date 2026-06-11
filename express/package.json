@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env dist/server.js",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "@sentry/node": "^10.57.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
@@ -23,6 +24,7 @@
     "helmet": "^8.1.0",
     "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.2",
+    "pino": "^9.13.1",
     "pino-http": "^11.0.0",
     "zod": "^4.2.0"
   },

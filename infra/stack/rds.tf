@@ -85,7 +85,8 @@ resource "aws_security_group" "rds" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.selected.cidr_block]
+    description = "Restrict egress to within the VPC"
   }
 
   tags = local.tags

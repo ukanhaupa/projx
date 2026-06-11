@@ -32,8 +32,11 @@ import {
 import {
   generateDockerCompose,
   generateCiYml,
+  generateCodeowners,
   generatePreCommit,
   generateReadme,
+  generateRollback,
+  generateRunbook,
   generateSetupSh,
   generateVscodeSettings,
 } from './generators/index.js';
@@ -530,6 +533,27 @@ export async function writeTemplateToDir(
     await chmod(join(dest, 'scripts/setup.sh'), 0o755);
   }
 
+  if (vars.components.includes('infra')) {
+    if (shouldWrite('scripts/rollback.sh')) {
+      await mkdir(join(dest, 'scripts'), { recursive: true });
+      await writeFile(
+        join(dest, 'scripts/rollback.sh'),
+        await generateRollback(vars),
+      );
+      await chmod(join(dest, 'scripts/rollback.sh'), 0o755);
+    }
+    if (shouldWrite('.github/CODEOWNERS')) {
+      await mkdir(join(dest, '.github'), { recursive: true });
+      await writeFile(
+        join(dest, '.github/CODEOWNERS'),
+        await generateCodeowners(vars),
+      );
+    }
+    if (shouldWrite('RUNBOOK.md')) {
+      await writeFile(join(dest, 'RUNBOOK.md'), await generateRunbook(vars));
+    }
+  }
+
   await copyStaticFiles(repoDir, dest);
 
   if (shouldWrite('.vscode/settings.json')) {
@@ -787,8 +811,8 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
           ? 'RUN npm install -g bun\n'
           : '';
   const buildCopy = extraConfigCopy
-    ? `COPY package.json tsconfig.json ${extraConfigCopy} ./`
-    : `COPY package.json tsconfig.json ./`;
+    ? `COPY package.json tsconfig.json tsconfig.build.json ${extraConfigCopy} ./`
+    : `COPY package.json tsconfig.json tsconfig.build.json ./`;
   const migrateStage = migrateCmd
     ? `FROM build AS migrate
 CMD ["sh", "-c", "${exec} ${migrateCmd}"]

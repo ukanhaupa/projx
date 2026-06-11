@@ -7,23 +7,13 @@ module "k8s" {
   source = "./k8s"
   count  = local.use_k8s ? 1 : 0
 
-  aws_region         = var.aws_region
-  environment        = var.environment
-  project            = var.project
-  name_prefix        = local.name_prefix
-  tags               = local.tags
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnets
+  aws_region  = var.aws_region
+  environment = var.environment
+  project     = var.project
+  name_prefix = local.name_prefix
+  tags        = local.tags
 
-  cicd_enabled                        = var.cicd_enabled
-  allow_cicd_codebuild_eks_api_access = var.allow_cicd_codebuild_eks_api_access
-  cicd_region                         = local.cicd_region_effective
-  public_access_cidrs                 = var.public_access_cidrs
-  kubernetes_version                  = var.kubernetes_version
-  node_instance_types                 = var.node_instance_types
-  node_desired_size                   = var.node_desired_size
-  node_min_size                       = var.node_min_size
-  node_max_size                       = var.node_max_size
+  cicd_enabled = var.cicd_enabled
 
   apps_namespace      = var.apps_namespace
   backend_db_name     = local.backend_db_name_effective

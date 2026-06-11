@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env dist/server.js",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
@@ -26,6 +26,7 @@
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.6",
     "@prisma/client": "^6.4.1",
+    "@sentry/node": "^10.57.0",
     "@sinclair/typebox": "^0.34.15",
     "fastify": "^5.8.5",
     "fastify-plugin": "^5.0.1",

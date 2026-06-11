@@ -3,9 +3,13 @@ package web
 import (
 	"encoding/csv"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -13,6 +17,76 @@ import (
 	"adminpanel/internal/auth"
 	"adminpanel/internal/browser"
 )
+
+type loginFailureRecord struct {
+	count     int
+	firstAt   time.Time
+	lockUntil time.Time
+}
+
+type loginFailureCounter struct {
+	mu       sync.Mutex
+	attempts map[string]*loginFailureRecord
+}
+
+const (
+	loginFailureMax    = 10
+	loginFailureWindow = 300 * time.Second
+	loginLockoutFor    = 900 * time.Second
+)
+
+var loginFailures = &loginFailureCounter{attempts: make(map[string]*loginFailureRecord)}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+func (c *loginFailureCounter) isLocked(ip string) (bool, time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	rec, ok := c.attempts[ip]
+	if !ok {
+		return false, 0
+	}
+	if rec.lockUntil.After(time.Now()) {
+		return true, time.Until(rec.lockUntil)
+	}
+	return false, 0
+}
+
+func (c *loginFailureCounter) recordFailure(ip string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	rec, ok := c.attempts[ip]
+	if !ok || now.Sub(rec.firstAt) > loginFailureWindow {
+		c.attempts[ip] = &loginFailureRecord{count: 1, firstAt: now}
+		return
+	}
+	rec.count++
+	if rec.count >= loginFailureMax {
+		rec.lockUntil = now.Add(loginLockoutFor)
+	}
+}
+
+func (c *loginFailureCounter) recordSuccess(ip string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.attempts, ip)
+}
 
 type ctxKey int
 
@@ -46,13 +120,21 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if locked, retry := loginFailures.isLocked(ip); locked {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())))
+		s.render(w, r, "login", viewData{Title: "Sign in", Error: "Too many failed attempts. Try again later."})
+		return
+	}
 	email := r.FormValue("email")
 	password := r.FormValue("password")
 	user, err := s.store.Authenticate(r.Context(), email, password)
 	if err != nil {
+		loginFailures.recordFailure(ip)
 		s.render(w, r, "login", viewData{Title: "Sign in", Error: "Invalid email or password."})
 		return
 	}
+	loginFailures.recordSuccess(ip)
 	token, err := s.store.CreateSession(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, "could not create session", http.StatusInternalServerError)

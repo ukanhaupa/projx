@@ -158,8 +158,9 @@ export class BaseRepository {
             where: { id, ...this.softDeleteWhere() },
             data: { deleted_at: new Date() },
           });
-        } catch {
-          // Match deleteMany semantics by ignoring ids that are already gone.
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          if (code !== 'P2025') throw err;
         }
       }
     } else {

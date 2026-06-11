@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:projx_mobile/core/auth/secure_storage.dart';
@@ -55,7 +56,13 @@ class AuthService {
         idToken: result.idToken,
       );
       return true;
-    } catch (_) {
+    } catch (err, stack) {
+      developer.log(
+        'token refresh failed',
+        name: 'auth',
+        error: err,
+        stackTrace: stack,
+      );
       return false;
     }
   }
@@ -71,8 +78,13 @@ class AuthService {
             discoveryUrl: _config.oidcDiscoveryUrl,
           ),
         );
-      } catch (_) {
-        // Ignore errors from OIDC end-session
+      } catch (err, stack) {
+        developer.log(
+          'OIDC end-session failed; clearing local tokens anyway',
+          name: 'auth',
+          error: err,
+          stackTrace: stack,
+        );
       }
     }
     await _storage.clearTokens();

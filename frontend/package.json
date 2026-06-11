@@ -17,6 +17,7 @@
     "lint:fix": "eslint --fix 'src/**/*.{ts,tsx}'"
   },
   "dependencies": {
+    "@sentry/react": "^10.57.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.15.0"

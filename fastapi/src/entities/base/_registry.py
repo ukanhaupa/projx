@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from loguru import logger
 from starlette.responses import Response
 from starlette.status import HTTP_201_CREATED
@@ -276,14 +276,19 @@ class _AutoController(BaseController):
             scope_filters = await parent._get_scope_filters(request)
             data_list = []
             for item in items:
-                data = item.model_dump(exclude_unset=True) if hasattr(item, "model_dump") else dict(item)
+                if not hasattr(item, "model_dump"):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Bulk items must match the create schema",
+                    )
+                data = item.model_dump(exclude_unset=True)
                 if scope_filters is not None:
                     data.update(scope_filters)
                 data_list.append(data)
             results = await parent._service().bulk_create(data_list)
             return {"data": [dict(r) for r in results], "count": len(results)}
 
-        bulk_create.__annotations__["items"] = list[Any]
+        bulk_create.__annotations__["items"] = list[schema]  # type: ignore[valid-type]
         return bulk_create
 
     async def bulk_delete(self, request: Request, ids: list[int] = Body(...)):

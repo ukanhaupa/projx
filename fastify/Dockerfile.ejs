@@ -9,7 +9,7 @@ RUN bun install --frozen-lockfile
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json bun.lockb tsconfig.json ./
+COPY package.json bun.lockb tsconfig.json tsconfig.build.json ./
 COPY prisma ./prisma
 COPY src ./src
 RUN bunx prisma generate
@@ -31,7 +31,7 @@ COPY --chown=bun:bun prisma ./prisma
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["bun", "-e", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
+    CMD ["bun", "-e", "fetch('http://localhost:3000/api/health/live').then(r => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
 
 CMD ["bun", "run", "dist/server.js"]
 <% } else { %>
@@ -60,7 +60,7 @@ RUN <%= pm.ci %>
 FROM base AS build
 ENV NODE_OPTIONS="--max-old-space-size=768"
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json <%= pm.lockfile %> tsconfig.json ./
+COPY package.json <%= pm.lockfile %> tsconfig.json tsconfig.build.json ./
 COPY prisma ./prisma
 COPY src ./src
 RUN <%= pm.prismaExec %> generate
@@ -83,7 +83,7 @@ COPY --chown=node:node prisma ./prisma
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+    CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health/live', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
 
 CMD ["pm2-runtime", "ecosystem.config.cjs"]
 <% } %>

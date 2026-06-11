@@ -1,5 +1,34 @@
+#trivy:ignore:AWS-0136 Alarm notifications carry no sensitive data; the AWS-managed SNS key avoids a billable customer CMK in the template.
 resource "aws_sns_topic" "alerts" {
-  name = "${local.name_prefix}-alerts"
+  name              = "${local.name_prefix}-alerts"
+  kms_master_key_id = "alias/aws/sns"
+  tags              = local.tags
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  for_each  = toset(var.alert_emails)
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
+resource "aws_cloudwatch_metric_alarm" "ec2_cpu" {
+  count               = local.use_compose ? 1 : 0
+  alarm_name          = "${local.name_prefix}-ec2-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 85
+  alarm_description   = "EC2 CPU above 85% for 15 minutes"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    InstanceId = module.compose[0].instance_id
+  }
+
   tags = local.tags
 }
 

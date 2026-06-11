@@ -54,7 +54,7 @@ describe('auth', () => {
 
       expect(authModule.isAuthenticated()).toBe(true);
       expect(authModule.getToken()).toBe(token);
-      expect(localStorage.getItem('auth')).toBeTruthy();
+      expect(sessionStorage.getItem('projx.refresh_token')).toBe('refresh-123');
     });
 
     it('sends correct form data to token endpoint', async () => {
@@ -342,21 +342,17 @@ describe('auth', () => {
     });
 
     it('returns empty array on malformed token', async () => {
-      // Directly set bad tokens via localStorage + initAuth
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          access_token: 'not.a.valid.token',
-          refresh_token: 'r',
-          expires_at: Date.now() + 3600000,
-        }),
-      );
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'not.a.valid.token',
+            refresh_token: 'r',
+          }),
+      });
 
-      // Re-import to get fresh module that reads from localStorage
-      vi.resetModules();
-      const freshAuth = await import('../src/auth');
-      freshAuth.initAuth();
-      expect(freshAuth.getRoles()).toEqual([]);
+      await authModule.login('user', 'pass');
+      expect(authModule.getRoles()).toEqual([]);
     });
   });
 
@@ -465,18 +461,13 @@ describe('auth', () => {
     });
 
     it('returns default on malformed token', async () => {
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          access_token: 'bad-token',
-          refresh_token: 'r',
-          expires_at: Date.now() + 3600000,
-        }),
-      );
-      vi.resetModules();
-      const freshAuth = await import('../src/auth');
-      freshAuth.initAuth();
-      expect(freshAuth.getUserInfo()).toEqual({ name: 'User' });
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({ access_token: 'bad-token', refresh_token: 'r' }),
+      });
+      await authModule.login('u', 'p');
+      expect(authModule.getUserInfo()).toEqual({ name: 'User' });
     });
   });
 
@@ -495,99 +486,59 @@ describe('auth', () => {
 
       expect(authModule.isAuthenticated()).toBe(false);
       expect(authModule.getToken()).toBeUndefined();
-      expect(localStorage.getItem('auth')).toBeNull();
+      expect(sessionStorage.getItem('projx.refresh_token')).toBeNull();
       expect(window.location.href).toBe('/');
     });
   });
 
   describe('initAuth', () => {
-    it('returns false when no stored auth', () => {
-      expect(authModule.initAuth()).toBe(false);
+    it('returns false when no refresh token is stored', async () => {
+      expect(await authModule.initAuth()).toBe(false);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-    it('hydrates tokens from localStorage', () => {
+    it('mints a fresh access token from the stored refresh token', async () => {
+      sessionStorage.setItem('projx.refresh_token', 'stored-refresh');
       const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 3600 });
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          access_token: token,
-          refresh_token: 'r',
-          expires_at: Date.now() + 3600000,
-        }),
-      );
-
-      expect(authModule.initAuth()).toBe(true);
-      expect(authModule.isAuthenticated()).toBe(true);
-      expect(authModule.getToken()).toBe(token);
-    });
-
-    it('returns false for invalid JSON in localStorage', () => {
-      localStorage.setItem('auth', 'not-json');
-      expect(authModule.initAuth()).toBe(false);
-    });
-
-    it('returns false when stored data has no access_token', () => {
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({ refresh_token: 'r', expires_at: 0 }),
-      );
-      expect(authModule.initAuth()).toBe(false);
-    });
-
-    it('returns false when stored data has no refresh_token', () => {
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({ access_token: 'a', expires_at: 0 }),
-      );
-      expect(authModule.initAuth()).toBe(false);
-    });
-
-    it('triggers immediate refresh when token is nearly expired', () => {
-      const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 2 });
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          access_token: token,
-          refresh_token: 'r',
-          expires_at: Date.now() + 2000,
-        }),
-      );
-
-      // Mock the refresh response
       (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         json: () =>
-          Promise.resolve({
-            access_token: makeToken({
-              exp: Math.floor(Date.now() / 1000) + 3600,
-            }),
-            refresh_token: 'r2',
-          }),
+          Promise.resolve({ access_token: token, refresh_token: 'r2' }),
       });
 
-      expect(authModule.initAuth()).toBe(true);
-      // The refresh was fired (fire-and-forget)
+      expect(await authModule.initAuth()).toBe(true);
       expect(authModule.isAuthenticated()).toBe(true);
+      expect(authModule.getToken()).toBe(token);
+      expect(sessionStorage.getItem('projx.refresh_token')).toBe('r2');
     });
 
-    it('schedules refresh when token is still valid', () => {
-      vi.useFakeTimers();
+    it('sends the stored refresh token to the token endpoint', async () => {
+      sessionStorage.setItem('projx.refresh_token', 'stored-refresh');
       const token = makeToken({ exp: Math.floor(Date.now() / 1000) + 3600 });
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          access_token: token,
-          refresh_token: 'r',
-          expires_at: Date.now() + 3600000,
-        }),
-      );
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({ access_token: token, refresh_token: 'r2' }),
+      });
 
-      expect(authModule.initAuth()).toBe(true);
-      expect(authModule.isAuthenticated()).toBe(true);
+      await authModule.initAuth();
 
-      // No immediate fetch call (just scheduled)
-      expect(globalThis.fetch).not.toHaveBeenCalled();
-      vi.useRealTimers();
+      const body = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+        .calls[0][1].body as URLSearchParams;
+      expect(body.get('grant_type')).toBe('refresh_token');
+      expect(body.get('refresh_token')).toBe('stored-refresh');
+    });
+
+    it('returns false and logs out when the refresh is rejected', async () => {
+      sessionStorage.setItem('projx.refresh_token', 'stored-refresh');
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({}),
+      });
+
+      expect(await authModule.initAuth()).toBe(false);
+      expect(authModule.isAuthenticated()).toBe(false);
+      expect(sessionStorage.getItem('projx.refresh_token')).toBeNull();
     });
   });
 });

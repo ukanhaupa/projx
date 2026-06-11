@@ -20,19 +20,19 @@ describe('App', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
 
-  it('renders the Login page when unauthenticated', () => {
-    mockInitAuth.mockReturnValue(false);
+  it('renders the Login page when unauthenticated', async () => {
+    mockInitAuth.mockResolvedValue(false);
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Sign In' }),
+      await screen.findByRole('heading', { name: 'Sign In' }),
     ).toBeInTheDocument();
   });
 
-  it('renders the Dashboard when authenticated', () => {
-    mockInitAuth.mockReturnValue(true);
+  it('renders the Dashboard when authenticated', async () => {
+    mockInitAuth.mockResolvedValue(true);
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Dashboard' }),
+      await screen.findByRole('heading', { name: 'Dashboard' }),
     ).toBeInTheDocument();
   });
 });

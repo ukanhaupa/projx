@@ -4,7 +4,12 @@ const PUBLIC_PREFIXES = [
   '/openapi.json',
   '/swagger',
 ];
-const PUBLIC_EXACT = new Set(['/api/', '/api/health']);
+const PUBLIC_EXACT = new Set([
+  '/api/',
+  '/api/health',
+  '/api/health/live',
+  '/api/health/ready',
+]);
 const AUTHN_ONLY_PREFIXES: string[] = [];
 
 export function isPublicPath(path: string): boolean {

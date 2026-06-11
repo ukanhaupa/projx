@@ -2,6 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { JWTPayload } from 'jose';
 import { ApiError } from '../errors.js';
 import { verifyToken } from '../lib/jwt-verifier.js';
+import { isPublicPath } from './public-paths.js';
 
 export interface AuthUser {
   sub: string;
@@ -71,6 +72,10 @@ export const requireAuth: RequestHandler = (
   _res: Response,
   next: NextFunction,
 ): void => {
+  if (isPublicPath(req.path)) {
+    next();
+    return;
+  }
   if (!req.authUser) {
     next(new ApiError(401, 'Authentication required', 'unauthorized'));
     return;

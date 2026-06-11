@@ -39,7 +39,7 @@ describe('crypto key resolution', () => {
 
   it('throws when CRED_ENCRYPTION_KEY is unset (no silent JWT_SECRET fallback)', async () => {
     vi.stubEnv('CRED_ENCRYPTION_KEY', '');
-    vi.stubEnv('JWT_SECRET', 'any-jwt-secret-value');
+    vi.stubEnv('JWT_SECRET', 'a'.repeat(48));
     const mod = await import('../../src/lib/crypto.js');
     expect(() => mod.encryptString('x')).toThrow(/CRED_ENCRYPTION_KEY/);
     vi.unstubAllEnvs();

@@ -1,8 +1,19 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyReply,
+} from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
+import {
+  SENTRY_PURPOSE,
+  initSentry,
+  normalizeSentryConfig,
+  registerSentryFastifyHooks,
+} from './lib/sentry.js';
+import { getServiceConfig } from './lib/service-config.js';
 import prismaPlugin from './plugins/prisma.js';
 import errorHandler from './plugins/error-handler.js';
 import authPlugin from './plugins/auth.js';
@@ -24,19 +35,30 @@ export async function buildApp(
   const app = Fastify({
     logger: options.logger ?? {
       level: config.LOG_LEVEL,
-      transport:
-        process.env.NODE_ENV !== 'production'
-          ? {
-              target: 'pino-pretty',
-              options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
-            }
-          : undefined,
+      transport: config.LOG_PRETTY
+        ? {
+            target: 'pino-pretty',
+            options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+          }
+        : undefined,
     },
     genReqId: (req) =>
       (req.headers['x-request-id'] as string) || crypto.randomUUID(),
   });
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: [`'none'`],
+        scriptSrc: [`'none'`],
+        styleSrc: [`'none'`],
+        imgSrc: [`'self'`],
+        frameAncestors: [`'none'`],
+        baseUri: [`'none'`],
+      },
+    },
+    hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
+  });
   await app.register(cors, {
     origin: config.CORS_ALLOW_ORIGINS.split(',').map((o) => o.trim()),
     credentials: true,
@@ -48,8 +70,18 @@ export async function buildApp(
       request.authUser?.sub ?? request.ip,
   });
 
-  await app.register(swaggerPlugin);
+  if (config.EXPOSE_API_DOCS) {
+    await app.register(swaggerPlugin);
+  }
   await app.register(prismaPlugin);
+
+  const sentryRuntime = normalizeSentryConfig(
+    await getServiceConfig(app.prisma, SENTRY_PURPOSE),
+  );
+  if (initSentry(sentryRuntime)) {
+    registerSentryFastifyHooks(app);
+  }
+
   await app.register(errorHandler);
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
@@ -57,25 +89,46 @@ export async function buildApp(
   // projx-anchor: plugins
 
   app.get(
+    '/api/health/live',
+    {
+      config: { public: true },
+      schema: { tags: ['health'] },
+      logLevel: 'debug',
+    },
+    async (_request, reply) => reply.send({ status: 'healthy' }),
+  );
+
+  const readiness = async (request: FastifyRequest, reply: FastifyReply) => {
+    const checks: Record<string, string> = { app: 'ok' };
+    try {
+      await app.prisma.$queryRaw`SELECT 1`;
+      checks.database = 'ok';
+    } catch (e) {
+      request.log.error({ err: e }, 'readiness database check failed');
+      checks.database = 'error';
+      return reply.status(503).send({ status: 'unhealthy', checks });
+    }
+    return reply.send({ status: 'healthy', checks });
+  };
+
+  app.get(
+    '/api/health/ready',
+    {
+      config: { public: true },
+      schema: { tags: ['health'] },
+      logLevel: 'debug',
+    },
+    readiness,
+  );
+
+  app.get(
     '/api/health',
     {
       config: { public: true },
-      schema: {
-        tags: ['health'],
-      },
+      schema: { tags: ['health'] },
       logLevel: 'debug',
     },
-    async (_request, reply) => {
-      const checks: Record<string, string> = { app: 'ok' };
-      try {
-        await app.prisma.$queryRaw`SELECT 1`;
-        checks.database = 'ok';
-      } catch (e) {
-        checks.database = `error: ${e instanceof Error ? e.message : String(e)}`;
-        return reply.status(503).send({ status: 'unhealthy', checks });
-      }
-      return reply.send({ status: 'healthy', checks });
-    },
+    readiness,
   );
 
   await app.register(

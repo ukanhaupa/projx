@@ -152,8 +152,8 @@ class BaseRepository:
                 from datetime import datetime as dt
 
                 return dt.fromisoformat(str(v))
-        except (ValueError, TypeError):
-            raise ValueError(f"Invalid value for {col_name}: {v}")
+        except (ValueError, TypeError) as err:
+            raise ValueError(f"Invalid value for {col_name}: {v}") from err
         return v
 
     def _convert_filter_values(self, filter_by: dict[str, Any]) -> dict[str, Any]:
@@ -164,36 +164,36 @@ class BaseRepository:
             if isinstance(col_type, (BigInteger, Integer)):
                 try:
                     converted[k] = int(v)
-                except (ValueError, TypeError):
-                    raise ValueError(f"Invalid integer value for {k}: {v}")
+                except (ValueError, TypeError) as err:
+                    raise ValueError(f"Invalid integer value for {k}: {v}") from err
             elif isinstance(col_type, Boolean):
                 converted[k] = str(v).lower() in ("1", "true")
             elif isinstance(col_type, Numeric):
                 try:
                     converted[k] = float(v)
-                except (ValueError, TypeError):
-                    raise ValueError(f"Invalid numeric value for {k}: {v}")
+                except (ValueError, TypeError) as err:
+                    raise ValueError(f"Invalid numeric value for {k}: {v}") from err
             elif isinstance(col_type, DateTime):
                 from datetime import datetime as dt
 
                 try:
                     converted[k] = dt.fromisoformat(str(v))
-                except (ValueError, TypeError):
-                    raise ValueError(f"Invalid datetime value for {k}: {v}")
+                except (ValueError, TypeError) as err:
+                    raise ValueError(f"Invalid datetime value for {k}: {v}") from err
             elif isinstance(col_type, Date):
                 from datetime import datetime as dt
 
                 try:
                     converted[k] = dt.strptime(str(v), "%Y-%m-%d").date()
-                except (ValueError, TypeError):
-                    raise ValueError(f"Invalid date value for {k}: {v}")
+                except (ValueError, TypeError) as err:
+                    raise ValueError(f"Invalid date value for {k}: {v}") from err
             elif isinstance(col_type, JSON):
                 import json
 
                 try:
                     converted[k] = json.loads(str(v))
-                except json.JSONDecodeError:
-                    raise ValueError(f"Invalid JSON value for {k}: {v}")
+                except json.JSONDecodeError as err:
+                    raise ValueError(f"Invalid JSON value for {k}: {v}") from err
             elif isinstance(col_type, (String, Text)):
                 converted[k] = str(v)
             else:

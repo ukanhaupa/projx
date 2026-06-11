@@ -2,5 +2,5 @@
   "type": "text",
   "file": "src/app.ts",
   "anchor": "// projx-anchor: plugins",
-  "insert": "  app.use('/auth', authRouter());\n  initMailer(() => getServiceConfig(null, 'smtp'), { info: console.log, warn: console.warn, error: console.error }).catch((err) => console.error('initMailer failed', err));\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(null, { info: console.log, warn: console.warn, error: console.error });\n  }\n"
+  "insert": "  app.use('/auth', authRouter());\n  initMailer(() => getServiceConfig(null, SMTP_PURPOSE), {\n    info: console.log,\n    warn: console.warn,\n    error: console.error,\n  }).catch((err) => console.error('initMailer failed', err));\n  if (process.env.AUTH_BACKGROUND_JOBS !== 'false') {\n    startVerificationJobs(null, {\n      info: console.log,\n      warn: console.warn,\n      error: console.error,\n    });\n  }\n"
 }

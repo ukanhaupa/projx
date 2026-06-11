@@ -1,6 +1,8 @@
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+export const SMTP_PURPOSE = "smtp";
+
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
 
 export interface SmtpConfig {
   host: string;
@@ -26,14 +28,14 @@ let log: Logger = console;
 export type GetSmtpConfig = () => Promise<Record<string, unknown> | null>;
 
 function asSmtpConfig(value: Record<string, unknown>): SmtpConfig | null {
-  if (typeof value.host !== 'string' || !value.host) return null;
+  if (typeof value.host !== "string" || !value.host) return null;
   return {
     host: value.host,
-    port: typeof value.port === 'number' ? value.port : 587,
-    secure: typeof value.secure === 'boolean' ? value.secure : false,
-    user: typeof value.user === 'string' ? value.user : '',
-    pass: typeof value.pass === 'string' ? value.pass : '',
-    from: typeof value.from === 'string' ? value.from : '',
+    port: typeof value.port === "number" ? value.port : 587,
+    secure: typeof value.secure === "boolean" ? value.secure : false,
+    user: typeof value.user === "string" ? value.user : "",
+    pass: typeof value.pass === "string" ? value.pass : "",
+    from: typeof value.from === "string" ? value.from : "",
     ...value,
   };
 }
@@ -47,7 +49,7 @@ export async function initMailer(
   const dbConfig = raw ? asSmtpConfig(raw) : null;
   if (!dbConfig) {
     log.warn(
-      '[mailer] no SMTP configured in service_configs — emails will be logged',
+      "[mailer] no SMTP configured in service_configs — emails will be logged",
     );
     return;
   }
@@ -72,7 +74,7 @@ function getTransporter() {
   if (!transporter && !mailWarned) {
     mailWarned = true;
     log.warn(
-      '[mailer] transporter not initialized — call initMailer() at startup',
+      "[mailer] transporter not initialized — call initMailer() at startup",
     );
   }
   return transporter;
@@ -93,21 +95,21 @@ async function sendAndLog(
   try {
     const info = (await tx.sendMail(mail)) as SendMailInfo;
     log.info(
-      `[mailer] sent | to=${to} | subject=${subject} | messageId=${info.messageId ?? 'n/a'}`,
+      `[mailer] sent | to=${to} | subject=${subject} | messageId=${info.messageId ?? "n/a"}`,
     );
     return true;
   } catch (err) {
-    log.error({ err, to, subject }, '[mailer] send failed');
+    log.error({ err, to, subject }, "[mailer] send failed");
     return false;
   }
 }
 
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 type EscapeValue = (value: string) => string;
@@ -136,9 +138,9 @@ export function assertTemplateVars(
   const extra = keys.filter((key) => !templateVars.includes(key));
   if (missing.length || extra.length) {
     const parts = [];
-    if (missing.length) parts.push(`missing keys: ${missing.join(', ')}`);
-    if (extra.length) parts.push(`extra keys: ${extra.join(', ')}`);
-    throw new Error(`Mailer template variable drift: ${parts.join('; ')}`);
+    if (missing.length) parts.push(`missing keys: ${missing.join(", ")}`);
+    if (extra.length) parts.push(`extra keys: ${extra.join(", ")}`);
+    throw new Error(`Mailer template variable drift: ${parts.join("; ")}`);
   }
 }
 
@@ -162,9 +164,9 @@ export function renderTemplate<const K extends string>(
   const extra = dataKeys.filter((key) => !template.keys.includes(key as K));
   if (missing.length || extra.length) {
     const parts = [];
-    if (missing.length) parts.push(`missing values: ${missing.join(', ')}`);
-    if (extra.length) parts.push(`extra values: ${extra.join(', ')}`);
-    throw new Error(`Mailer render variable drift: ${parts.join('; ')}`);
+    if (missing.length) parts.push(`missing values: ${missing.join(", ")}`);
+    if (extra.length) parts.push(`extra values: ${extra.join(", ")}`);
+    throw new Error(`Mailer render variable drift: ${parts.join("; ")}`);
   }
   return template.source.replace(
     /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g,
@@ -180,7 +182,7 @@ const EMAIL_HTML_TEMPLATE = defineTemplate(
   <p><a href="{{actionUrl}}" style="display:inline-block;padding:10px 20px;background:#0a66c2;color:#fff;text-decoration:none;border-radius:4px;">{{actionLabel}}</a></p>
   <p style="font-size:12px;color:#888;margin-top:24px;">If the button doesn't work, paste this link: {{actionUrl}}</p>
 </body></html>`,
-  ['title', 'message', 'actionUrl', 'actionLabel'],
+  ["title", "message", "actionUrl", "actionLabel"],
 );
 
 const PASSWORD_RESET_TEXT_TEMPLATE = defineTemplate(
@@ -189,7 +191,7 @@ const PASSWORD_RESET_TEXT_TEMPLATE = defineTemplate(
 {{resetLink}}
 
 If you didn't request this, ignore this email.`,
-  ['resetLink'],
+  ["resetLink"],
 );
 
 const VERIFICATION_TEXT_TEMPLATE = defineTemplate(
@@ -198,7 +200,7 @@ const VERIFICATION_TEXT_TEMPLATE = defineTemplate(
 {{verificationLink}}
 
 If you didn't create this account, ignore this email.`,
-  ['verificationLink'],
+  ["verificationLink"],
 );
 
 function renderEmail(
@@ -216,16 +218,16 @@ function renderEmail(
 }
 
 export function buildResetLink(token: string): string {
-  const base = FRONTEND_URL.replace(/\/$/, '');
-  const url = new URL('/reset-password', `${base}/`);
-  url.searchParams.set('token', token);
+  const base = FRONTEND_URL.replace(/\/$/, "");
+  const url = new URL("/reset-password", `${base}/`);
+  url.searchParams.set("token", token);
   return url.toString();
 }
 
 export function buildVerificationLink(token: string): string {
-  const base = FRONTEND_URL.replace(/\/$/, '');
-  const url = new URL('/verify-email', `${base}/`);
-  url.searchParams.set('token', token);
+  const base = FRONTEND_URL.replace(/\/$/, "");
+  const url = new URL("/verify-email", `${base}/`);
+  url.searchParams.set("token", token);
   return url.toString();
 }
 
@@ -235,10 +237,10 @@ export async function sendPasswordResetEmail(
 ): Promise<boolean> {
   const tx = getTransporter();
   if (!tx) {
-    logEmail(to, 'Password reset', resetLink);
+    logEmail(to, "Password reset", resetLink);
     return true;
   }
-  const subject = 'Reset your password';
+  const subject = "Reset your password";
   return sendAndLog(tx, to, subject, {
     from: getSmtpFrom(),
     to,
@@ -249,9 +251,9 @@ export async function sendPasswordResetEmail(
       (value) => value,
     ),
     html: renderEmail(
-      'Reset your password',
+      "Reset your password",
       "Click the button below to set a new password. This link expires in 30 minutes. If you didn't request this, ignore this email.",
-      'Reset password',
+      "Reset password",
       resetLink,
     ),
   });
@@ -263,10 +265,10 @@ export async function sendVerificationEmail(
 ): Promise<boolean> {
   const tx = getTransporter();
   if (!tx) {
-    logEmail(to, 'Email verification', verificationLink);
+    logEmail(to, "Email verification", verificationLink);
     return true;
   }
-  const subject = 'Verify your email';
+  const subject = "Verify your email";
   return sendAndLog(tx, to, subject, {
     from: getSmtpFrom(),
     to,
@@ -277,9 +279,9 @@ export async function sendVerificationEmail(
       (value) => value,
     ),
     html: renderEmail(
-      'Verify your email',
+      "Verify your email",
       "Click the button below to confirm your email address. This link expires in 24 hours. If you didn't create this account, ignore this email.",
-      'Verify email',
+      "Verify email",
       verificationLink,
     ),
   });

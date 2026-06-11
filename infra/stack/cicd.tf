@@ -247,7 +247,7 @@ resource "aws_ecr_repository" "backend" {
   count = var.cicd_enabled ? 1 : 0
 
   name                 = "${var.project}/${var.environment}/backend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
@@ -282,7 +282,7 @@ resource "aws_ecr_repository" "frontend" {
   count = var.cicd_enabled ? 1 : 0
 
   name                 = "${var.project}/${var.environment}/frontend"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
@@ -343,6 +343,18 @@ resource "aws_s3_bucket" "cicd_artifacts" {
   tags = local.tags
 }
 
+resource "aws_s3_bucket_public_access_block" "cicd_artifacts" {
+  count    = var.cicd_enabled ? 1 : 0
+  provider = aws.cicd
+
+  bucket = aws_s3_bucket.cicd_artifacts[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket_versioning" "cicd_artifacts" {
   count    = var.cicd_enabled ? 1 : 0
   provider = aws.cicd
@@ -354,6 +366,7 @@ resource "aws_s3_bucket_versioning" "cicd_artifacts" {
   }
 }
 
+#trivy:ignore:AWS-0132 SSE-S3 (AES256) suffices for build artifacts; a billable customer CMK is unwarranted for the template.
 resource "aws_s3_bucket_server_side_encryption_configuration" "cicd_artifacts" {
   count    = var.cicd_enabled ? 1 : 0
   provider = aws.cicd

@@ -1,17 +1,23 @@
-const OIDC_URL = import.meta.env.VITE_OIDC_URL || 'http://localhost:8080';
-const OIDC_REALM = import.meta.env.VITE_OIDC_REALM || 'master';
-const OIDC_CLIENT_ID = import.meta.env.VITE_OIDC_CLIENT_ID || 'frontend';
+const OIDC_URL = import.meta.env.VITE_OIDC_URL;
+const OIDC_REALM = import.meta.env.VITE_OIDC_REALM;
+const OIDC_CLIENT_ID = import.meta.env.VITE_OIDC_CLIENT_ID;
+
+if (!OIDC_URL || !OIDC_REALM || !OIDC_CLIENT_ID) {
+  throw new Error(
+    'VITE_OIDC_URL, VITE_OIDC_REALM, and VITE_OIDC_CLIENT_ID are required',
+  );
+}
 
 const TOKEN_URL = `${OIDC_URL}/realms/${OIDC_REALM}/protocol/openid-connect/token`;
+const REFRESH_STORAGE_KEY = 'projx.refresh_token';
 
 interface StoredTokens {
   access_token: string;
   refresh_token: string;
-  expires_at: number; // epoch ms
+  expires_at: number;
 }
 
 let tokens: StoredTokens | null = null;
-let refreshTimer: number | null = null;
 let refreshPromise: Promise<void> | null = null;
 
 function parseExp(accessToken: string): number {
@@ -23,24 +29,13 @@ function parseExp(accessToken: string): number {
   }
 }
 
-function scheduleRefresh() {
-  if (refreshTimer) clearTimeout(refreshTimer);
-  if (!tokens) return;
-  const msUntilExpiry = tokens.expires_at - Date.now();
-  const delay = Math.max(msUntilExpiry - 30_000, 1_000);
-  refreshTimer = window.setTimeout(() => {
-    doRefresh();
-  }, delay);
-}
-
 function save(raw: { access_token: string; refresh_token: string }) {
   tokens = {
     access_token: raw.access_token,
     refresh_token: raw.refresh_token,
     expires_at: parseExp(raw.access_token),
   };
-  localStorage.setItem('auth', JSON.stringify(tokens));
-  scheduleRefresh();
+  sessionStorage.setItem(REFRESH_STORAGE_KEY, raw.refresh_token);
 }
 
 export async function login(username: string, password: string) {
@@ -67,7 +62,8 @@ export async function login(username: string, password: string) {
 }
 
 async function doRefresh(): Promise<void> {
-  if (!tokens) return;
+  const refreshToken = tokens?.refresh_token;
+  if (!refreshToken) return;
   try {
     const res = await fetch(TOKEN_URL, {
       method: 'POST',
@@ -75,7 +71,7 @@ async function doRefresh(): Promise<void> {
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         client_id: OIDC_CLIENT_ID,
-        refresh_token: tokens.refresh_token,
+        refresh_token: refreshToken,
       }),
     });
     if (!res.ok) throw new Error();
@@ -141,25 +137,18 @@ export function getUserInfo() {
 
 export function logout() {
   tokens = null;
-  localStorage.removeItem('auth');
-  if (refreshTimer) clearTimeout(refreshTimer);
+  sessionStorage.removeItem(REFRESH_STORAGE_KEY);
   window.location.href = '/';
 }
 
-export function initAuth(): boolean {
-  const stored = localStorage.getItem('auth');
+export async function initAuth(): Promise<boolean> {
+  const stored = sessionStorage.getItem(REFRESH_STORAGE_KEY);
   if (!stored) return false;
-  try {
-    const parsed: StoredTokens = JSON.parse(stored);
-    if (!parsed.access_token || !parsed.refresh_token) return false;
-    tokens = parsed;
-    if (tokens.expires_at - Date.now() < 10_000) {
-      doRefresh();
-    } else {
-      scheduleRefresh();
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  tokens = {
+    access_token: '',
+    refresh_token: stored,
+    expires_at: 0,
+  };
+  await doRefresh();
+  return !!tokens;
 }

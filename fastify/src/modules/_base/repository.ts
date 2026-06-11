@@ -158,8 +158,9 @@ export class BaseRepository {
             where: { id, ...this.softDeleteWhere() },
             data: { deleted_at: new Date() },
           });
-        } catch {
-          // skip records that don't exist
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          if (code !== 'P2025') throw err;
         }
       }
     } else {
