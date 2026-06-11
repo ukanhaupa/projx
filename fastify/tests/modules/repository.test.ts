@@ -326,7 +326,9 @@ describe('BaseRepository', () => {
         .widget as {
         update: ReturnType<typeof vi.fn>;
       };
-      delegate.update.mockRejectedValue(new Error('Record not found'));
+      delegate.update.mockRejectedValue(
+        Object.assign(new Error('Record not found'), { code: 'P2025' }),
+      );
 
       const repo = new BaseRepository(prisma, 'Widget', {
         ...defaultOptions,

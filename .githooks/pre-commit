@@ -131,7 +131,7 @@ if [ -n "$INFRA_TF" ]; then
       echo "Skipping tflint (not installed)"
     fi
     if command -v trivy &> /dev/null; then
-      trivy config --exit-code 1 --severity HIGH,CRITICAL .
+      trivy config --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .terraform .
     else
       echo "Skipping trivy config scan (not installed)"
     fi

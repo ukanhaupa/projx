@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,14 +30,23 @@ type Server struct {
 	audit  *audit.Logger
 	tmpl   map[string]*template.Template
 	secure bool
+	ready  bool
 }
 
 func NewServer(base string, store *auth.Store, schema *browser.Schema, repo *browser.Repo, audit *audit.Logger) (*Server, error) {
-	s := &Server{base: base, store: store, schema: schema, repo: repo, audit: audit}
+	s := &Server{base: base, store: store, schema: schema, repo: repo, audit: audit, ready: true}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func (s *Server) SetCookieSecure(secure bool) {
+	s.secure = secure
+}
+
+func (s *Server) SetReadiness(value bool) {
+	s.ready = value
 }
 
 func (s *Server) parseTemplates() error {
@@ -74,9 +84,13 @@ func (s *Server) parseTemplates() error {
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
+	r.Use(limitRequestBody)
+	r.Use(sameOriginPostMiddleware)
 	r.Handle(s.base+"/static/*", http.StripPrefix(s.base+"/", http.FileServer(http.FS(staticFS))))
 
 	r.Get(s.base+"/healthz", s.healthz)
+	r.Get(s.base+"/healthz/live", s.healthzLive)
+	r.Get(s.base+"/healthz/ready", s.healthzReady)
 	r.Get(s.base+"/login", s.loginForm)
 	r.Post(s.base+"/login", s.loginSubmit)
 	r.Post(s.base+"/logout", s.logout)
@@ -206,7 +220,55 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+const maxRequestBodyBytes = 1 << 20
+
+func limitRequestBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sameOriginPostMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		host := r.Host
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if u, err := url.Parse(origin); err != nil || u.Host != host {
+				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
+				return
+			}
+		} else if referer := r.Header.Get("Referer"); referer != "" {
+			if u, err := url.Parse(referer); err != nil || u.Host != host {
+				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprintln(w, "ok")
+}
+
+func (s *Server) healthzLive(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintln(w, "live")
+}
+
+func (s *Server) healthzReady(w http.ResponseWriter, _ *http.Request) {
+	if !s.ready {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintln(w, "draining")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintln(w, "ready")
 }

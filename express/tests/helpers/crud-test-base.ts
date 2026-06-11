@@ -174,7 +174,7 @@ export function describeCrudEntity(config: CrudTestConfig) {
           .post(config.basePath)
           .send(secondPayload);
         expect(second.status).toBe(409);
-        expect(second.body.error.code).toBe('conflict');
+        expect(second.body.code).toBe('conflict');
       });
     }
   });

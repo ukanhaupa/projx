@@ -210,6 +210,7 @@ resource "aws_security_group" "compose" {
     }
   }
 
+  #trivy:ignore:AWS-0104 The compose host must reach arbitrary internet IPs for container image pulls and package updates.
   egress {
     from_port   = 0
     to_port     = 0
@@ -279,8 +280,16 @@ resource "aws_instance" "compose" {
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
   key_name               = var.ssh_key_name != "" ? var.ssh_key_name : null
 
-  # user_data is rendered once at creation. To reprovision, replace the instance.
   user_data_base64 = data.cloudinit_config.compose.rendered
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
+  root_block_device {
+    encrypted = true
+  }
 
   tags = merge(var.tags, { Name = "${var.name_prefix}-compose" })
 

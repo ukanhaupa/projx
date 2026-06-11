@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"adminpanel/internal/audit"
@@ -58,17 +60,40 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	srv.SetCookieSecure(cfg.CookieSecure)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("admin-panel listening on :%s (base path %q)", cfg.Port, cfg.BasePath)
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+
+	stopCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Printf("admin-panel listening on :%s (base path %q)", cfg.Port, cfg.BasePath)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	select {
+	case err := <-serverErr:
 		return err
+	case <-stopCtx.Done():
+		log.Printf("shutdown signal received, draining (20s deadline)")
+		srv.SetReadiness(false)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
 }
 
 func healthcheck() int {

@@ -2,12 +2,17 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import asyncio
+
 import jwt
 import pyotp
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from src.app import app
+from src.configs import get_db_session
 
 from src.auth import _mailer
 from src.auth._mfa import (
@@ -331,6 +336,38 @@ class TestRefreshAndLogout:
         replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
         assert replay.status_code == 401
         assert replay.json()["detail"] == "token_replay_detected"
+
+    async def test_refresh_concurrent_rotation_single_winner(self, test_db: AsyncSession, test_engine: AsyncEngine):
+        await _seed_user(test_db, email="race@example.com", password="goodpass-1")  # pragma: allowlist secret
+
+        session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+        async def override_get_db_session():
+            async with session_factory() as session:
+                yield session
+
+        app.dependency_overrides[get_db_session] = override_get_db_session
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as race_client:
+                login = await race_client.post(
+                    "/api/v1/auth/login",
+                    json={"email": "race@example.com", "password": "goodpass-1"},
+                )
+                refresh_token = login.json()["refresh_token"]
+
+                attempts = await asyncio.gather(
+                    *(race_client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}) for _ in range(8))
+                )
+
+            winners = [r for r in attempts if r.status_code == 200]
+            losers = [r for r in attempts if r.status_code == 401]
+            assert len(winners) == 1
+            assert len(losers) == len(attempts) - 1
+            for loser in losers:
+                assert loser.json()["detail"] == "token_replay_detected"
+        finally:
+            app.dependency_overrides.clear()
 
     async def test_logout_revokes_session(self, client: AsyncClient, test_db: AsyncSession):
         user = await _seed_user(test_db, email="lo@example.com")

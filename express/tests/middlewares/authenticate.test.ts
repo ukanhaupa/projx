@@ -100,7 +100,7 @@ describe('authenticate middleware', () => {
       .set('Authorization', 'Bearer not-a-jwt');
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('invalid_token');
+    expect(res.body.code).toBe('invalid_token');
   });
 
   it('errors with 401 when the token is signed with a different secret', async () => {
@@ -111,7 +111,7 @@ describe('authenticate middleware', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('invalid_token');
+    expect(res.body.code).toBe('invalid_token');
   });
 
   it('errors with 401 when the token is expired', async () => {
@@ -122,7 +122,7 @@ describe('authenticate middleware', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('invalid_token');
+    expect(res.body.code).toBe('invalid_token');
   });
 
   it('errors with 401 when the payload has no sub', async () => {
@@ -133,7 +133,7 @@ describe('authenticate middleware', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('invalid_token');
+    expect(res.body.code).toBe('invalid_token');
   });
 
   it('defaults missing email, role, and permissions to safe values', async () => {
@@ -174,7 +174,7 @@ describe('requireAuth middleware', () => {
   it('returns 401 when authUser is missing', async () => {
     const res = await request(buildApp(true)).get('/protected');
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('unauthorized');
+    expect(res.body.code).toBe('unauthorized');
   });
 
   it('passes through when authUser is set', async () => {
@@ -208,6 +208,6 @@ describe('authenticate without JWT_SECRET', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(500);
-    expect(res.body.error.code).toBe('jwt_not_configured');
+    expect(res.body.code).toBe('jwt_not_configured');
   });
 });

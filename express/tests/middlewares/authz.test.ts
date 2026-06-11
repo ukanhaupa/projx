@@ -38,7 +38,7 @@ describe('requirePermission', () => {
       '/widgets',
     );
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('unauthorized');
+    expect(res.body.code).toBe('unauthorized');
   });
 
   it('allows when the exact permission is granted', async () => {
@@ -74,7 +74,7 @@ describe('requirePermission', () => {
       buildApp('widgets:update.one', user(['widgets:read.all'])),
     ).get('/widgets');
     expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('forbidden');
+    expect(res.body.code).toBe('forbidden');
   });
 
   it('rejects permissions with disallowed characters', async () => {

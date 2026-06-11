@@ -71,7 +71,7 @@ func newTestServer(t *testing.T, pool *pgxpool.Pool) *Server {
 		t.Fatalf("migrate is not idempotent: %v", err)
 	}
 	store := auth.NewStore(pool)
-	if err := store.EnsureBootstrap(ctx, "admin@example.com", "s3cret-pass"); err != nil {
+	if err := store.EnsureBootstrap(ctx, "admin@example.com", "s3cret-pass1"); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	if err := store.EnsureBootstrap(ctx, "second@example.com", "other"); err != nil {
@@ -154,7 +154,7 @@ func TestLoginAndProtectedRedirect(t *testing.T) {
 	if login(t, h, "admin@example.com", "wrong") != "" {
 		t.Fatal("wrong password should not yield a session")
 	}
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	if token == "" {
 		t.Fatal("valid login should set a session cookie")
 	}
@@ -166,7 +166,7 @@ func TestLoginAndProtectedRedirect(t *testing.T) {
 func TestUnknownTableIs404(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	for _, name := range []string{"does_not_exist", "widgets; DROP TABLE widgets", "pg_class"} {
 		rec := authedGet(h, "/admin/tables/"+url.PathEscape(name), token)
@@ -179,7 +179,7 @@ func TestUnknownTableIs404(t *testing.T) {
 func TestBrowseListsRows(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedGet(h, "/admin/tables/widgets", token)
 	if rec.Code != http.StatusOK {
@@ -200,7 +200,7 @@ func TestBrowseListsRows(t *testing.T) {
 func TestReadModeRejectsWrites(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	for _, path := range []string{
 		"/admin/tables/widgets/new",
@@ -217,7 +217,7 @@ func TestReadModeRejectsWrites(t *testing.T) {
 func TestWritableTableCRUD(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 	ctx := context.Background()
 
@@ -259,7 +259,7 @@ func TestWritableTableCRUD(t *testing.T) {
 func TestMixedTypesRoundTrip(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 	ctx := context.Background()
 
@@ -300,7 +300,7 @@ func TestMixedTypesRoundTrip(t *testing.T) {
 func TestInvalidJSONRejected(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	form := url.Values{"label": {"bad"}, "meta": {"{not json}"}}
@@ -316,7 +316,7 @@ func TestInvalidJSONRejected(t *testing.T) {
 func TestLogoutClearsSession(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	if rec := authedPost(h, "/admin/logout", token, nil); rec.Code != http.StatusSeeOther {
 		t.Fatalf("logout should redirect, got %d", rec.Code)
@@ -341,7 +341,7 @@ func TestLoginFormRenders(t *testing.T) {
 func TestNewAndEditForms(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	newForm := authedGet(h, "/admin/tables/mixed/new", token)
@@ -388,7 +388,7 @@ func TestHealthz(t *testing.T) {
 func TestModeToggleByReadWriteAdmin(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	on := authedPost(h, "/admin/mode", token, url.Values{"write": {"on"}, "return": {"/admin/tables/widgets"}})
 	if on.Code != http.StatusSeeOther {
@@ -446,7 +446,7 @@ func TestReadOnlyAdminSeesNoToggle(t *testing.T) {
 func TestExpiredWriteModeRejectsWrites(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	_, err := pool.Exec(context.Background(),
 		`UPDATE admin_panel.admin_sessions SET write_mode_until = $2 WHERE token = $1`,
@@ -465,7 +465,7 @@ func TestExpiredWriteModeRejectsWrites(t *testing.T) {
 func TestBannerShownOnlyInWriteMode(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	body := authedGet(h, "/admin/", token).Body.String()
 	if strings.Contains(body, "WRITE MODE") {
@@ -488,7 +488,7 @@ func TestBannerShownOnlyInWriteMode(t *testing.T) {
 func TestSafeRedirectRejectsExternalReturn(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedPost(h, "/admin/mode", token,
 		url.Values{"write": {"on"}, "return": {"https://evil.example.com/"}})
@@ -503,7 +503,7 @@ func TestSafeRedirectRejectsExternalReturn(t *testing.T) {
 func TestSchemaPickerSwitchesCookie(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	rec := authedPost(h, "/admin/schema", token,
 		url.Values{"schema": {"admin_panel"}, "return": {"/admin/"}})
@@ -534,7 +534,7 @@ func TestSchemaPickerSwitchesCookie(t *testing.T) {
 func TestNoInlineJSInAdminPages(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	paths := []string{"/admin/", "/admin/tables/widgets", "/admin/tables/widgets/new"}
 	enableWriteMode(t, pool, token)
@@ -560,7 +560,7 @@ func TestNoInlineJSInAdminPages(t *testing.T) {
 func TestAdminPagesSendNoStoreHeader(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	paths := []string{"/admin/", "/admin/tables/widgets"}
 	for _, p := range paths {
@@ -578,7 +578,7 @@ func TestAdminPagesSendNoStoreHeader(t *testing.T) {
 func TestSchemaPickerSwitchSurvivesNavigation(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	switchRec := authedPost(h, "/admin/schema", token,
 		url.Values{"schema": {"admin_panel"}, "return": {"/admin/"}})
@@ -618,7 +618,7 @@ func TestSchemaPickerSwitchSurvivesNavigation(t *testing.T) {
 func TestAdminPanelBrowsable(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
@@ -634,7 +634,7 @@ func TestAdminPanelBrowsable(t *testing.T) {
 func TestSelfRoleEditStripped(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	var selfID int64
@@ -667,7 +667,7 @@ func TestSelfRoleEditStripped(t *testing.T) {
 func TestSelfDeleteBlocked(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	var selfID int64
@@ -696,7 +696,7 @@ func TestOtherAdminEditableByReadWrite(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
 	seedAdmin(t, pool, "second@example.com", "other", auth.RoleReadOnly)
-	token := login(t, h, "admin@example.com", "s3cret-pass")
+	token := login(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	var otherID int64

@@ -6,6 +6,7 @@
     "prisma",
     "src/plugins/prisma.ts",
     "src/prisma.ts",
+    "src/lib/prisma-client.ts",
     "src/lib/service-config.ts",
     "src/modules/_base",
     "src/modules/audit-logs",
@@ -27,7 +28,10 @@
     "tests"
   ],
   "packageOverrides": {
-    "descriptionReplace": { "from": "Prisma", "to": "Sequelize" },
+    "descriptionReplace": {
+      "from": "Prisma",
+      "to": "Sequelize"
+    },
     "removeDependencies": ["@prisma/client"],
     "removeDevDependencies": ["prisma"],
     "addDependencies": {

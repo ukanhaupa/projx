@@ -5,8 +5,8 @@ const ConfigSchema = Type.Object({
   HOST: Type.String({ default: '0.0.0.0' }),
   PORT: Type.Number({ default: 3000 }),
   LOG_LEVEL: Type.String({ default: 'debug' }),
-  DATABASE_URL: Type.String(),
-  JWT_SECRET: Type.String({ default: 'dev-secret-change-in-production' }),
+  DATABASE_URL: Type.String({ minLength: 1 }),
+  JWT_SECRET: Type.String({ minLength: 32 }),
   JWT_PROVIDER: Type.Union(
     [
       Type.Literal('shared_secret'),
@@ -27,6 +27,8 @@ const ConfigSchema = Type.Object({
   CRED_ENCRYPTION_KEY: Type.String({ default: '' }),
   RATE_LIMIT_MAX: Type.Number({ default: 200 }),
   RATE_LIMIT_WINDOW: Type.String({ default: '1 minute' }),
+  EXPOSE_API_DOCS: Type.Boolean({ default: false }),
+  LOG_PRETTY: Type.Boolean({ default: false }),
 });
 
 export type Config = Static<typeof ConfigSchema>;
@@ -37,7 +39,7 @@ function loadConfig(): Config {
     PORT: Number(process.env.PORT ?? 3000),
     LOG_LEVEL: process.env.LOG_LEVEL ?? 'debug',
     DATABASE_URL: process.env.DATABASE_URL ?? '',
-    JWT_SECRET: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
+    JWT_SECRET: process.env.JWT_SECRET ?? '',
     JWT_PROVIDER: process.env.JWT_PROVIDER ?? 'auto',
     JWT_PUBLIC_KEY: process.env.JWT_PUBLIC_KEY ?? '',
     JWT_JWKS_URL: process.env.JWT_JWKS_URL ?? '',
@@ -51,6 +53,8 @@ function loadConfig(): Config {
     CRED_ENCRYPTION_KEY: process.env.CRED_ENCRYPTION_KEY ?? '',
     RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX ?? 200),
     RATE_LIMIT_WINDOW: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
+    EXPOSE_API_DOCS: process.env.EXPOSE_API_DOCS === 'true',
+    LOG_PRETTY: process.env.LOG_PRETTY === 'true',
   };
 
   if (!Value.Check(ConfigSchema, raw)) {
@@ -61,6 +65,12 @@ function loadConfig(): Config {
 
   if (!raw.DATABASE_URL) {
     throw new Error('DATABASE_URL is required');
+  }
+
+  if (!raw.JWT_SECRET || raw.JWT_SECRET.length < 32) {
+    throw new Error(
+      'JWT_SECRET is required and must be at least 32 characters. Generate one with: openssl rand -base64 48',
+    );
   }
 
   return raw;

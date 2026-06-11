@@ -1,30 +1,30 @@
-import express from 'express';
-import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import express from "express";
+import request from "supertest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const SECRET = 'test-secret-12345-67890-abcdef-09876';
-const ENC_KEY = Buffer.alloc(32, 7).toString('base64');
+const SECRET = "test-secret-12345-67890-abcdef-09876";
+const ENC_KEY = Buffer.alloc(32, 7).toString("base64");
 
 const stub = vi.hoisted(() => ({
   config: {
-    JWT_SECRET: 'test-secret-12345-67890-abcdef-09876' as string | undefined,
-    CRED_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64') as
+    JWT_SECRET: "test-secret-12345-67890-abcdef-09876" as string | undefined,
+    CRED_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64") as
       | string
       | undefined,
-    NODE_ENV: 'test' as string,
+    NODE_ENV: "test" as string,
   },
 }));
 
-vi.mock('../../../src/config.js', () => ({
+vi.mock("../../../src/config.js", () => ({
   config: stub.config,
   allowedOrigins: () => [],
 }));
 
-const { authRouter } = await import('../../../src/modules/auth/index.js');
+const { authRouter } = await import("../../../src/modules/auth/index.js");
 const { errorHandler, notFoundHandler } =
-  await import('../../../src/errors.js');
+  await import("../../../src/errors.js");
 const { authenticate } =
-  await import('../../../src/middlewares/authenticate.js');
+  await import("../../../src/middlewares/authenticate.js");
 
 interface UserRow {
   id: string;
@@ -75,10 +75,10 @@ function newUser(overrides: Partial<UserRow> = {}): UserRow {
   const now = new Date();
   return {
     id: `user-${Math.random().toString(36).slice(2, 10)}`,
-    email: 'placeholder@example.com',
-    name: 'Test User',
+    email: "placeholder@example.com",
+    name: "Test User",
     password_hash: null,
-    role: 'user',
+    role: "user",
     email_verified: false,
     failed_login_count: 0,
     locked_until: null,
@@ -116,21 +116,21 @@ function makeMockPrisma() {
   function evalCondition(value: unknown, condition: unknown): boolean {
     if (
       condition !== null &&
-      typeof condition === 'object' &&
+      typeof condition === "object" &&
       !Array.isArray(condition)
     ) {
       const cond = condition as Record<string, unknown>;
-      if ('gt' in cond) {
+      if ("gt" in cond) {
         return (
           value instanceof Date && value.getTime() > (cond.gt as Date).getTime()
         );
       }
-      if ('lt' in cond) {
+      if ("lt" in cond) {
         return (
           value instanceof Date && value.getTime() < (cond.lt as Date).getTime()
         );
       }
-      if ('not' in cond) {
+      if ("not" in cond) {
         return value !== cond.not;
       }
     }
@@ -171,7 +171,7 @@ function makeMockPrisma() {
       update: vi.fn(
         async (args: { where: { id: string }; data: Partial<UserRow> }) => {
           const existing = users.get(args.where.id);
-          if (!existing) throw new Error('user not found');
+          if (!existing) throw new Error("user not found");
           const next: UserRow = {
             ...existing,
             ...args.data,
@@ -209,8 +209,8 @@ function makeMockPrisma() {
       findMany: vi.fn(
         async (args: {
           where: { user_id: string; revoked_at: null };
-          orderBy: { created_at: 'desc' };
-          distinct: ['session_id'];
+          orderBy: { created_at: "desc" };
+          distinct: ["session_id"];
         }) => {
           const filtered = [...refreshTokens.values()]
             .filter(
@@ -234,6 +234,7 @@ function makeMockPrisma() {
         }) => {
           let count = 0;
           for (const t of refreshTokens.values()) {
+            if (args.where.id !== undefined && t.id !== args.where.id) continue;
             if (
               args.where.user_id !== undefined &&
               t.user_id !== args.where.user_id
@@ -245,6 +246,8 @@ function makeMockPrisma() {
             )
               continue;
             if (args.where.revoked_at === null && t.revoked_at !== null)
+              continue;
+            if (args.where.rotated_to === null && t.rotated_to !== null)
               continue;
             if (args.where.NOT && t.session_id === args.where.NOT.session_id)
               continue;
@@ -260,7 +263,7 @@ function makeMockPrisma() {
           data: Partial<RefreshTokenRow>;
         }) => {
           const existing = refreshTokens.get(args.where.id);
-          if (!existing) throw new Error('refresh token not found');
+          if (!existing) throw new Error("refresh token not found");
           const next = { ...existing, ...args.data };
           refreshTokens.set(args.where.id, next);
           return { ...next };
@@ -293,7 +296,7 @@ function makeMockPrisma() {
           data: Partial<VerificationTokenRow>;
         }) => {
           const existing = verificationTokens.get(args.where.id);
-          if (!existing) throw new Error('verification token not found');
+          if (!existing) throw new Error("verification token not found");
           const next = { ...existing, ...args.data };
           verificationTokens.set(args.where.id, next);
           return { ...next };
@@ -317,15 +320,15 @@ function buildAuthApp(prisma: MockPrisma) {
   const app = express();
   app.use(express.json());
   app.use(authenticate);
-  app.use('/auth', authRouter(prisma));
+  app.use("/auth", authRouter(prisma));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
 }
 
-describe('auth signup -> login -> me flow', () => {
-  const email = 'flow@example.com';
-  const password = 'P@ssw0rd!2025'; // pragma: allowlist secret
+describe("auth signup -> login -> me flow", () => {
+  const email = "flow@example.com";
+  const password = "P@ssw0rd!2025"; // pragma: allowlist secret
   let app: express.Express;
   let prisma: MockPrisma;
 
@@ -336,23 +339,23 @@ describe('auth signup -> login -> me flow', () => {
     app = buildAuthApp(prisma);
   });
 
-  it('POST /auth/signup creates a user', async () => {
+  it("POST /auth/signup creates a user", async () => {
     const res = await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe(email);
     expect(res.body.access_token).toBeTruthy();
     expect(res.body.refresh_token).toBeTruthy();
   });
 
-  it('POST /auth/login returns tokens', async () => {
+  it("POST /auth/login returns tokens", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const res = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     expect(res.status).toBe(200);
     expect(res.body.access_token).toBeTruthy();
@@ -360,51 +363,51 @@ describe('auth signup -> login -> me flow', () => {
     expect(res.body.user.email).toBe(email);
   });
 
-  it('POST /auth/login rejects wrong password with request_id', async () => {
+  it("POST /auth/login rejects wrong password with request_id", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const res = await request(app)
-      .post('/auth/login')
-      .set('x-request-id', 'req-test-1')
-      .send({ email, password: 'wrong-password' }); // pragma: allowlist secret
+      .post("/auth/login")
+      .set("x-request-id", "req-test-1")
+      .send({ email, password: "wrong-password" }); // pragma: allowlist secret
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('invalid_credentials');
-    expect(res.body.error.message).toBe('Invalid credentials');
+    expect(res.body.code).toBe("invalid_credentials");
+    expect(res.body.detail).toBe("Invalid credentials");
   });
 
-  it('GET /auth/me returns current user', async () => {
+  it("GET /auth/me returns current user", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { access_token } = loginRes.body;
 
     const res = await request(app)
-      .get('/auth/me')
-      .set('Authorization', `Bearer ${access_token}`);
+      .get("/auth/me")
+      .set("Authorization", `Bearer ${access_token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.email).toBe(email);
   });
 
-  it('POST /auth/refresh rotates the refresh token', async () => {
+  it("POST /auth/refresh rotates the refresh token", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { refresh_token: oldRefresh } = loginRes.body;
 
     const res = await request(app)
-      .post('/auth/refresh')
+      .post("/auth/refresh")
       .send({ refresh_token: oldRefresh });
 
     expect(res.status).toBe(200);
@@ -412,133 +415,158 @@ describe('auth signup -> login -> me flow', () => {
     expect(res.body.refresh_token).not.toBe(oldRefresh);
   });
 
-  it('POST /auth/refresh detects replay of revoked token', async () => {
+  it("POST /auth/refresh detects replay of revoked token", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { refresh_token } = loginRes.body;
 
     const first = await request(app)
-      .post('/auth/refresh')
+      .post("/auth/refresh")
       .send({ refresh_token });
     expect(first.status).toBe(200);
 
     const replay = await request(app)
-      .post('/auth/refresh')
+      .post("/auth/refresh")
       .send({ refresh_token });
     expect(replay.status).toBe(401);
-    expect(replay.body.error.message).toBe('token_replay_detected');
+    expect(replay.body.detail).toBe("token_replay_detected");
   });
 
-  it('POST /auth/logout revokes the current session', async () => {
+  it("POST /auth/refresh lets exactly one concurrent rotation win", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
 
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
+      .send({ email, password });
+    const { refresh_token } = loginRes.body;
+
+    const attempts = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        request(app).post("/auth/refresh").send({ refresh_token }),
+      ),
+    );
+
+    const winners = attempts.filter((r) => r.status === 200);
+    const losers = attempts.filter((r) => r.status === 401);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(attempts.length - 1);
+    for (const loser of losers) {
+      expect(loser.body.detail).toBe("token_replay_detected");
+    }
+  });
+
+  it("POST /auth/logout revokes the current session", async () => {
+    await request(app)
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
+
+    const loginRes = await request(app)
+      .post("/auth/login")
       .send({ email, password });
     const { access_token } = loginRes.body;
 
     const res = await request(app)
-      .post('/auth/logout')
-      .set('Authorization', `Bearer ${access_token}`)
+      .post("/auth/logout")
+      .set("Authorization", `Bearer ${access_token}`)
       .send({});
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe('ok');
+    expect(res.body.status).toBe("ok");
   });
 
-  it('POST /auth/change-password requires current password', async () => {
+  it("POST /auth/change-password requires current password", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { access_token } = loginRes.body;
 
     const fail = await request(app)
-      .post('/auth/change-password')
-      .set('Authorization', `Bearer ${access_token}`)
-      .send({ current_password: 'wrong', new_password: 'N3wP@ssword!' }); // pragma: allowlist secret
+      .post("/auth/change-password")
+      .set("Authorization", `Bearer ${access_token}`)
+      .send({ current_password: "wrong", new_password: "N3wP@ssword!" }); // pragma: allowlist secret
     expect(fail.status).toBe(400);
-    expect(fail.body.error.code).toBe('invalid_password');
+    expect(fail.body.code).toBe("invalid_password");
 
     const ok = await request(app)
-      .post('/auth/change-password')
-      .set('Authorization', `Bearer ${access_token}`)
-      .send({ current_password: password, new_password: 'N3wP@ssword!' }); // pragma: allowlist secret
+      .post("/auth/change-password")
+      .set("Authorization", `Bearer ${access_token}`)
+      .send({ current_password: password, new_password: "N3wP@ssword!" }); // pragma: allowlist secret
     expect(ok.status).toBe(200);
   });
 
-  it('POST /auth/forgot-password is silent for unknown email', async () => {
+  it("POST /auth/forgot-password is silent for unknown email", async () => {
     const res = await request(app)
-      .post('/auth/forgot-password')
-      .send({ email: 'unknown@example.com' });
+      .post("/auth/forgot-password")
+      .send({ email: "unknown@example.com" });
     expect(res.status).toBe(200);
     expect(res.body.message).toMatch(/If the account exists/);
   });
 
-  it('POST /auth/reset-password rejects invalid token', async () => {
+  it("POST /auth/reset-password rejects invalid token", async () => {
     const res = await request(app)
-      .post('/auth/reset-password')
-      .send({ token: 'invalid', new_password: 'N3wP@ssword!' }); // pragma: allowlist secret
+      .post("/auth/reset-password")
+      .send({ token: "invalid", new_password: "N3wP@ssword!" }); // pragma: allowlist secret
     expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('invalid_reset_token');
+    expect(res.body.code).toBe("invalid_reset_token");
   });
 
-  it('POST /auth/verify-email rejects invalid token', async () => {
+  it("POST /auth/verify-email rejects invalid token", async () => {
     const res = await request(app)
-      .post('/auth/verify-email')
-      .send({ token: 'invalid' });
+      .post("/auth/verify-email")
+      .send({ token: "invalid" });
     expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('invalid_verification_token');
+    expect(res.body.code).toBe("invalid_verification_token");
   });
 
-  it('POST /auth/resend-verification returns 202 even for unknown email', async () => {
+  it("POST /auth/resend-verification returns 202 even for unknown email", async () => {
     const res = await request(app)
-      .post('/auth/resend-verification')
-      .send({ email: 'unknown@example.com' });
+      .post("/auth/resend-verification")
+      .send({ email: "unknown@example.com" });
     expect(res.status).toBe(202);
     expect(res.body.sent).toBe(true);
   });
 
-  it('GET /auth/sessions lists active sessions', async () => {
+  it("GET /auth/sessions lists active sessions", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { access_token } = loginRes.body;
 
     const res = await request(app)
-      .get('/auth/sessions')
-      .set('Authorization', `Bearer ${access_token}`);
+      .get("/auth/sessions")
+      .set("Authorization", `Bearer ${access_token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(res.body.data.length).toBeGreaterThan(0);
   });
 
-  it('POST /auth/signup rejects duplicate email', async () => {
+  it("POST /auth/signup rejects duplicate email", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
     const dup = await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Other', password });
+      .post("/auth/signup")
+      .send({ email, name: "Other", password });
     expect(dup.status).toBe(409);
-    expect(dup.body.error.code).toBe('duplicate_email');
+    expect(dup.body.code).toBe("duplicate_email");
   });
 });
 
-describe('mfa enrollment', () => {
-  const email = 'mfa@example.com';
-  const password = 'P@ssw0rd!2025'; // pragma: allowlist secret
+describe("mfa enrollment", () => {
+  const email = "mfa@example.com";
+  const password = "P@ssw0rd!2025"; // pragma: allowlist secret
   let app: express.Express;
   let prisma: MockPrisma;
 
@@ -549,18 +577,18 @@ describe('mfa enrollment', () => {
     app = buildAuthApp(prisma);
   });
 
-  it('starts MFA enrollment and returns secret + otpauth url', async () => {
+  it("starts MFA enrollment and returns secret + otpauth url", async () => {
     await request(app)
-      .post('/auth/signup')
-      .send({ email, name: 'Test User', password });
+      .post("/auth/signup")
+      .send({ email, name: "Test User", password });
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post("/auth/login")
       .send({ email, password });
     const { access_token } = loginRes.body;
 
     const res = await request(app)
-      .post('/auth/mfa/enroll')
-      .set('Authorization', `Bearer ${access_token}`)
+      .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${access_token}`)
       .send({});
     expect(res.status).toBe(200);
     expect(res.body.secret).toBeTruthy();

@@ -13,6 +13,7 @@ type Config struct {
 	SessionSecret  string
 	BootstrapEmail string
 	BootstrapPass  string
+	CookieSecure   bool
 }
 
 func Load() (*Config, error) {
@@ -36,6 +37,7 @@ func Load() (*Config, error) {
 		SessionSecret:  secret,
 		BootstrapEmail: os.Getenv("ADMIN_EMAIL"),
 		BootstrapPass:  os.Getenv("ADMIN_PASSWORD"),
+		CookieSecure:   !strings.EqualFold(os.Getenv("COOKIE_SECURE"), "false"),
 	}
 	return c, nil
 }

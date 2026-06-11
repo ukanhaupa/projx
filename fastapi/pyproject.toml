@@ -20,6 +20,8 @@ dependencies = [
     "pyjwt>=2.13.0,<3.0.0",
     "cryptography>=47.0.0,<48.0.0",
     # projx-anchor: deps
+    "sentry-sdk>=2.62.0",
+    "slowapi>=0.1.9",
 ]
 
 [tool.uv]
@@ -87,6 +89,7 @@ select = [
     "N",
     "UP",
     "B",
+    "B904",
     "A",
     "T20",
     "SIM",
@@ -102,7 +105,6 @@ ignore = [
     "RUF012",
     "F403",
     "F405",
-    "B904",
     "N801",
     "TC001",
     "TC003",

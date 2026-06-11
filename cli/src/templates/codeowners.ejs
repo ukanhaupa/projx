@@ -1,0 +1,9 @@
+* @<%= githubOwner %>
+
+infra/ @<%= githubOwner %>
+.github/workflows/ @<%= githubOwner %>
+scripts/deploy*.sh @<%= githubOwner %>
+scripts/rollback.sh @<%= githubOwner %>
+<% if (hasBackendMigrations) { %>backend/prisma/migrations/ @<%= githubOwner %>
+<% } %><% if (hasAdminPanelMigrations) { %>admin-panel/internal/db/migrations/ @<%= githubOwner %>
+<% } %>
