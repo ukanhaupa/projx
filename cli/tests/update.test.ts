@@ -321,8 +321,7 @@ describe('update — schema migration on legacy projects', () => {
     expect(next.components).toBeUndefined();
     expect(next.createdAt).toBe('2026-01-01');
     expect(next.defaultsApplied).toBe(true);
-    expect(next.skip).toContain('docker-compose.yml');
-    expect(next.skip).toContain('README.md');
+    expect(next.skip ?? []).not.toContain('docker-compose.yml');
     expect(next.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 

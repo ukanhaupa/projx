@@ -2,6 +2,8 @@ node_modules/
 playwright-report/
 test-results/
 blob-report/
+.nyc_output/
+coverage/
 .env
 .env.*
 !.env.example

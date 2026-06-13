@@ -532,17 +532,15 @@ export async function writeProjxConfig(
   await writeFile(path, JSON.stringify(out, null, 2) + '\n');
 }
 
-export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
+// Shared root files the generators rebuild with one block per instance/component
+// (a compose service, a CI job, a pre-commit block, a setup step). When `add`
+// leaves one untouched because it is pinned, the new component is not wired into
+// it, so the user must edit it by hand or unpin and re-run.
+export const INSTANCE_AWARE_SHARED: string[] = [
   'docker-compose.yml',
-  'README.md',
-  '.githooks/pre-commit',
   '.github/workflows/ci.yml',
-  'scripts/ci-local.sh',
-  'scripts/ci-runner-gc.sh',
-  'scripts/check-bundle-size.sh',
+  '.githooks/pre-commit',
   'scripts/setup.sh',
-  'scripts/setup-docker.sh',
-  'scripts/setup-ssl.sh',
 ];
 
 export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<

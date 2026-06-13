@@ -223,6 +223,53 @@ describe('add', () => {
       expect(await readFile(join(dest, 'README.md'), 'utf-8')).toBe(userReadme);
     });
 
+    it('respects .projx skip for instance-aware root files (docker-compose.yml)', async () => {
+      dest = join(tmpdir(), `projx-add-skip-compose-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['fastify'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      const projxPath = join(dest, '.projx');
+      const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+      projx.skip = [...(projx.skip ?? []), 'docker-compose.yml'];
+      await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+
+      const userCompose = '# Hand-authored compose — DO NOT TOUCH\n';
+      await writeFile(join(dest, 'docker-compose.yml'), userCompose);
+
+      await add(dest, ['fastify'], REPO_DIR, true, 'email-ingestor');
+
+      expect(await readFile(join(dest, 'docker-compose.yml'), 'utf-8')).toBe(
+        userCompose,
+      );
+    });
+
+    it('respects .projx skip when adding a new component (no --name path)', async () => {
+      dest = join(tmpdir(), `projx-add-newcomp-skip-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['fastify'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      const projxPath = join(dest, '.projx');
+      const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+      projx.skip = [...(projx.skip ?? []), 'docker-compose.yml'];
+      await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+
+      const userCompose = '# Hand-authored compose — DO NOT TOUCH\n';
+      await writeFile(join(dest, 'docker-compose.yml'), userCompose);
+
+      await add(dest, ['admin-panel'], REPO_DIR, true);
+
+      expect(existsSync(join(dest, 'admin-panel'))).toBe(true);
+      expect(await readFile(join(dest, 'docker-compose.yml'), 'utf-8')).toBe(
+        userCompose,
+      );
+    });
+
     it("sets the new instance's package.json name from the custom dir name", async () => {
       dest = join(tmpdir(), `projx-add-name-pkgname-${Date.now()}`);
       await scaffold(

@@ -147,7 +147,7 @@ describe('init workflow', () => {
     expect(existsSync(join(tmp, '.projx'))).toBe(true);
     const cfg = JSON.parse(await readFile(join(tmp, '.projx'), 'utf-8'));
     expect(cfg.defaultsApplied).toBe(true);
-    expect(cfg.skip).toContain('scripts/setup.sh');
+    expect(cfg.skip).toEqual([]);
     expect(cfg.version).toMatch(/^\d+\.\d+\.\d+/);
 
     expect(existsSync(join(tmp, 'docker-compose.yml'))).toBe(false);
@@ -322,6 +322,33 @@ describe('init — detected components', () => {
     await init(tmp, REPO_DIR);
 
     expect(p.select).toHaveBeenCalledTimes(1);
+    const cfg = JSON.parse(await readFile(join(tmp, '.projx'), 'utf-8'));
+    expect(cfg.packageManager).toBe('pnpm');
+  });
+
+  it('detects the package manager from a component-dir lockfile without prompting', async () => {
+    tmp = join(tmpdir(), `projx-init-pm-component-${Date.now()}`);
+    await mkdir(join(tmp, 'fastify'), { recursive: true });
+    await writeFile(
+      join(tmp, 'fastify/package.json'),
+      JSON.stringify({ name: 'old-api', dependencies: { fastify: '^5' } }),
+    );
+    await writeFile(
+      join(tmp, 'fastify/pnpm-lock.yaml'),
+      'lockfileVersion: 9.0\n',
+    );
+    await gitFixture(tmp);
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: false,
+      configurable: true,
+    });
+    vi.mocked(p.confirm).mockResolvedValue(true as never);
+    vi.mocked(p.select).mockClear();
+
+    await init(tmp, REPO_DIR);
+
+    expect(p.select).not.toHaveBeenCalled();
     const cfg = JSON.parse(await readFile(join(tmp, '.projx'), 'utf-8'));
     expect(cfg.packageManager).toBe('pnpm');
   });

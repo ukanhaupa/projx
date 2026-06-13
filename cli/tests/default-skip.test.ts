@@ -31,7 +31,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
       });
   });
 
-  it('fresh scaffold writes default skip patterns to .projx + markers', async () => {
+  it('fresh scaffold leaves root skip empty but protects component manifests', async () => {
     dest = join(tmpdir(), `projx-A1-${Date.now()}`);
     await scaffold(
       {
@@ -46,13 +46,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
 
     const config = await readProjxConfig(dest);
     expect(config.defaultsApplied).toBe(true);
-    expect(config.skip).toContain('docker-compose.yml');
-    expect(config.skip).toContain('README.md');
-    expect(config.skip).toContain('.githooks/pre-commit');
-    expect(config.skip).toContain('.github/workflows/ci.yml');
-    expect(config.skip).toContain('scripts/setup.sh');
-    expect(config.skip).toContain('scripts/setup-docker.sh');
-    expect(config.skip).toContain('scripts/setup-ssl.sh');
+    expect(config.skip).toEqual([]);
 
     const fastapiMarker = await readComponentMarker(join(dest, 'fastapi'));
     expect(fastapiMarker?.skip).toContain('pyproject.toml');
@@ -385,14 +379,13 @@ describe('default-skip — scenario E: legacy migration', () => {
 
     const config = await readProjxConfig(dest);
     expect(config.defaultsApplied).toBe(true);
-    expect(config.skip).toContain('docker-compose.yml');
-    expect(config.skip).toContain('README.md');
+    expect(config.skip ?? []).not.toContain('docker-compose.yml');
 
     const fastifyMarker = await readComponentMarker(join(dest, 'fastify'));
     expect(fastifyMarker?.skip).toContain('package.json');
   });
 
-  it("legacy migration unions defaults with user's existing skip patterns", async () => {
+  it("legacy migration preserves the user's existing skip patterns", async () => {
     dest = join(tmpdir(), `projx-E2-${Date.now()}`);
     await scaffold(
       {
@@ -427,11 +420,10 @@ describe('default-skip — scenario E: legacy migration', () => {
 
     const config = await readProjxConfig(dest);
     expect(config.skip).toContain('custom-user-file.txt');
-    expect(config.skip).toContain('docker-compose.yml');
-    expect(config.skip).toContain('README.md');
+    expect(config.skip ?? []).not.toContain('docker-compose.yml');
   });
 
-  it('after migration, defaults are NOT re-added if user unpins them', async () => {
+  it('update never injects files into the root skip list', async () => {
     dest = join(tmpdir(), `projx-E3-${Date.now()}`);
     await scaffold(
       {
@@ -444,16 +436,10 @@ describe('default-skip — scenario E: legacy migration', () => {
       REPO_DIR,
     );
 
-    await unpin(dest, ['README.md']);
-    execSync(
-      "git add -A && git -c core.hooksPath=/dev/null commit -m 'unpin readme'",
-      { cwd: dest, stdio: 'pipe' },
-    );
-
     await update(dest, REPO_DIR);
 
     const config = await readProjxConfig(dest);
-    expect(config.skip).not.toContain('README.md');
+    expect(config.skip).toEqual([]);
     expect(config.defaultsApplied).toBe(true);
   });
 });
@@ -587,6 +573,9 @@ describe('default-skip — scenario G: pinned-update notification', () => {
       dest,
       REPO_DIR,
     );
+
+    const { pin } = await import('../src/pin.js');
+    await pin(dest, ['docker-compose.yml']);
 
     const composePath = join(dest, 'docker-compose.yml');
     let compose = await readFile(composePath, 'utf-8');

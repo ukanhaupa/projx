@@ -7,7 +7,8 @@
 #   ./scripts/ci-local.sh fastify e2e           # run named sections only
 #
 # Sections (auto-detected by which top-level dirs exist):
-#   secrets  cli  fastapi  fastify  express  frontend  e2e  infra  scaffold_matrix
+#   secrets  cli  fastapi  fastify  express  frontend  mobile  e2e  infra
+#   admin_panel  scaffold_matrix  scaffold_fuzz  scripts
 #
 # Environment knobs:
 #   E2E_SKIP_REAL=1             skip real backend/frontend boot + Playwright in sec_e2e
@@ -15,6 +16,10 @@
 #   E2E_BACKEND_PORT=auto       port the booted backend listens on (default: random free port)
 #   E2E_FRONTEND_PORT=auto      port the booted frontend listens on (default: random free port)
 #   E2E_HEALTH_PATH=/api/health endpoint used for readiness polling
+#   E2E_BACKEND_COV_MIN=30      min %% lines for the backend E2E coverage stream
+#   SCAFFOLD_FUZZ_RUNS=200      random scaffold permutations in sec_scaffold_fuzz
+#   SCAFFOLD_FUZZ_JOBS=4        parallel scaffolds inside the fuzzer
+#   SCAFFOLD_FUZZ_SEED=N        pin the fuzzer seed for a reproducible run
 #   LOGS_DIR=/tmp/foo           override per-section log directory
 
 set -uo pipefail
@@ -214,7 +219,7 @@ sec_cli() {
   git diff --quiet -- . || warn "cli: formatters/linters rewrote files — commit them before push (CI checks, doesn't fix)"
   run_step "cli typecheck" pm_exec tsc --noEmit
   run_step "cli build" pm_run build
-  run_step "cli tests" pm_exec vitest run --coverage --coverage.reportsDirectory="coverage-ci-$$"
+  run_step "cli tests" pm_exec vitest run --coverage --coverage.reportsDirectory="$LOGS_DIR/cli-coverage"
   run_step "cli audit" pm_audit
 }
 
@@ -320,8 +325,14 @@ sec_e2e() {
         bash -c "set -a; . '$ROOT_DIR/fastapi/.env.test'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
       )"
     fi
+    local base_uri e2e_uri
+    base_uri="$(bash -c "set -a; . '$ROOT_DIR/fastapi/.env.test'; set +a; printf '%s' \"\${SQLALCHEMY_DATABASE_URI:-}\"")"
+    e2e_uri="${base_uri%/*}/projx_test_e2e"
+    createdb -U "${PGUSER:-$(whoami)}" -h "${PGHOST:-localhost}" -p "${PGPORT:-5432}" projx_test_e2e 2>/dev/null || true
+    bash -c "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && exec uv run python migrate.py" || return 1
+    rm -f "$ROOT_DIR/fastapi"/.coverage*
     start_background "e2e-backend" bash -c \
-      "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export CORS_ALLOW_ORIGINS='http://127.0.0.1:$frontend_port' && exec uv run main.py --host 127.0.0.1 --port '$port' --workers 2"
+      "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && export CORS_ALLOW_ORIGINS='http://127.0.0.1:$frontend_port' && exec uv run coverage run --parallel-mode --source=src -m uvicorn src.app:app --host 127.0.0.1 --port '$port'"
   elif [ "$backend_kind" = "fastify" ]; then
     (cd "$ROOT_DIR/fastify" && pm_install) || return 1
     if [ -f "$ROOT_DIR/fastify/prisma/schema.prisma" ]; then
@@ -375,7 +386,7 @@ sec_e2e() {
     cd "$ROOT_DIR/frontend" || exit 1
     run_step "frontend install (e2e)" pm_install
     run_step "frontend build (e2e)" bash -c \
-      "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' pm_exec vite build --outDir dist-e2e"
+      "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' VITE_COVERAGE=1 pm_exec vite build --outDir dist-e2e"
   ) || {
     kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
     return 1
@@ -399,6 +410,7 @@ sec_e2e() {
     done
   fi
 
+  rm -rf "$ROOT_DIR/e2e/.nyc_output"
   local rc=0
   (
     cd "$ROOT_DIR/e2e" || exit 1
@@ -415,11 +427,36 @@ sec_e2e() {
   ) || rc=$?
 
   kill -- "-$frontend_pid" 2>/dev/null || kill "$frontend_pid" 2>/dev/null || true
-  sleep 1
-  kill -9 -- "-$frontend_pid" 2>/dev/null || kill -9 "$frontend_pid" 2>/dev/null || true
   kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
-  sleep 1
+  sleep 3
+  kill -9 -- "-$frontend_pid" 2>/dev/null || kill -9 "$frontend_pid" 2>/dev/null || true
   kill -9 -- "-$backend_pid" 2>/dev/null || kill -9 "$backend_pid" 2>/dev/null || true
+
+  if [ "$rc" -eq 0 ]; then
+    local cov="$LOGS_DIR/e2e-coverage"
+    mkdir -p "$cov/fe"
+    if [ -d "$ROOT_DIR/e2e/.nyc_output" ]; then
+      (cd "$ROOT_DIR/e2e" && pm_exec nyc report --cwd "$ROOT_DIR" --temp-dir "$ROOT_DIR/e2e/.nyc_output" --reporter=lcovonly --report-dir "$cov/fe") || true
+      if [ ! -s "$cov/fe/lcov.info" ] || ! grep -q '^SF:' "$cov/fe/lcov.info"; then
+        xfail "e2e frontend coverage empty — instrumented __coverage__ scrape produced no lcov"
+        rc=1
+      else
+        run_step "e2e frontend reachability" bash "$ROOT_DIR/e2e/scripts/check-coverage.sh" "$cov/fe/lcov.info" "$ROOT_DIR/frontend/src/pages" || rc=1
+      fi
+    else
+      xfail "e2e frontend coverage missing — no .nyc_output (frontend not instrumented)"
+      rc=1
+    fi
+    if [ "$backend_kind" = "fastapi" ]; then
+      (cd "$ROOT_DIR/fastapi" && uv run coverage combine && uv run coverage lcov -o "$cov/e2e-backend.lcov") || true
+      if [ ! -s "$cov/e2e-backend.lcov" ] || ! grep -q '^SF:' "$cov/e2e-backend.lcov"; then
+        xfail "e2e backend coverage empty — coverage.py produced no lcov (did the server flush on SIGTERM?)"
+        rc=1
+      else
+        run_step "e2e backend coverage" bash -c "cd '$ROOT_DIR/fastapi' && uv run coverage report --fail-under=${E2E_BACKEND_COV_MIN:-30}" || rc=1
+      fi
+    fi
+  fi
   return "$rc"
 }
 
@@ -460,9 +497,10 @@ sec_admin_panel() {
   pg_port="${PGPORT:-5432}"
   createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_test_admin_panel 2>/dev/null || true
   db="postgresql://${pg_user}@${pg_host}:${pg_port}/projx_test_admin_panel?sslmode=disable"
-  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" go test ./... -p 1 -coverpkg=./... -coverprofile=cover.out
-  run_step "admin-panel coverage" bash scripts/check-coverage.sh cover.out 80
-  rm -f cover.out
+  local cover="$LOGS_DIR/admin-panel-cover.out"
+  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" go test ./... -p 1 -coverpkg=./... -coverprofile="$cover"
+  run_step "admin-panel coverage" bash scripts/check-coverage.sh "$cover" 80
+  rm -f "$cover"
 }
 
 sec_scaffold_matrix() {
@@ -470,6 +508,21 @@ sec_scaffold_matrix() {
   run_step "cli build for matrix" pm_run build
   cd "$ROOT_DIR" || exit 1
   run_step "scaffold-matrix" "$ROOT_DIR/scripts/ci-scaffold-matrix.sh" all
+}
+
+sec_scaffold_fuzz() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 not found — scaffold-fuzz requires it"
+    return 1
+  fi
+  cd "$ROOT_DIR/cli" || exit 1
+  run_step "cli build for fuzz" pm_exec tsup src/index.ts --format esm --target node18 --clean --out-dir dist-fuzz
+  cd "$ROOT_DIR" || exit 1
+  local runs="${SCAFFOLD_FUZZ_RUNS:-200}"
+  local jobs="${SCAFFOLD_FUZZ_JOBS:-4}"
+  local args=(--runs "$runs" --jobs "$jobs" --cli "$ROOT_DIR/cli/dist-fuzz/index.js")
+  [ -n "${SCAFFOLD_FUZZ_SEED:-}" ] && args+=(--seed "$SCAFFOLD_FUZZ_SEED")
+  run_step "scaffold-fuzz ($runs runs)" python3 "$ROOT_DIR/scripts/scaffold-fuzz.py" "${args[@]}"
 }
 
 sec_scripts() {
@@ -497,6 +550,7 @@ available_sections() {
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
   [ -d "$ROOT_DIR/admin-panel" ] && found+=("admin_panel")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
+  [ -f "$ROOT_DIR/scripts/scaffold-fuzz.py" ] && found+=("scaffold_fuzz")
   compgen -G "$ROOT_DIR/scripts/*.test.sh" >/dev/null 2>&1 && found+=("scripts")
   printf '%s\n' "${found[@]}"
 }
@@ -528,6 +582,8 @@ elif [[ "${1:-}" == "changed" ]]; then
       admin_panel) has_changes_in "admin-panel/" && SECTIONS+=("$s") ;;
       scaffold_matrix)
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
+      scaffold_fuzz)
+        { has_changes_in "cli/" || has_changes_in "addons/" || has_changes_in "features/"; } && SECTIONS+=("$s") ;;
       scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;
       *) has_changes_in "$s/" && SECTIONS+=("$s") ;;
     esac

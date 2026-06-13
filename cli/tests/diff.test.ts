@@ -162,12 +162,13 @@ describe('diff', () => {
       REPO_DIR,
     );
 
-    const markerPath = join(dest, 'fastify/.projx-component');
-    const marker = JSON.parse(await readFile(markerPath, 'utf-8'));
-    marker.skip = ['src/**'];
-    await writeFile(markerPath, JSON.stringify(marker, null, 2) + '\n');
+    const projxPath = join(dest, '.projx');
+    const projx = JSON.parse(await readFile(projxPath, 'utf-8'));
+    projx.skip = [...(projx.skip ?? []), 'README.md'];
+    await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
+    await rm(join(dest, 'README.md'));
     execSync(
-      "git add -A && git -c core.hooksPath=/dev/null commit -m 'set skip'",
+      "git add -A && git -c core.hooksPath=/dev/null commit -m 'pin + remove readme'",
       { cwd: dest, stdio: 'pipe' },
     );
 

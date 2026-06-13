@@ -7,10 +7,10 @@ import {
   type Component,
   type ComponentPaths,
   type PackageManager,
-  DEFAULT_ROOT_SKIP_PATTERNS,
   PACKAGE_MANAGERS,
   cleanupRepo,
   detectPackageManager,
+  detectPackageManagerFromComponents,
   downloadRepo,
   pmCommands,
   toKebab,
@@ -82,7 +82,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   let pm: PackageManager = 'npm';
 
   if (hasJs) {
-    const detected = detectPackageManager(cwd);
+    const detected = detectPackageManagerFromComponents(cwd, paths);
     if (detected) {
       pm = detected;
       p.log.info(`Detected package manager: ${pm}`);
@@ -204,7 +204,7 @@ async function writeBareProjx(
       version: pkg.version,
       createdAt: today,
       updatedAt: today,
-      skip: [...DEFAULT_ROOT_SKIP_PATTERNS],
+      skip: [],
       defaultsApplied: true,
     };
     if (pm) config.packageManager = pm;

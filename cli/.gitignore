@@ -1,3 +1,4 @@
 dist
+dist-fuzz
 node_modules
 coverage
