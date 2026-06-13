@@ -64,6 +64,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["src"]
+sigterm = true
 omit = [
     "src/migrations/*",
 ]

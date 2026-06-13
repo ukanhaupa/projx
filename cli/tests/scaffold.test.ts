@@ -310,8 +310,7 @@ describe('scaffold', () => {
     expect(config.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(config.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(config.defaultsApplied).toBe(true);
-    expect(config.skip).toContain('docker-compose.yml');
-    expect(config.skip).toContain('README.md');
+    expect(config.skip).toEqual([]);
   });
 
   it('writes .projx-component markers', async () => {

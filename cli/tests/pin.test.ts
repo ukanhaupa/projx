@@ -147,7 +147,7 @@ describe('unpin', () => {
     expect(marker.skip).toContain('Dockerfile');
   });
 
-  it('can unpin a default skip pattern', async () => {
+  it('can unpin a pattern the user pinned', async () => {
     dest = join(tmpdir(), `projx-unpin-last-${Date.now()}`);
     await scaffold(
       { name: 'unpin-app', components: ['fastify'], git: true, install: false },
@@ -155,6 +155,7 @@ describe('unpin', () => {
       REPO_DIR,
     );
 
+    await pin(dest, ['README.md']);
     const before = JSON.parse(await readFile(join(dest, '.projx'), 'utf-8'));
     expect(before.skip).toContain('README.md');
 

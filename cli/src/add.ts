@@ -8,6 +8,7 @@ import {
   type ComponentPaths,
   type Feature,
   type PackageManager,
+  INSTANCE_AWARE_SHARED,
   cleanupRepo,
   detectProjectName,
   discoverComponentPaths,
@@ -21,10 +22,27 @@ import {
 } from './utils.js';
 import {
   applyTemplate,
+  matchesSkip,
   writeTemplateToDir,
   type GeneratorVars,
 } from './baseline.js';
 import { applyFeatures } from './features.js';
+
+function reportPinnedShared(
+  cwd: string,
+  rootSkip: string[],
+  wiringTarget: string,
+): void {
+  const pinned = INSTANCE_AWARE_SHARED.filter(
+    (f) => matchesSkip(f, rootSkip) && existsSync(join(cwd, f)),
+  );
+  if (pinned.length === 0) return;
+  p.log.warn(
+    `${pinned.length} shared file(s) are in .projx "skip" and were left untouched — wire ${wiringTarget} in by hand, or unpin then re-run add:`,
+  );
+  for (const f of pinned) p.log.info(`  ${f}`);
+  p.log.info(`Unpin:  npx create-projx unpin ${pinned.join(' ')}`);
+}
 
 export async function add(
   cwd: string,
@@ -123,6 +141,15 @@ export async function add(
     );
     const version = pkg.version;
 
+    const rootSkip: string[] = Array.isArray(config.skip)
+      ? (config.skip as string[])
+      : [];
+    const componentSkips: Record<string, string[]> = {};
+    for (const inst of existingInstances) {
+      const m = await readComponentMarker(join(cwd, inst.path));
+      if (m?.skip && m.skip.length > 0) componentSkips[inst.type] = m.skip;
+    }
+
     const spinner = p.spinner();
     spinner.start('Adding components');
     await writeTemplateToDir(
@@ -132,9 +159,11 @@ export async function add(
       paths,
       vars,
       version,
-      { realCwd: cwd },
+      { componentSkips, rootSkip, realCwd: cwd },
     );
     spinner.stop('Components added.');
+
+    reportPinnedShared(cwd, rootSkip, toAdd.join(', '));
 
     if (features && Object.keys(features).length > 0) {
       const featSpinner = p.spinner();
@@ -225,16 +254,9 @@ async function addInstance(
       await readFile(join(repoDir, 'cli/package.json'), 'utf-8'),
     );
     const version = pkg.version;
-    const INSTANCE_AWARE_ROOT = new Set([
-      '.github/workflows/ci.yml',
-      '.githooks/pre-commit',
-      'scripts/setup.sh',
-      'docker-compose.yml',
-    ]);
-    const rawSkip: string[] = Array.isArray(config.skip)
+    const rootSkip: string[] = Array.isArray(config.skip)
       ? (config.skip as string[])
       : [];
-    const rootSkip = rawSkip.filter((p) => !INSTANCE_AWARE_ROOT.has(p));
     const componentSkips: Record<string, string[]> = {};
     for (const inst of existingInstances) {
       const m = await readComponentMarker(join(cwd, inst.path));
@@ -257,6 +279,8 @@ async function addInstance(
       [newInstance],
     );
     spinner.stop(`Scaffolded ${customName}/.`);
+
+    reportPinnedShared(cwd, rootSkip, customName);
 
     if (result.status === 'merged') {
       p.log.success(

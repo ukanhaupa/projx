@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { test as base, expect, type Page } from '@playwright/test';
 import { DashboardPage } from '../pages/dashboard.page';
 import { LoginPage } from '../pages/login.page';
+import { collectCoverage } from './coverage';
 import { attachPageErrorTracking } from './page-errors';
 
 const TEST_USER = process.env.TEST_USER || 'admin';
@@ -121,6 +122,7 @@ export const test = base.extend<AuthFixtures>({
     await installOidcMock(page);
     const assertNoPageErrors = attachPageErrorTracking(page, testInfo);
     await use(page);
+    await collectCoverage(page);
     assertNoPageErrors();
   },
 

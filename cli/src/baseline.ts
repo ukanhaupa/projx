@@ -17,7 +17,6 @@ import {
   type ComponentInstance,
   type ComponentPaths,
   DEFAULT_COMPONENT_SKIP_PATTERNS,
-  DEFAULT_ROOT_SKIP_PATTERNS,
   copyComponent,
   copyStaticFiles,
   readComponentMarker,
@@ -102,11 +101,7 @@ async function writeManagedProjx(
   if (typeof vars.orm === 'string' && !merged.orm) {
     merged.orm = vars.orm;
   }
-  if (applyDefaults && !merged.defaultsApplied) {
-    const userSkip = Array.isArray(merged.skip)
-      ? (merged.skip as string[])
-      : [];
-    merged.skip = [...new Set([...userSkip, ...DEFAULT_ROOT_SKIP_PATTERNS])];
+  if (applyDefaults) {
     merged.defaultsApplied = true;
   }
   await writeProjxConfig(cwd, merged);
@@ -485,10 +480,8 @@ export async function writeTemplateToDir(
     components.includes('express');
 
   const userSkip = rootSkip ?? [];
-  const defaultRootSkip = applyDefaults ? DEFAULT_ROOT_SKIP_PATTERNS : [];
-  const effectiveSkip = [...new Set([...userSkip, ...defaultRootSkip])];
   const shouldWrite = (file: string) => {
-    if (!matchesSkip(file, effectiveSkip)) return true;
+    if (!matchesSkip(file, userSkip)) return true;
     return !existsSync(join(realCwd, file));
   };
 
