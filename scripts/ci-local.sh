@@ -498,7 +498,7 @@ sec_admin_panel() {
   createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_test_admin_panel 2>/dev/null || true
   db="postgresql://${pg_user}@${pg_host}:${pg_port}/projx_test_admin_panel?sslmode=disable"
   local cover="$LOGS_DIR/admin-panel-cover.out"
-  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" go test ./... -p 1 -coverpkg=./... -coverprofile="$cover"
+  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" bash scripts/test.sh "$cover"
   run_step "admin-panel coverage" bash scripts/check-coverage.sh "$cover" 80
   rm -f "$cover"
 }

@@ -2,6 +2,28 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-06-13
+
+### Added
+
+- **Randomized scaffold fuzzer** ([scripts/scaffold-fuzz.py](scripts/scaffold-fuzz.py)) — seeded, parallel harness that scaffolds many random component/ORM/`--auth` permutations under temp dirs and runs fast structural assertions (component dirs present, `.projx` valid, compose services, auth modules, no unrendered EJS, admin-panel wired) plus deterministic regression scenarios. Wired into [scripts/ci-local.sh](scripts/ci-local.sh) as the `scaffold_fuzz` gate (isolated `dist-fuzz` build; `SCAFFOLD_FUZZ_RUNS`/`SCAFFOLD_FUZZ_JOBS`/`SCAFFOLD_FUZZ_SEED` knobs). Every failure prints the seed for exact replay.
+- **Four-stream E2E coverage** ([scripts/ci-local.sh](scripts/ci-local.sh) `sec_e2e`) — the e2e gate now captures real coverage: the frontend build is instrumented with `vite-plugin-istanbul` (gated on `VITE_COVERAGE`), Playwright scrapes `window.__coverage__` per test, and the FastAPI backend boots under `coverage run`. Each stream merges to lcov with a non-empty guard, then gates: the frontend on **reachability** ([e2e/scripts/check-coverage.sh](e2e/scripts/check-coverage.sh) — every page must be reached, 0 orphans) and the backend on a line-% floor (`E2E_BACKEND_COV_MIN`, default 30). This brings `ci-local` to a full 11/11 on the coverage rubric.
+
+### Fixed
+
+- **`init` records the actual package manager** ([cli/src/init.ts](cli/src/init.ts)) — [#57](https://github.com/ukanhaupa/projx/issues/57). `init` detected the lockfile only at the project root and defaulted to `npm`, but scaffolds keep their lockfile inside the component dir — so a pnpm-managed project was recorded as `npm`, steering tooling into a phantom `ERESOLVE`. It now detects from component-dir lockfiles via `detectPackageManagerFromComponents`.
+- **`add`/`update` honor the `.projx` skip list** ([cli/src/add.ts](cli/src/add.ts)) — [#60](https://github.com/ukanhaupa/projx/issues/60). `add` stripped instance-aware shared files (`docker-compose.yml`, `ci.yml`, `pre-commit`, `setup.sh`) from the skip set and regenerated them, clobbering hand-authored content — across both the named-instance and new-component paths. Both paths now pass the full skip set and print exact manual-wiring guidance for any pinned shared file left untouched.
+- **`sec_e2e` self-hosts its database** ([scripts/ci-local.sh](scripts/ci-local.sh)) — e2e now creates and migrates its own `projx_test_e2e` instead of sharing (and racing) the FastAPI unit-test DB, and runs the backend single-process so coverage captures the app.
+- **Coverage artifacts no longer pollute the source tree** ([scripts/ci-local.sh](scripts/ci-local.sh)) — the admin-panel and CLI coverage files write outside the repo (fixing a `cover.out` race the fuzzer exposed and an intermittent vitest coverage flake).
+
+### Changed
+
+- **`.projx` skip is purely user-authored** ([cli/src/utils.ts](cli/src/utils.ts), [cli/src/baseline.ts](cli/src/baseline.ts), [cli/src/init.ts](cli/src/init.ts)) — `DEFAULT_ROOT_SKIP_PATTERNS` is removed; fresh scaffolds write `skip: []`. Shared files (compose, CI, hooks, setup) are protected on `update` by the existing 3-way merge, so customizations survive without being auto-pinned. Pin a file only when you want projx to never touch it; `add` auto-wires new instances into unpinned shared files. Existing projects are unaffected — entries already in `.projx.skip` are still honored.
+
+### Dependencies
+
+- `frontend`: add `vite-plugin-istanbul` (E2E coverage instrumentation). `e2e`: add `nyc` (coverage reporting).
+
 ## [1.7.7] - 2026-06-10
 
 ### Security

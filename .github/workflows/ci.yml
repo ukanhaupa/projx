@@ -442,7 +442,7 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go build ./...
-      - run: go test ./... -coverpkg=./... -coverprofile=cover.out
+      - run: bash scripts/test.sh cover.out
       - run: bash scripts/check-coverage.sh cover.out 80
 
   scaffold-matrix:
