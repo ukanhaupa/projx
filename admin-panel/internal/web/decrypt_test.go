@@ -258,6 +258,66 @@ func TestDecryptScopedToServiceConfigsOnly(t *testing.T) {
 	}
 }
 
+func TestDecryptWritesAuditEntry(t *testing.T) {
+	pool := testPool(t)
+	key := credTestKey(t)
+	seedServiceConfigs(t, pool, encryptForTest(t, key, "smtp-secret-value"))
+	srv := serverWithCred(t, pool, key)
+	h := srv.Handler()
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
+	enableWriteMode(t, pool, token)
+	id := serviceConfigID(t, pool)
+
+	rec := authedGet(h, "/admin/tables/service_configs/"+id+"/decrypt?col=config", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("decrypt should be 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var (
+		recordID    string
+		performedBy int64
+		oldVal      *string
+		newVal      *string
+	)
+	if err := pool.QueryRow(context.Background(),
+		`SELECT record_id, performed_by, old_value, new_value
+		   FROM admin_panel.write_audit_log
+		  WHERE table_schema = 'public' AND table_name = 'service_configs' AND action = 'decrypt'
+		  ORDER BY id DESC LIMIT 1`).Scan(&recordID, &performedBy, &oldVal, &newVal); err != nil {
+		t.Fatalf("expected a decrypt audit row: %v", err)
+	}
+	if recordID != id {
+		t.Fatalf("audit record_id = %q, want %q", recordID, id)
+	}
+	if performedBy == 0 {
+		t.Fatal("audit performed_by must identify the admin")
+	}
+	if oldVal != nil || newVal != nil {
+		t.Fatalf("decrypt audit must store no values; old=%v new=%v", oldVal, newVal)
+	}
+}
+
+func TestDecryptFailureWritesNoAuditEntry(t *testing.T) {
+	pool := testPool(t)
+	key := credTestKey(t)
+	seedServiceConfigs(t, pool, "not-a-valid-ciphertext")
+	h := serverWithCred(t, pool, key).Handler()
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
+	enableWriteMode(t, pool, token)
+	id := serviceConfigID(t, pool)
+
+	authedGet(h, "/admin/tables/service_configs/"+id+"/decrypt?col=config", token)
+
+	var count int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM admin_panel.write_audit_log WHERE action = 'decrypt'`).Scan(&count); err != nil {
+		t.Fatalf("audit query: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("a failed decrypt must not write an audit row, got %d", count)
+	}
+}
+
 func TestDecryptNeverLogsPlaintext(t *testing.T) {
 	pool := testPool(t)
 	key := credTestKey(t)

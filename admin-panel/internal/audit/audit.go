@@ -13,9 +13,10 @@ import (
 type Action string
 
 const (
-	ActionInsert Action = "insert"
-	ActionUpdate Action = "update"
-	ActionDelete Action = "delete"
+	ActionInsert  Action = "insert"
+	ActionUpdate  Action = "update"
+	ActionDelete  Action = "delete"
+	ActionDecrypt Action = "decrypt"
 )
 
 type Entry struct {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"adminpanel/internal/audit"
 	"adminpanel/internal/browser"
 	"adminpanel/internal/secret"
 )
@@ -69,6 +70,8 @@ func (s *Server) decryptCell(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not decrypt value", http.StatusUnprocessableEntity)
 		return
 	}
+
+	s.logAudit(r, audit.ActionDecrypt, table, id, nil, nil)
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	w.Header().Set("Pragma", "no-cache")
