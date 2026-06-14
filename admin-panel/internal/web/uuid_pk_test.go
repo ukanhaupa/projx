@@ -26,7 +26,7 @@ func TestUUIDPrimaryKeyRendersAsCanonicalString(t *testing.T) {
 
 	srv := newTestServer(t, pool)
 	h := srv.Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/tables/uuid_widgets", nil)
@@ -66,7 +66,7 @@ func TestUUIDPrimaryKeyEditFlowRoundTrips(t *testing.T) {
 
 	srv := newTestServer(t, pool)
 	h := srv.Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 	enableWriteMode(t, pool, token)
 
 	req := httptest.NewRequest(http.MethodGet,

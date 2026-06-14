@@ -94,7 +94,7 @@ describe('parseArgs', () => {
   it('parses a valid --components list', () => {
     expect(parseArgs(['--components', 'fastify,frontend,e2e']).options).toEqual(
       {
-        components: ['fastify', 'frontend', 'e2e'],
+        components: ['fastify', 'vitejs', 'e2e'],
       },
     );
   });
@@ -132,12 +132,12 @@ describe('parseArgs', () => {
   it('defaults components for -y and --yes', () => {
     expect(parseArgs(['-y']).options.components).toEqual([
       'fastify',
-      'frontend',
+      'vitejs',
       'e2e',
     ]);
     expect(parseArgs(['--yes']).options.components).toEqual([
       'fastify',
-      'frontend',
+      'vitejs',
       'e2e',
     ]);
   });
@@ -182,9 +182,9 @@ describe('parseArgs', () => {
   });
 
   it('routes positional args to extraArgs for add/pin/unpin/gen', () => {
-    expect(parseArgs(['add', 'fastify', 'frontend']).extraArgs).toEqual([
+    expect(parseArgs(['add', 'fastify', 'vitejs']).extraArgs).toEqual([
       'fastify',
-      'frontend',
+      'vitejs',
     ]);
     expect(parseArgs(['pin', 'a', 'b']).extraArgs).toEqual(['a', 'b']);
     expect(parseArgs(['unpin', 'a']).extraArgs).toEqual(['a']);
@@ -276,6 +276,18 @@ describe('main dispatch', () => {
     );
   });
 
+  it('normalizes the legacy frontend alias to vitejs in add', async () => {
+    await runMain(['add', 'frontend', '--no-install']);
+    expect(add).toHaveBeenCalledWith(
+      expect.any(String),
+      ['vitejs'],
+      undefined,
+      true,
+      undefined,
+      undefined,
+    );
+  });
+
   it('exits 2 with a suggestion when add gets an unknown component', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exitSpy = vi
@@ -303,7 +315,7 @@ describe('main dispatch', () => {
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => {}) as never);
-    await runMain(['add', 'fastify', 'frontend', '--name', 'x']);
+    await runMain(['add', 'fastify', 'vitejs', '--name', 'x']);
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
@@ -365,6 +377,15 @@ describe('main dispatch', () => {
     };
     expect(opts.name).toBe('my-app');
     expect(opts.git).toBe(false);
+  });
+
+  it('normalizes the legacy frontend alias to vitejs before scaffolding', async () => {
+    await runMain(['my-app', '--components', 'frontend', '--no-git']);
+    expect(scaffold).toHaveBeenCalled();
+    const opts = scaffold.mock.calls[0][0] as unknown as {
+      components: string[];
+    };
+    expect(opts.components).toEqual(['vitejs']);
   });
 
   it('exits 1 when components are given without a name', async () => {

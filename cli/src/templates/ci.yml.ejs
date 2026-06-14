@@ -28,7 +28,10 @@ jobs:
 <% for (const inst of expressInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
-<% for (const inst of frontendInstances) { %>
+<% for (const inst of vitejsInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
+<% for (const inst of nextjsInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
 <% for (const inst of mobileInstances) { %>
@@ -64,7 +67,11 @@ jobs:
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
-<% for (const inst of frontendInstances) { %>
+<% for (const inst of vitejsInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of nextjsInstances) { %>
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
@@ -100,7 +107,12 @@ jobs:
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
       - name: Run gitleaks
         run: gitleaks detect --source ${{ env.WS }} --no-git --no-banner --redact --exit-code 1
-      - run: python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/frontend/src
+<% for (const inst of vitejsInstances) { %>
+      - run: python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/<%= inst.path %>/src
+<% } %>
+<% for (const inst of nextjsInstances) { %>
+      - run: python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/<%= inst.path %>/src
+<% } %>
 <% for (const inst of fastapiInstances) { %>
 
   <%= inst.path %>:
@@ -275,7 +287,7 @@ jobs:
       - run: <%= pm.run %> build
       - run: <%= pm.audit %>
 <% } %>
-<% for (const inst of frontendInstances) { %>
+<% for (const inst of vitejsInstances) { %>
 
   <%= inst.path %>:
     name: <%= inst.display %> (format + lint + typecheck + build + audit)
@@ -310,6 +322,43 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.run %> build
       - run: bash scripts/check-bundle-size.sh
+      - run: <%= pm.audit %>
+<% } %>
+<% for (const inst of nextjsInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + lint + typecheck + build + test + audit)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+<% if (pm.name === 'pnpm') { %>
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+<% } %>
+<% if (pm.name === 'bun') { %>
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+<% } %>
+<% if (pm.name !== 'bun') { %>
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: <%= pm.name %>
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
+<% } %>
+      - run: <%= pm.ci %>
+      - run: <%= pm.exec %> prettier --check .
+      - run: <%= pm.exec %> eslint .
+      - run: <%= pm.exec %> tsc --noEmit
+      - run: <%= pm.run %> build
+      - run: <%= pm.exec %> vitest run --coverage
       - run: <%= pm.audit %>
 <% } %>
 <% for (const inst of mobileInstances) { %>

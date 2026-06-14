@@ -21,7 +21,8 @@ export const COMPONENTS = [
   'fastapi',
   'fastify',
   'express',
-  'frontend',
+  'vitejs',
+  'nextjs',
   'mobile',
   'e2e',
   'infra',
@@ -29,6 +30,17 @@ export const COMPONENTS = [
 ] as const;
 
 export type Component = (typeof COMPONENTS)[number];
+
+export const COMPONENT_ALIASES: Record<string, Component> = {
+  frontend: 'vitejs',
+};
+
+export function normalizeComponent(raw: string): Component | null {
+  const id = COMPONENT_ALIASES[raw] ?? raw;
+  return (COMPONENTS as readonly string[]).includes(id)
+    ? (id as Component)
+    : null;
+}
 
 function editDistance(a: string, b: string): number {
   const rows = a.length + 1;
@@ -52,6 +64,8 @@ function editDistance(a: string, b: string): number {
 }
 
 export function suggestComponent(input: string): Component | null {
+  const aliased = normalizeComponent(input.toLowerCase());
+  if (aliased) return aliased;
   const needle = input.toLowerCase();
   let best: Component | null = null;
   let bestDistance = Infinity;
@@ -160,7 +174,13 @@ export function detectPackageManagerFromComponents(
   cwd: string,
   componentPaths: Partial<Record<Component, string>>,
 ): PackageManager | null {
-  const jsComponents: Component[] = ['fastify', 'express', 'frontend', 'e2e'];
+  const jsComponents: Component[] = [
+    'fastify',
+    'express',
+    'vitejs',
+    'nextjs',
+    'e2e',
+  ];
   for (const component of jsComponents) {
     const dir = componentPaths[component];
     if (!dir) continue;
@@ -272,6 +292,10 @@ export const EXCLUDE = new Set([
   'test-results',
   '.terraform',
   'cli',
+  '.next',
+  '.nyc_output',
+  '.swc',
+  'dist-e2e',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -430,19 +454,18 @@ export interface ComponentMarkerData {
 function parseMarker(raw: string): ComponentMarkerData | null {
   try {
     const data = JSON.parse(raw);
-    let component: Component | undefined;
+    let component: Component | null = null;
+    if (typeof data.component === 'string') {
+      component = normalizeComponent(data.component);
+    }
     if (
-      typeof data.component === 'string' &&
-      COMPONENTS.includes(data.component as Component)
+      !component &&
+      Array.isArray(data.components) &&
+      data.components.length > 0
     ) {
-      component = data.component as Component;
-    } else if (Array.isArray(data.components) && data.components.length > 0) {
       const first = data.components[0];
-      if (
-        typeof first === 'string' &&
-        COMPONENTS.includes(first as Component)
-      ) {
-        component = first as Component;
+      if (typeof first === 'string') {
+        component = normalizeComponent(first);
       }
     }
     if (!component) return null;
@@ -549,7 +572,8 @@ export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
   fastapi: ['pyproject.toml'],
   fastify: ['package.json'],
   express: ['package.json'],
-  frontend: ['package.json'],
+  vitejs: ['package.json'],
+  nextjs: ['package.json'],
   e2e: ['package.json'],
   mobile: ['pubspec.yaml'],
 };

@@ -7,6 +7,9 @@ import (
 )
 
 func renderCell(v viewData, row browser.Row, colName string) template.HTML {
+	if isEncryptedColumn(v, colName) {
+		return encryptedCell(v, row, colName)
+	}
 	raw := cell(row[colName])
 	if raw == "" {
 		return ""
@@ -30,6 +33,38 @@ func renderCell(v viewData, row browser.Row, colName string) template.HTML {
 		}
 	}
 	return template.HTML(template.HTMLEscapeString(raw))
+}
+
+func isEncryptedColumn(v viewData, colName string) bool {
+	schema := v.Schema
+	if schema == "" {
+		schema = serviceConfigsSchema
+	}
+	return schema == serviceConfigsSchema &&
+		v.Table == serviceConfigsTable &&
+		colName == encryptedConfigCol
+}
+
+func encryptedCell(v viewData, row browser.Row, colName string) template.HTML {
+	if cell(row[colName]) == "" {
+		return ""
+	}
+	masked := `<span class="encrypted muted">•••••• encrypted</span>`
+	if !v.CanDecrypt || v.PrimaryKey == "" {
+		return template.HTML(masked)
+	}
+	pk := cell(row[v.PrimaryKey])
+	if pk == "" {
+		return template.HTML(masked)
+	}
+	target := "cell-" + template.HTMLEscapeString(pk) + "-" + template.HTMLEscapeString(colName)
+	url := v.Base + "/tables/" + template.HTMLEscapeString(v.Table) + "/" +
+		template.URLQueryEscaper(pk) + "/decrypt?col=" + template.URLQueryEscaper(colName)
+	return template.HTML(`<span id="` + target + `">` + masked +
+		` <a class="decrypt-btn" href="` + url + `"` +
+		` hx-get="` + url + `"` +
+		` hx-target="#` + target + `"` +
+		` hx-swap="innerHTML">Decrypt</a></span>`)
 }
 
 func sortToggleURL(v viewData, col string) string {

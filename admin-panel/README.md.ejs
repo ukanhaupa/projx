@@ -7,6 +7,7 @@ It has its own admin accounts (separate from your application's users) and store
 ## What it does
 
 - **Admin auth** — email + password login with argon2id hashing and server-side sessions. Admin accounts live in `admin_panel.admin_users`, isolated from your app's users.
+- **Mandatory 2FA (TOTP)** — every admin must enrol a TOTP authenticator on first login before any admin route is reachable. Enrolment generates a secret (stored AES-256-GCM encrypted at rest, keyed off `SESSION_SECRET` — never plaintext), shows the provisioning URI to scan, and verifies a first code before granting a full session. Ten single-use recovery codes are issued once at enrolment (stored argon2id-hashed) for authenticator loss. Every subsequent login requires a valid TOTP code or a recovery code; the gate is server-side (`admin_sessions.mfa_passed`), not hidden UI.
 - **Role + write-window gate** — two layers protect writes:
   - **Role** (`admin_users.role` ∈ `read_only` / `read_write`) — only `read_write` admins ever see the write-mode toggle. Read-only admins get a 403 if they forge a POST.
   - **Write window** — clicking *Enable write* sets `admin_sessions.write_mode_until = NOW() + 30 min`. A sticky red banner runs for the duration with the auto-revert time. Click again to revert early.
@@ -17,6 +18,7 @@ It has its own admin accounts (separate from your application's users) and store
 - **CSV export** — `/tables/<name>.csv?<query>` streams the current filtered/sorted view, capped at 10 000 rows.
 - **Foreign-key links** — FK columns render as clickable links to the target row.
 - **Append-only audit log** — every insert/update/delete is logged to `admin_panel.write_audit_log` with a sha256 hash chain. Tamper-evident.
+- **On-demand secret decryption** — the encrypted `public.service_configs.config` cell renders masked and is never auto-decrypted. A per-value **Decrypt** action shows only to admins currently in write mode; clicking it triggers an HTMX request that re-checks write permission server-side, AES-256-GCM-decrypts with `CRED_ENCRYPTION_KEY` (the same key/format the backend writes with), and reveals the plaintext inline over a `no-store` response. Read-only sessions get a 403 even on a hand-crafted request; plaintext is never logged. Absent key ⇒ the action never renders and the route returns a clear 503.
 - **Safe by default** — identifiers come only from live schema introspection so they can't be injected; values are always parameterized.
 
 ## Configuration
@@ -31,6 +33,7 @@ All configuration is via environment variables (`.env`):
 | `ADMIN_PASSWORD` | first run | —        | Password for the bootstrap admin. Rotate via UI after first login. |
 | `PORT`           | no        | `8055`   | Listen port.                                                       |
 | `BASE_PATH`      | no        | `/admin` | URL prefix it mounts under. Set to `/` to serve at the root.       |
+| `CRED_ENCRYPTION_KEY` | bootstrap-only | — | Base64 of **exactly 32 bytes**; must match the backend's. Enables the per-value **Decrypt** action on the encrypted `public.service_configs.config` cell. Absent ⇒ decryption is unavailable and the action never renders. |
 
 Schema selection is **not** an env var — admins pick it from the topbar dropdown. The selection is stored in an `admin_schema` cookie (HttpOnly, SameSite=Lax) per session.
 
@@ -43,7 +46,7 @@ go run ./cmd/admin
 
 Then open <http://localhost:8055/admin>.
 
-On first boot it applies its own migrations (the `admin_panel` schema with `admin_users`, `admin_sessions`, `write_audit_log`, `schema_migrations`), seeds the bootstrap admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, and starts serving. Migrations are advisory-locked and tracked in `schema_migrations` — safe to boot multiple replicas concurrently and idempotent across restarts.
+On first boot it applies its own migrations (the `admin_panel` schema with `admin_users`, `admin_sessions`, `admin_recovery_codes`, `write_audit_log`, `schema_migrations`), seeds the bootstrap admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, and starts serving. The seeded admin is **not** pre-enrolled in 2FA — it goes through the forced TOTP enrolment flow on its first login, the same as any other admin. Migrations are advisory-locked and tracked in `schema_migrations` — safe to boot multiple replicas concurrently and idempotent across restarts.
 
 ## In the project
 

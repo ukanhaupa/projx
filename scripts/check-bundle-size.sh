@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/check-bundle-size.sh — fail the build if a frontend chunk exceeds a budget.
 #
-# Usage (from frontend/ workdir):
+# Usage (from vitejs/ workdir):
 #   bash ../scripts/check-bundle-size.sh                 # default budgets
 #   BUNDLE_BUDGET_INITIAL_KB=600 bash ../scripts/check-bundle-size.sh
 #

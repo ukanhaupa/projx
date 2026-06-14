@@ -57,8 +57,24 @@ describe('detectComponents', () => {
 
     const results = await detectComponents(tmp);
     expect(results).toHaveLength(1);
-    expect(results[0].component).toBe('frontend');
+    expect(results[0].component).toBe('vitejs');
     expect(results[0].directory).toBe('web');
+  });
+
+  it('detects nextjs from a next dependency, not vitejs', async () => {
+    await mkdir(join(tmp, 'web'));
+    await writeFile(
+      join(tmp, 'web/package.json'),
+      JSON.stringify({
+        dependencies: { next: '^15', react: '^19', 'react-dom': '^19' },
+      }),
+    );
+
+    const results = await detectComponents(tmp);
+    expect(results).toHaveLength(1);
+    expect(results[0].component).toBe('nextjs');
+    expect(results[0].directory).toBe('web');
+    expect(results[0].evidence).toContain('next');
   });
 
   it('detects playwright e2e from package.json', async () => {
@@ -115,9 +131,9 @@ describe('detectComponents', () => {
       join(tmp, 'backend/package.json'),
       JSON.stringify({ dependencies: { fastify: '^5' } }),
     );
-    await mkdir(join(tmp, 'frontend'));
+    await mkdir(join(tmp, 'vitejs'));
     await writeFile(
-      join(tmp, 'frontend/package.json'),
+      join(tmp, 'vitejs/package.json'),
       JSON.stringify({ dependencies: { react: '^19' } }),
     );
     await mkdir(join(tmp, 'e2e'));
@@ -129,7 +145,7 @@ describe('detectComponents', () => {
     const results = await detectComponents(tmp);
     expect(results).toHaveLength(3);
     const components = results.map((r) => r.component).sort();
-    expect(components).toEqual(['e2e', 'fastify', 'frontend']);
+    expect(components).toEqual(['e2e', 'fastify', 'vitejs']);
   });
 
   it('returns empty for empty directory', async () => {

@@ -37,7 +37,8 @@ COMPONENTS = [
     "fastapi",
     "fastify",
     "express",
-    "frontend",
+    "vitejs",
+    "nextjs",
     "mobile",
     "e2e",
     "infra",
@@ -148,7 +149,8 @@ def check_scaffold(combo, app):
             failures.append(f".projx not valid JSON: {e}")
 
     needs_compose = any(
-        c in BACKENDS or c in {"frontend", "admin-panel"} for c in combo.components
+        c in BACKENDS or c in {"vitejs", "nextjs", "admin-panel"}
+        for c in combo.components
     )
     compose = app / "docker-compose.yml"
     if needs_compose and not compose.exists():
@@ -159,6 +161,10 @@ def check_scaffold(combo, app):
             failures.append("admin-panel requested but admin-panel/ missing")
         if compose.exists() and "admin-panel:" not in compose.read_text():
             failures.append("admin-panel service missing from docker-compose.yml")
+
+    if "nextjs" in combo.components and compose.exists():
+        if "nextjs:" not in compose.read_text():
+            failures.append("nextjs service missing from docker-compose.yml")
 
     for target in combo.auth:
         mod = AUTH_MODULE.get(target)
@@ -171,7 +177,7 @@ def check_scaffold(combo, app):
             failures.append(f"unrendered EJS tags left in {rel}")
 
     for c in combo.components:
-        if c in NODE_BACKENDS or c == "frontend":
+        if c in NODE_BACKENDS or c in {"vitejs", "nextjs"}:
             pkg = app / c / "package.json"
             if pkg.exists():
                 try:

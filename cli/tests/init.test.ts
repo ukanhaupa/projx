@@ -82,7 +82,7 @@ describe('init workflow', () => {
       detected.map((d) => [d.component, d.directory]),
     );
     expect(map.fastapi).toBe('backend');
-    expect(map.frontend).toBe('web');
+    expect(map.vitejs).toBe('web');
     expect(map.e2e).toBe('tests');
   });
 
@@ -94,14 +94,14 @@ describe('init workflow', () => {
     await upsertComponentMarker(join(tmp, 'backend'), 'fastapi');
 
     await mkdir(join(tmp, 'web'));
-    await upsertComponentMarker(join(tmp, 'web'), 'frontend');
+    await upsertComponentMarker(join(tmp, 'web'), 'vitejs');
 
     const paths = await discoverComponentPaths(tmp, [
       'fastapi',
-      'frontend',
+      'vitejs',
     ] as Component[]);
     expect(paths.fastapi).toBe('backend');
-    expect(paths.frontend).toBe('web');
+    expect(paths.vitejs).toBe('web');
   });
 
   it('detection + marker + discovery roundtrip', async () => {
@@ -114,9 +114,9 @@ describe('init workflow', () => {
       JSON.stringify({ dependencies: { fastify: '^5' } }),
     );
 
-    await mkdir(join(tmp, 'frontend'));
+    await mkdir(join(tmp, 'vitejs'));
     await writeFile(
-      join(tmp, 'frontend/package.json'),
+      join(tmp, 'vitejs/package.json'),
       JSON.stringify({ dependencies: { react: '^19' } }),
     );
 
@@ -130,7 +130,7 @@ describe('init workflow', () => {
     const components = detected.map((d) => d.component) as Component[];
     const paths = await discoverComponentPaths(tmp, components);
     expect(paths.fastify).toBe('backend');
-    expect(paths.frontend).toBe('frontend');
+    expect(paths.vitejs).toBe('vitejs');
   });
 
   it('init in an empty git repo writes a bare .projx without prompting', async () => {

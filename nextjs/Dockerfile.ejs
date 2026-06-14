@@ -1,0 +1,51 @@
+<% if (pm.name === 'bun') { %>
+FROM oven/bun:1-alpine AS build
+<% } else { %>
+FROM public.ecr.aws/docker/library/node:22-alpine3.20 AS build
+<% } %>
+
+WORKDIR /app
+
+<% if (pm.name === 'pnpm') { %>
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+<% } else if (pm.name === 'yarn') { %>
+RUN corepack enable
+<% } %>
+
+COPY package.json <%= pm.lockfile %> ./
+
+RUN <%= pm.ci %>
+
+COPY src/ src/
+COPY public/ public/
+COPY next.config.ts tsconfig.json instrumentation.ts instrumentation-client.ts sentry.server.config.ts sentry.edge.config.ts ./
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN <%= pm.run %> build
+
+FROM public.ecr.aws/docker/library/node:22-alpine3.20
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
+COPY --from=build /app/public ./public
+COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+USER nextjs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget --spider -q http://127.0.0.1:3000/login || exit 1
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

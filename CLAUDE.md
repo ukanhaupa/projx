@@ -15,7 +15,8 @@ Top-level layout:
 cli/         create-projx CLI source (TypeScript, ESM, tsup build, vitest)
 fastify/     Fastify + Prisma backend template
 fastapi/     FastAPI + SQLAlchemy + Alembic backend template
-frontend/    React + Vite frontend template
+vitejs/      React + Vite frontend template (legacy alias: `frontend`)
+nextjs/      React + Next.js (App Router) frontend template (standalone node server)
 mobile/      Flutter app template
 e2e/         Playwright E2E template
 infra/       Terraform IaC template
@@ -36,7 +37,7 @@ ORM-specific scaffolding (Drizzle, Sequelize, TypeORM) lives in [addons/orms/<or
 The EJS-like engine in [cli/src/utils.ts](cli/src/utils.ts) (`render`) supports `<% if %>`, `<% for %>`, `<%= expr %>`. It is intentionally minimal — do not introduce a dep on real EJS. Shared template vars:
 
 - `projectName`, `components`, `paths`, `pm` (package-manager commands)
-- `fastapiInstances`, `fastifyInstances`, `frontendInstances`, `mobileInstances`, `e2eInstances`, `infraInstances` — all enriched with `path`, `upper`, `display`
+- `fastapiInstances`, `fastifyInstances`, `vitejsInstances`, `nextjsInstances`, `mobileInstances`, `e2eInstances`, `infraInstances` — all enriched with `path`, `upper`, `display`
 
 Multi-instance support: a project can have N fastify instances at different paths. Generators iterate the `*Instances` arrays.
 
@@ -114,14 +115,15 @@ Each template has its own test suite that must stay green on the projx repo itse
 | `fastify/`     | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres)    | v8 ≥80%                                                                                      |
 | `express/`     | prettier    | eslint                       | `tsc --noEmit` | vitest (real Postgres)    | v8 ≥80%                                                                                      |
 | `fastapi/`     | ruff format | ruff check                   | mypy           | pytest                    | pytest-cov ≥80%                                                                              |
-| `frontend/`    | prettier    | eslint                       | `tsc --noEmit` | vitest                    | v8 ≥80%                                                                                      |
+| `vitejs/`      | prettier    | eslint                       | `tsc --noEmit` | vitest                    | v8 ≥80%                                                                                      |
+| `nextjs/`      | prettier    | eslint                       | `tsc --noEmit` | vitest                    | v8 ≥80%                                                                                      |
 | `mobile/`      | dart format | `dart analyze --fatal-infos` | (in analyze)   | flutter test              | [scripts/check-coverage.sh](mobile/scripts/check-coverage.sh) ≥80%                           |
 | `e2e/`         | prettier    | eslint                       | `tsc --noEmit` | n/a                       | n/a                                                                                          |
 | `admin-panel/` | gofmt       | `go vet`                     | (in build)     | `go test` (real Postgres) | [scripts/check-coverage.sh](admin-panel/scripts/check-coverage.sh) ≥80%, entrypoint excluded |
 
-CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `frontend`, `e2e`, `infra`, `admin_panel`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo. The `express` section ends with a boot smoke: it syncs the schema from `.env.test`, boots `src/server.ts` on a free port, and polls `/api/health` — catching boot-path breakage (e.g. a missing Prisma model) that delegate-mocked unit tests can't. The `admin-panel` Go tests self-skip the integration suite when `TEST_DATABASE_URL` is unset (unit tests still run).
+CI runs all of these — see [.github/workflows/ci.yml](.github/workflows/ci.yml). Locally, [scripts/ci-local.sh](scripts/ci-local.sh) runs every available section in parallel — pass `cli`, `fastapi`, `fastify`, `express`, `vitejs`, `nextjs`, `e2e`, `infra`, `admin_panel`, or no args for all. `cli` is the only section that gates the CLI itself; the rest gate the templates as they sit in the projx repo. The `express` section ends with a boot smoke: it syncs the schema from `.env.test`, boots `src/server.ts` on a free port, and polls `/api/health` — catching boot-path breakage (e.g. a missing Prisma model) that delegate-mocked unit tests can't. The `admin-panel` Go tests self-skip the integration suite when `TEST_DATABASE_URL` is unset (unit tests still run).
 
-Prettier config is unified across `cli/`, `fastify/`, `express/`, `frontend/`, `e2e/`: `{semi: true, singleQuote: true, trailingComma: "all", printWidth: 80, tabWidth: 2}` — frontend keeps `jsxSingleQuote` + `bracketSameLine` as overrides. All four `.prettierignore` files cover `node_modules`, `dist`, `coverage`, and all three lockfile names (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`).
+Prettier config is unified across `cli/`, `fastify/`, `express/`, `vitejs/`, `e2e/`: `{semi: true, singleQuote: true, trailingComma: "all", printWidth: 80, tabWidth: 2}` — `vitejs/` keeps `jsxSingleQuote` + `bracketSameLine` as overrides. All four `.prettierignore` files cover `node_modules`, `dist`, `coverage`, and all three lockfile names (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`).
 
 ## Pre-commit hooks
 

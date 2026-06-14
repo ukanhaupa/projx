@@ -90,7 +90,7 @@ describe('admin-panel component', () => {
     await scaffold(
       {
         name: 'admin-app',
-        components: ['frontend', 'admin-panel'],
+        components: ['vitejs', 'admin-panel'],
         git: true,
         install: false,
       },
@@ -98,7 +98,7 @@ describe('admin-panel component', () => {
       REPO_DIR,
     );
 
-    const nginx = await readFile(join(dest, 'frontend/nginx.conf'), 'utf-8');
+    const nginx = await readFile(join(dest, 'vitejs/nginx.conf'), 'utf-8');
     expect(nginx).toContain('location ^~ /admin/');
     expect(nginx).toContain('set $admin_panel_upstream admin-panel;');
     expect(nginx).toContain('proxy_pass http://$admin_panel_upstream:8055;');

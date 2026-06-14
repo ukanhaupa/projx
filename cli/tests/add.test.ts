@@ -30,10 +30,59 @@ describe('add', () => {
       REPO_DIR,
     );
 
-    await add(dest, ['frontend'], REPO_DIR, true);
+    await add(dest, ['vitejs'], REPO_DIR, true);
 
-    expect(existsSync(join(dest, 'frontend'))).toBe(true);
-    expect(existsSync(join(dest, 'frontend/.projx-component'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/.projx-component'))).toBe(true);
+  });
+
+  it('adds nextjs to an existing backend and wires its compose service + CI job', async () => {
+    dest = join(tmpdir(), `projx-add-nextjs-${Date.now()}`);
+    await scaffold(
+      { name: 'my-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await add(dest, ['nextjs'], REPO_DIR, true);
+
+    expect(existsSync(join(dest, 'nextjs'))).toBe(true);
+    const marker = JSON.parse(
+      await readFile(join(dest, 'nextjs/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('nextjs');
+
+    const compose = await readFile(join(dest, 'docker-compose.yml'), 'utf-8');
+    expect(compose).toContain('  nextjs:');
+    expect(compose).toContain('"3000:3000"');
+
+    const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
+    expect(ci).toContain(
+      'name: Next.js (format + lint + typecheck + build + test + audit)',
+    );
+  });
+
+  it('recognizes a legacy frontend-marked component when adding alongside it', async () => {
+    dest = join(tmpdir(), `projx-add-legacy-${Date.now()}`);
+    await scaffold(
+      { name: 'my-app', components: ['vitejs'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await writeFile(
+      join(dest, 'vitejs/.projx-component'),
+      JSON.stringify({ component: 'frontend', skip: ['package.json'] }),
+    );
+
+    await add(dest, ['fastify'], REPO_DIR, true);
+
+    expect(existsSync(join(dest, 'fastify'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs'))).toBe(true);
+    const marker = JSON.parse(
+      await readFile(join(dest, 'vitejs/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('vitejs');
   });
 
   it('registers new component via .projx-component marker', async () => {
@@ -65,11 +114,11 @@ describe('add', () => {
       REPO_DIR,
     );
 
-    await add(dest, ['frontend'], REPO_DIR, true);
+    await add(dest, ['vitejs'], REPO_DIR, true);
 
     const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
     expect(ci).toContain('fastify');
-    expect(ci).toContain('frontend');
+    expect(ci).toContain('vitejs');
   });
 
   describe('--auth feature', () => {
@@ -85,7 +134,7 @@ describe('add', () => {
         false,
       );
 
-      await add(dest, ['frontend'], REPO_DIR, true, undefined, {
+      await add(dest, ['vitejs'], REPO_DIR, true, undefined, {
         auth: 'fastify',
       });
 
@@ -102,7 +151,7 @@ describe('add', () => {
     it('applies auth to a newly added backend instance', async () => {
       dest = join(tmpdir(), `projx-add-auth-new-${Date.now()}`);
       await scaffold(
-        { name: 'my-app', components: ['frontend'], git: true, install: false },
+        { name: 'my-app', components: ['vitejs'], git: true, install: false },
         dest,
         REPO_DIR,
       );
@@ -118,6 +167,65 @@ describe('add', () => {
         await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
       );
       expect(marker.features).toContain('auth');
+    });
+
+    it('applies auth to an already-present component', async () => {
+      dest = join(tmpdir(), `projx-add-auth-existing-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['fastify'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+        false,
+      );
+
+      await add(dest, ['fastify'], REPO_DIR, true, undefined, {
+        auth: 'fastify',
+      });
+
+      expect(existsSync(join(dest, 'fastify/src/modules/auth/routes.ts'))).toBe(
+        true,
+      );
+      const marker = JSON.parse(
+        await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+      );
+      expect(marker.features).toContain('auth');
+    });
+
+    it('is idempotent when re-applying auth to an already-present component', async () => {
+      dest = join(tmpdir(), `projx-add-auth-idem-${Date.now()}`);
+      await scaffold(
+        { name: 'my-app', components: ['fastify'], git: true, install: false },
+        dest,
+        REPO_DIR,
+      );
+
+      await add(dest, ['fastify'], REPO_DIR, true, undefined, {
+        auth: 'fastify',
+      });
+      const appAfterFirst = await readFile(
+        join(dest, 'fastify/src/app.ts'),
+        'utf-8',
+      );
+
+      await add(dest, ['fastify'], REPO_DIR, true, undefined, {
+        auth: 'fastify',
+      });
+      const appAfterSecond = await readFile(
+        join(dest, 'fastify/src/app.ts'),
+        'utf-8',
+      );
+
+      expect(appAfterSecond).toBe(appAfterFirst);
+
+      const marker = JSON.parse(
+        await readFile(join(dest, 'fastify/.projx-component'), 'utf-8'),
+      );
+      expect(marker.features.filter((f: string) => f === 'auth')).toHaveLength(
+        1,
+      );
     });
   });
 
@@ -338,7 +446,7 @@ describe('add — installDeps paths (mocked)', () => {
     );
 
     execSpy.mockClear();
-    await add(dest, ['frontend'], REPO_DIR, false);
+    await add(dest, ['vitejs'], REPO_DIR, false);
 
     const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
     expect(calls.some((c) => c.includes('npm install'))).toBe(true);
@@ -390,10 +498,10 @@ describe('add — installDeps paths (mocked)', () => {
       dest,
       REPO_DIR,
     );
-    await add(dest, ['frontend'], REPO_DIR, true);
+    await add(dest, ['vitejs'], REPO_DIR, true);
 
-    expect(existsSync(join(dest, 'frontend/.env.example'))).toBe(true);
-    expect(existsSync(join(dest, 'frontend/.env'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/.env.example'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/.env'))).toBe(true);
   });
 
   it('runs fastify install when package manager is on PATH', async () => {
@@ -401,7 +509,7 @@ describe('add — installDeps paths (mocked)', () => {
     hasCommandSpy.mockReturnValue(true);
 
     await scaffold(
-      { name: 'fy', components: ['frontend'], git: true, install: false },
+      { name: 'fy', components: ['vitejs'], git: true, install: false },
       dest,
       REPO_DIR,
     );
@@ -418,7 +526,7 @@ describe('add — installDeps paths (mocked)', () => {
     hasCommandSpy.mockReturnValue(false);
 
     await scaffold(
-      { name: 'fy', components: ['frontend'], git: true, install: false },
+      { name: 'fy', components: ['vitejs'], git: true, install: false },
       dest,
       REPO_DIR,
     );
@@ -435,7 +543,7 @@ describe('add — installDeps paths (mocked)', () => {
     hasCommandSpy.mockReturnValue(false);
 
     await scaffold(
-      { name: 'ex', components: ['frontend'], git: true, install: false },
+      { name: 'ex', components: ['vitejs'], git: true, install: false },
       dest,
       REPO_DIR,
     );
@@ -458,10 +566,10 @@ describe('add — installDeps paths (mocked)', () => {
     );
 
     execSpy.mockClear();
-    await add(dest, ['frontend'], REPO_DIR, false);
+    await add(dest, ['vitejs'], REPO_DIR, false);
 
     expect(execSpy).not.toHaveBeenCalled();
-    expect(existsSync(join(dest, 'frontend'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs'))).toBe(true);
   });
 
   it('warns instead of installing e2e when package manager missing', async () => {
@@ -582,9 +690,9 @@ describe('add — installDeps paths (mocked)', () => {
     });
 
     await expect(
-      add(dest, ['frontend'], REPO_DIR, false),
+      add(dest, ['vitejs'], REPO_DIR, false),
     ).resolves.toBeUndefined();
-    expect(existsSync(join(dest, 'frontend'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs'))).toBe(true);
   });
 
   it('installs express dependencies when package manager is on PATH', async () => {
@@ -592,7 +700,7 @@ describe('add — installDeps paths (mocked)', () => {
     hasCommandSpy.mockReturnValue(true);
 
     await scaffold(
-      { name: 'ex', components: ['frontend'], git: true, install: false },
+      { name: 'ex', components: ['vitejs'], git: true, install: false },
       dest,
       REPO_DIR,
     );
@@ -656,7 +764,7 @@ describe('add — installDeps paths (mocked)', () => {
     );
 
     execSpy.mockClear();
-    await add(dest, ['frontend'], REPO_DIR, false);
+    await add(dest, ['vitejs'], REPO_DIR, false);
 
     const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
     expect(calls.some((c) => c.includes('bun install'))).toBe(true);
@@ -680,7 +788,7 @@ describe('add — installDeps paths (mocked)', () => {
     await writeFile(projxPath, JSON.stringify(projx, null, 2) + '\n');
 
     execSpy.mockClear();
-    await add(dest, ['frontend'], REPO_DIR, false);
+    await add(dest, ['vitejs'], REPO_DIR, false);
 
     const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
     expect(calls.some((c) => c.includes('npm install'))).toBe(true);
@@ -696,7 +804,7 @@ describe('add — installDeps paths (mocked)', () => {
       REPO_DIR,
     );
 
-    await add(dest, ['frontend'], REPO_DIR, true, 'web2');
+    await add(dest, ['vitejs'], REPO_DIR, true, 'web2');
 
     const envPath = join(dest, 'web2/.env');
     await writeFile(envPath, 'CUSTOM=1\n');
@@ -730,9 +838,7 @@ describe('add — early exits and validation', () => {
       throw new Error('exit');
     }) as never);
 
-    await expect(add(dest, ['frontend'], REPO_DIR, true)).rejects.toThrow(
-      'exit',
-    );
+    await expect(add(dest, ['vitejs'], REPO_DIR, true)).rejects.toThrow('exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
@@ -745,7 +851,7 @@ describe('add — early exits and validation', () => {
     );
 
     await expect(
-      add(dest, ['frontend', 'e2e'], REPO_DIR, true, 'whatever'),
+      add(dest, ['vitejs', 'e2e'], REPO_DIR, true, 'whatever'),
     ).rejects.toThrow(/single component type/i);
   });
 
@@ -754,7 +860,7 @@ describe('add — early exits and validation', () => {
     await scaffold(
       {
         name: 'dup',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -800,7 +906,7 @@ describe('add — early exits and validation', () => {
       throw new Error('exit');
     }) as never);
 
-    await expect(add(dest, ['frontend'], REPO_DIR, true)).rejects.toThrow();
+    await expect(add(dest, ['vitejs'], REPO_DIR, true)).rejects.toThrow();
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });

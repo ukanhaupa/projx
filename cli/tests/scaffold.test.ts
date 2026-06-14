@@ -31,7 +31,7 @@ describe('scaffold', () => {
     await scaffold(
       {
         name: 'test-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -41,11 +41,11 @@ describe('scaffold', () => {
 
     expect(existsSync(join(dest, '.projx'))).toBe(true);
     expect(existsSync(join(dest, 'fastify'))).toBe(true);
-    expect(existsSync(join(dest, 'frontend'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs'))).toBe(true);
 
-    expect(existsSync(join(dest, 'frontend/nginx.conf'))).toBe(true);
-    expect(existsSync(join(dest, 'frontend/nginx.conf.ejs'))).toBe(false);
-    const nginx = await readFile(join(dest, 'frontend/nginx.conf'), 'utf-8');
+    expect(existsSync(join(dest, 'vitejs/nginx.conf'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/nginx.conf.ejs'))).toBe(false);
+    const nginx = await readFile(join(dest, 'vitejs/nginx.conf'), 'utf-8');
     expect(nginx).not.toContain('keycloak');
     expect(nginx).not.toContain('location /admin/');
   });
@@ -55,7 +55,7 @@ describe('scaffold', () => {
     await scaffold(
       {
         name: 'express-app',
-        components: ['express', 'frontend', 'e2e'],
+        components: ['express', 'vitejs', 'e2e'],
         git: true,
         install: false,
       },
@@ -318,7 +318,7 @@ describe('scaffold', () => {
     await scaffold(
       {
         name: 'my-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -334,9 +334,46 @@ describe('scaffold', () => {
     expect(fastifyMarker.origin).toBeUndefined();
 
     const frontendMarker = JSON.parse(
-      await readFile(join(dest, 'frontend/.projx-component'), 'utf-8'),
+      await readFile(join(dest, 'vitejs/.projx-component'), 'utf-8'),
     );
-    expect(frontendMarker.component).toBe('frontend');
+    expect(frontendMarker.component).toBe('vitejs');
+  });
+
+  it('scaffolds a nextjs frontend with a standalone compose service and CI job', async () => {
+    dest = join(tmpdir(), `projx-nextjs-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'next-app',
+        components: ['fastify', 'nextjs'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    expect(existsSync(join(dest, 'nextjs'))).toBe(true);
+    expect(existsSync(join(dest, 'nextjs/next.config.ts'))).toBe(true);
+    expect(existsSync(join(dest, 'nextjs/Dockerfile'))).toBe(true);
+    expect(existsSync(join(dest, 'nextjs/Dockerfile.ejs'))).toBe(false);
+
+    const marker = JSON.parse(
+      await readFile(join(dest, 'nextjs/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('nextjs');
+
+    const compose = await readFile(join(dest, 'docker-compose.yml'), 'utf-8');
+    expect(compose).toContain('  nextjs:');
+    expect(compose).toContain('NEXT_PUBLIC_API_URL');
+    expect(compose).toContain('"3000:3000"');
+    expect(compose).not.toContain('certbot');
+    expect(compose).not.toContain('letsencrypt');
+
+    const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
+    expect(ci).toContain(
+      'name: Next.js (format + lint + typecheck + build + test + audit)',
+    );
+    expect(ci).toContain("nextjs:\n              - 'nextjs/**'");
   });
 
   it('generates shared files', async () => {
@@ -361,7 +398,7 @@ describe('scaffold', () => {
     await scaffold(
       {
         name: 'frontend-tests',
-        components: ['frontend'],
+        components: ['vitejs'],
         git: true,
         install: false,
       },
@@ -369,17 +406,17 @@ describe('scaffold', () => {
       REPO_DIR,
     );
 
-    expect(existsSync(join(dest, 'frontend/tests/test-setup.ts'))).toBe(true);
-    expect(existsSync(join(dest, 'frontend/src/test-setup.ts'))).toBe(false);
-    expect(existsSync(join(dest, 'frontend/src/testing'))).toBe(false);
+    expect(existsSync(join(dest, 'vitejs/tests/test-setup.ts'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/src/test-setup.ts'))).toBe(false);
+    expect(existsSync(join(dest, 'vitejs/src/testing'))).toBe(false);
   });
 
-  it('ci.yml uses canonical display names (FastAPI, Fastify, Express, Frontend, Flutter)', async () => {
+  it('ci.yml uses canonical display names (FastAPI, Fastify, Express, React + Vite, Flutter)', async () => {
     dest = join(tmpdir(), `projx-display-${Date.now()}`);
     await scaffold(
       {
         name: 'display-app',
-        components: ['fastapi', 'fastify', 'express', 'frontend', 'mobile'],
+        components: ['fastapi', 'fastify', 'express', 'vitejs', 'mobile'],
         git: true,
         install: false,
       },
@@ -396,7 +433,7 @@ describe('scaffold', () => {
       'name: Express (format + lint + typecheck + build + audit)',
     );
     expect(ci).toContain(
-      'name: Frontend (format + lint + typecheck + build + audit)',
+      'name: React + Vite (format + lint + typecheck + build + audit)',
     );
     expect(ci).toContain('name: Flutter (format + analyze + test + coverage)');
     expect(ci).toContain('name: Secret scan');
@@ -415,7 +452,7 @@ describe('scaffold', () => {
     expect(ci).not.toContain('uses: actions/checkout@v5');
     expect(ci).not.toContain('uses: gitleaks/gitleaks-action');
     expect(ci).toContain(
-      'python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/frontend/src',
+      'python3 ${{ env.WS }}/scripts/style-check.py ${{ env.WS }}/vitejs/src',
     );
     expect(ci).toContain('run_pip_audit() {');
     expect(ci).toContain('bash audit.sh');
@@ -510,7 +547,7 @@ describe('scaffold', () => {
     await scaffold(
       {
         name: 'display-app',
-        components: ['fastapi', 'fastify', 'frontend'],
+        components: ['fastapi', 'fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -521,7 +558,7 @@ describe('scaffold', () => {
     const setup = await readFile(join(dest, 'scripts/setup.sh'), 'utf-8');
     expect(setup).toContain('FastAPI dependencies installed.');
     expect(setup).toContain('Fastify dependencies installed.');
-    expect(setup).toContain('Frontend dependencies installed.');
+    expect(setup).toContain('React + Vite dependencies installed.');
   });
 
   it('substitutes project name in package.json', async () => {
@@ -614,7 +651,7 @@ describe('scaffold install paths (mocked)', () => {
     await scaffold(
       {
         name: 'install-app',
-        components: ['fastify', 'frontend', 'e2e', 'fastapi', 'mobile'],
+        components: ['fastify', 'vitejs', 'e2e', 'fastapi', 'mobile'],
         git: false,
         install: true,
         packageManager: 'npm',
@@ -638,7 +675,7 @@ describe('scaffold install paths (mocked)', () => {
     await scaffold(
       {
         name: 'no-tool',
-        components: ['fastify', 'frontend', 'fastapi', 'mobile'],
+        components: ['fastify', 'vitejs', 'fastapi', 'mobile'],
         git: false,
         install: true,
         packageManager: 'pnpm',
@@ -696,7 +733,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -714,7 +751,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -732,7 +769,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -744,7 +781,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     const setup = await readFile(join(dest, 'scripts/setup.sh'), 'utf-8');
     expect(setup).not.toContain('&& cd ..');
     expect(setup).toMatch(/\(\n\s+cd fastify\n\s+\S+/);
-    expect(setup).toMatch(/\(\n\s+cd frontend\n\s+\S+/);
+    expect(setup).toMatch(/\(\n\s+cd vitejs\n\s+\S+/);
   });
 
   it('README uses correct commands', async () => {
@@ -752,7 +789,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -789,7 +826,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend', 'e2e'],
+        components: ['fastify', 'vitejs', 'e2e'],
         git: true,
         install: false,
         packageManager: pm,
@@ -833,7 +870,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -879,7 +916,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     await scaffold(
       {
         name: `${pm}-app`,
-        components: ['frontend'],
+        components: ['vitejs'],
         git: true,
         install: false,
         packageManager: pm,
@@ -888,11 +925,8 @@ describe.each(PMS)('scaffold with %s', (pm) => {
       REPO_DIR,
     );
 
-    const dockerfile = await readFile(
-      join(dest, 'frontend/Dockerfile'),
-      'utf-8',
-    );
-    expect(existsSync(join(dest, 'frontend/Dockerfile.ejs'))).toBe(false);
+    const dockerfile = await readFile(join(dest, 'vitejs/Dockerfile'), 'utf-8');
+    expect(existsSync(join(dest, 'vitejs/Dockerfile.ejs'))).toBe(false);
     expect(dockerfile).toContain(cmd.ci);
     expect(dockerfile).toContain(`${cmd.run} build`);
     expect(dockerfile).toContain(cmd.lockfile);

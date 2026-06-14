@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import {
   COMPONENTS,
+  normalizeComponent,
   render,
   type Component,
   type ComponentInstance,
@@ -74,15 +75,14 @@ export function parseFeatureFlag(input: string): FeatureTarget[] {
       );
     }
     const [component, instance] = parts;
-    if (!(COMPONENTS as readonly string[]).includes(component)) {
+    const canonical = normalizeComponent(component);
+    if (!canonical) {
       throw new Error(
         `Unknown component "${component}". Valid: ${COMPONENTS.join(', ')}.`,
       );
     }
     out.push(
-      instance
-        ? { component: component as Component, instance }
-        : { component: component as Component },
+      instance ? { component: canonical, instance } : { component: canonical },
     );
   }
   return out;

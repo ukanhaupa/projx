@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="card mfa" data-secret="{{.MFASecret}}">{{/* pragma: allowlist secret */}}
+  <h1>Set up two-factor authentication</h1>
+  <p>Two-factor authentication is required. Scan this in your authenticator app, then enter the 6-digit code to finish.</p>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <p class="mfa-secret"><span class="muted">Setup key</span> <code>{{.MFASecret}}</code></p>
+  <p class="muted">Provisioning URI <code data-otpauth="{{.OTPAuthURL}}">{{.OTPAuthURL}}</code></p>
+  <form method="post" action="{{.Action}}">
+    <input type="hidden" name="secret" value="{{.MFASecret}}">
+    <input type="hidden" name="recovery_codes" value="{{range .RecoveryCodes}}{{.}} {{end}}">
+    <label>Authentication code<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" required autofocus></label>
+    <button type="submit">Verify and finish</button>
+  </form>
+</div>
+{{end}}

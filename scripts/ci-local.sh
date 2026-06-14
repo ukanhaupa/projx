@@ -7,7 +7,7 @@
 #   ./scripts/ci-local.sh fastify e2e           # run named sections only
 #
 # Sections (auto-detected by which top-level dirs exist):
-#   secrets  cli  fastapi  fastify  express  frontend  mobile  e2e  infra
+#   secrets  cli  fastapi  fastify  express  vitejs  nextjs  mobile  e2e  infra
 #   admin_panel  scaffold_matrix  scaffold_fuzz  scripts
 #
 # Environment knobs:
@@ -165,7 +165,7 @@ run_js_component() {
 }
 
 ensure_gitleaks() {
-  local version="8.21.2"
+  local version="8.24.3"
   local cache_dir="${HOME}/.cache/ci-local"
   GITLEAKS_BIN="$cache_dir/gitleaks-${version}"
   [ -x "$GITLEAKS_BIN" ] && return 0
@@ -277,12 +277,14 @@ sec_express() {
   express_boot_smoke
 }
 
-sec_frontend() {
-  run_js_component frontend
-  if [ -d "$ROOT_DIR/frontend/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
-    (cd "$ROOT_DIR/frontend" && run_step "frontend bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
+sec_vitejs() {
+  run_js_component vitejs
+  if [ -d "$ROOT_DIR/vitejs/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
+    (cd "$ROOT_DIR/vitejs" && run_step "vitejs bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
   fi
 }
+
+sec_nextjs() { run_js_component nextjs; }
 
 sec_e2e() {
   if [ ! -d "$ROOT_DIR/e2e" ]; then return 0; fi
@@ -376,14 +378,14 @@ sec_e2e() {
     done
   fi
 
-  [ -d "$ROOT_DIR/frontend" ] || {
+  [ -d "$ROOT_DIR/vitejs" ] || {
     xfail "frontend directory missing — cannot run e2e"
     kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
     return 1
   }
 
   (
-    cd "$ROOT_DIR/frontend" || exit 1
+    cd "$ROOT_DIR/vitejs" || exit 1
     run_step "frontend install (e2e)" pm_install
     run_step "frontend build (e2e)" bash -c \
       "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' VITE_COVERAGE=1 pm_exec vite build --outDir dist-e2e"
@@ -393,7 +395,7 @@ sec_e2e() {
   }
 
   start_background "e2e-frontend" bash -c \
-    "cd '$ROOT_DIR/frontend' && $(declare -f pm_exec detect_pm); pm_exec vite preview --outDir dist-e2e --host 127.0.0.1 --port '$frontend_port' --strictPort"
+    "cd '$ROOT_DIR/vitejs' && $(declare -f pm_exec detect_pm); pm_exec vite preview --outDir dist-e2e --host 127.0.0.1 --port '$frontend_port' --strictPort"
   local frontend_pid="$LAST_PID"
 
   if command -v curl >/dev/null 2>&1; then
@@ -441,7 +443,7 @@ sec_e2e() {
         xfail "e2e frontend coverage empty — instrumented __coverage__ scrape produced no lcov"
         rc=1
       else
-        run_step "e2e frontend reachability" bash "$ROOT_DIR/e2e/scripts/check-coverage.sh" "$cov/fe/lcov.info" "$ROOT_DIR/frontend/src/pages" || rc=1
+        run_step "e2e frontend reachability" bash "$ROOT_DIR/e2e/scripts/check-coverage.sh" "$cov/fe/lcov.info" "$ROOT_DIR/vitejs/src/pages" || rc=1
       fi
     else
       xfail "e2e frontend coverage missing — no .nyc_output (frontend not instrumented)"
@@ -544,7 +546,8 @@ available_sections() {
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
-  [ -d "$ROOT_DIR/frontend" ] && found+=("frontend")
+  [ -d "$ROOT_DIR/vitejs" ] && found+=("vitejs")
+  [ -d "$ROOT_DIR/nextjs" ] && found+=("nextjs")
   [ -d "$ROOT_DIR/mobile" ] && found+=("mobile")
   [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
   [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")

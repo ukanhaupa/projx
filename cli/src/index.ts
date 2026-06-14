@@ -6,6 +6,7 @@ import {
   COMPONENTS,
   KNOWN_FEATURES,
   ORM_PROVIDERS,
+  normalizeComponent,
   suggestComponent,
   type Component,
   type Feature,
@@ -122,9 +123,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       const val = args[++i];
       if (val) {
         const requested = val.split(',').map((c) => c.trim());
-        const invalid = requested.filter(
-          (c) => !COMPONENTS.includes(c as Component),
-        );
+        const invalid = requested.filter((c) => !normalizeComponent(c));
         if (invalid.length > 0) {
           const hints = invalid
             .map((c) => {
@@ -136,7 +135,9 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
             `Invalid --components: ${hints}. Available: ${COMPONENTS.join(', ')}`,
           );
         }
-        options.components = requested as Component[];
+        options.components = requested.map(
+          (c) => normalizeComponent(c) as Component,
+        );
       }
       continue;
     }
@@ -167,7 +168,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
     }
 
     if (arg === '-y' || arg === '--yes') {
-      options.components = options.components ?? ['fastify', 'frontend', 'e2e'];
+      options.components = options.components ?? ['fastify', 'vitejs', 'e2e'];
       continue;
     }
 
@@ -249,23 +250,24 @@ function printHelp(): void {
     projx gen entity <name>       Generate a new entity
 
   Options:
-    --components <list>  Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra,admin-panel
+    --components <list>  Comma-separated: fastapi,fastify,express,vitejs,nextjs,mobile,e2e,infra,admin-panel
     --orm <provider>     Node backend ORM: prisma (default), drizzle, sequelize, typeorm
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation
-    -y, --yes            Accept defaults (fastify + frontend + e2e)
+    -y, --yes            Accept defaults (fastify + vitejs + e2e)
     --local <path>       Use local repo instead of downloading (dev only)
     -h, --help           Show this help
 
   Examples:
     npx create-projx my-app
-    npx create-projx my-app --components fastapi,frontend,e2e
-    npx create-projx my-app --components express,frontend,e2e --orm drizzle
-    npx create-projx my-app --components fastify,frontend,mobile --auth fastify
-    npx create-projx my-app --components fastify,frontend,admin-panel
+    npx create-projx my-app --components fastapi,vitejs,e2e
+    npx create-projx my-app --components express,vitejs,e2e --orm drizzle
+    npx create-projx my-app --components fastify,nextjs
+    npx create-projx my-app --components fastify,vitejs,mobile --auth fastify
+    npx create-projx my-app --components fastify,vitejs,admin-panel
     npx create-projx my-app -y
-    npx create-projx add frontend mobile
+    npx create-projx add vitejs mobile
     npx create-projx add fastify --name email-ingestor
     npx create-projx@latest update
     npx create-projx diff
@@ -291,12 +293,10 @@ async function main(): Promise<void> {
 
   if (command === 'add') {
     const positionals = extraArgs.filter((a) => !a.startsWith('-'));
-    const components = positionals.filter((c): c is Component =>
-      COMPONENTS.includes(c as Component),
-    );
-    const unknown = positionals.filter(
-      (c) => !COMPONENTS.includes(c as Component),
-    );
+    const components = positionals
+      .map((c) => normalizeComponent(c))
+      .filter((c): c is Component => c !== null);
+    const unknown = positionals.filter((c) => !normalizeComponent(c));
     if (unknown.length > 0) {
       for (const u of unknown) {
         const guess = suggestComponent(u);

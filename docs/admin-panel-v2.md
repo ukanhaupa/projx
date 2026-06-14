@@ -34,12 +34,12 @@ The replacement: a small, self-contained admin panel that projx generates as a s
 
 ## What the new `admin-panel/` looks like
 
-After `npx create-projx my-app --components fastify,frontend,admin-panel` (or `--components fastapi,frontend,admin-panel` — backend language doesn't matter), the project layout is:
+After `npx create-projx my-app --components fastify,vitejs,admin-panel` (or `--components fastapi,vitejs,admin-panel` — backend language doesn't matter), the project layout is:
 
 ```
 my-app/
 ├── backend/                  # Fastify (or fastapi/, express/) — unchanged by admin-panel component
-├── frontend/                 # React + Vite marketing/app UI — unchanged
+├── vitejs/                   # React + Vite marketing/app UI — unchanged
 ├── admin-panel/              # ← NEW: self-contained Go + HTMX admin
 │   ├── cmd/admin/
 │   │   └── main.go           # entrypoint: load env, wire deps, http.ListenAndServe
@@ -118,9 +118,9 @@ The component does NOT require a specific backend component — it only requires
 
 ### Generation
 
-`npx create-projx my-app --components fastify,frontend,admin-panel,infra,e2e` runs:
+`npx create-projx my-app --components fastify,vitejs,admin-panel,infra,e2e` runs:
 
-1. **Base scaffold** — `fastify/`, `frontend/`, etc., as today
+1. **Base scaffold** — `fastify/`, `vitejs/`, etc., as today
 2. **Admin panel component** — copy `admin-panel/` template directly into `my-app/admin-panel/`. No EJS rendering needed inside; the template is project-agnostic Go code. Only `.env.example`, `Dockerfile`, and `README.md` are EJS-rendered with project name.
 3. **docker-compose service injection** — `cli/src/templates/docker-compose.yml.ejs` gets a new conditional block:
    ```yaml
@@ -445,7 +445,7 @@ The tenant's auth plugin reads it just like a regular user token, but the impers
 
 Every API call made under an impersonation token sets `X-Impersonated-By: <admin_email>` in the response. Tenant mobile/web clients render a non-dismissable banner: "Support is viewing your account. Started 14:32 IST by `admin@example.com`."
 
-Mobile (Flutter) implementation lives in the `mobile/` projx component as a feature overlay enabled when `admin-panel` is in the components list. Same for `frontend/` (React).
+Mobile (Flutter) implementation lives in the `mobile/` projx component as a feature overlay enabled when `admin-panel` is in the components list. Same for `vitejs/` (React).
 
 ### Blocked actions during impersonation
 

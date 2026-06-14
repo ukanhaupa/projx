@@ -10,7 +10,7 @@ import (
 func TestHXRequestReturnsFragmentNotFullPage(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/tables/widgets", nil)
 	req.Header.Set("HX-Request", "true")
@@ -35,7 +35,7 @@ func TestHXRequestReturnsFragmentNotFullPage(t *testing.T) {
 func TestRegularGETReturnsFullPage(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/tables/widgets", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
@@ -53,7 +53,7 @@ func TestRegularGETReturnsFullPage(t *testing.T) {
 func TestHXRequestWithFilterRendersFragmentWithChip(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/tables/widgets?f.name.eq=alpha", nil)
 	req.Header.Set("HX-Request", "true")
@@ -69,7 +69,7 @@ func TestHXRequestWithFilterRendersFragmentWithChip(t *testing.T) {
 func TestAddFilterHXPushesNewURL(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/admin/tables/widgets/_filter?filter_col=name&filter_op=eq&filter_val=alpha", nil)
@@ -89,7 +89,7 @@ func TestAddFilterHXPushesNewURL(t *testing.T) {
 func TestAddFilterNonHXRedirects(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/admin/tables/widgets/_filter?filter_col=name&filter_op=eq&filter_val=alpha", nil)
@@ -108,7 +108,7 @@ func TestAddFilterNonHXRedirects(t *testing.T) {
 func TestEmptyRowsRendersInFragment(t *testing.T) {
 	pool := testPool(t)
 	h := newTestServer(t, pool).Handler()
-	token := login(t, h, "admin@example.com", "s3cret-pass1")
+	token := loginFull(t, h, "admin@example.com", "s3cret-pass1")
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/admin/tables/widgets?f.name.eq=__nope__", nil)

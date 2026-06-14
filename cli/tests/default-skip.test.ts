@@ -36,7 +36,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
     await scaffold(
       {
         name: 'fresh-app',
-        components: ['fastapi', 'fastify', 'frontend'],
+        components: ['fastapi', 'fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -54,7 +54,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
     const fastifyMarker = await readComponentMarker(join(dest, 'fastify'));
     expect(fastifyMarker?.skip).toContain('package.json');
 
-    const frontendMarker = await readComponentMarker(join(dest, 'frontend'));
+    const frontendMarker = await readComponentMarker(join(dest, 'vitejs'));
     expect(frontendMarker?.skip).toContain('package.json');
   });
 
@@ -181,7 +181,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
     await scaffold(
       {
         name: 'fresh-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -251,9 +251,9 @@ describe('default-skip — scenario C: add new component', () => {
       REPO_DIR,
     );
 
-    await add(dest, ['frontend'], REPO_DIR, true);
+    await add(dest, ['vitejs'], REPO_DIR, true);
 
-    const frontendMarker = await readComponentMarker(join(dest, 'frontend'));
+    const frontendMarker = await readComponentMarker(join(dest, 'vitejs'));
     expect(frontendMarker?.skip).toContain('package.json');
   });
 
@@ -268,7 +268,7 @@ describe('default-skip — scenario C: add new component', () => {
     const before = await readProjxConfig(dest);
     const beforeSkip = JSON.stringify(before.skip);
 
-    await add(dest, ['frontend'], REPO_DIR, true);
+    await add(dest, ['vitejs'], REPO_DIR, true);
 
     const after = await readProjxConfig(dest);
     expect(JSON.stringify(after.skip)).toBe(beforeSkip);
@@ -529,7 +529,7 @@ describe('default-skip — scenario G: pinned-update notification', () => {
     await scaffold(
       {
         name: 'notify-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },

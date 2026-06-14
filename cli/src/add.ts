@@ -93,12 +93,14 @@ export async function add(
   }
 
   const toAdd = newComponents.filter((c) => !existing.includes(c));
-  if (toAdd.length === 0) {
+  const hasFeatures = !!features && Object.keys(features).length > 0;
+  if (toAdd.length === 0 && !hasFeatures) {
     p.log.info('Nothing new to add.');
     process.exit(0);
   }
 
-  p.log.info(`Adding: ${toAdd.join(', ')}`);
+  if (toAdd.length > 0) p.log.info(`Adding: ${toAdd.join(', ')}`);
+  else p.log.info('Applying features to existing components.');
 
   const dlSpinner = p.spinner();
   dlSpinner.start(
@@ -150,22 +152,24 @@ export async function add(
       if (m?.skip && m.skip.length > 0) componentSkips[inst.type] = m.skip;
     }
 
-    const spinner = p.spinner();
-    spinner.start('Adding components');
-    await writeTemplateToDir(
-      cwd,
-      repoDir,
-      allComponents,
-      paths,
-      vars,
-      version,
-      { componentSkips, rootSkip, realCwd: cwd },
-    );
-    spinner.stop('Components added.');
+    if (toAdd.length > 0) {
+      const spinner = p.spinner();
+      spinner.start('Adding components');
+      await writeTemplateToDir(
+        cwd,
+        repoDir,
+        allComponents,
+        paths,
+        vars,
+        version,
+        { componentSkips, rootSkip, realCwd: cwd },
+      );
+      spinner.stop('Components added.');
 
-    reportPinnedShared(cwd, rootSkip, toAdd.join(', '));
+      reportPinnedShared(cwd, rootSkip, toAdd.join(', '));
+    }
 
-    if (features && Object.keys(features).length > 0) {
+    if (features && hasFeatures) {
       const featSpinner = p.spinner();
       featSpinner.start('Applying features');
       await applyFeatures({
@@ -199,8 +203,12 @@ export async function add(
       }
     }
 
+    const summary =
+      toAdd.length > 0
+        ? `Added ${toAdd.join(', ')}.`
+        : 'Applied features to existing components.';
     p.outro(
-      `Added ${toAdd.join(', ')}.\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
+      `${summary}\n\n  Like projx? Star it: https://github.com/ukanhaupa/projx`,
     );
   } finally {
     await cleanupRepo(repoDir, isLocal);
@@ -365,13 +373,26 @@ async function installDeps(
             );
           }
           break;
-        case 'frontend':
+        case 'vitejs':
           if (hasCommand(pmBin)) {
             spinner.start(
-              `Installing Frontend dependencies (${path}/, ${cmds.install})`,
+              `Installing React + Vite dependencies (${path}/, ${cmds.install})`,
             );
             exec(cmds.install, dir);
-            spinner.stop(`Frontend dependencies installed (${path}/).`);
+            spinner.stop(`React + Vite dependencies installed (${path}/).`);
+          } else {
+            p.log.warn(
+              `${pm} not found — run 'cd ${path} && ${cmds.install}' manually.`,
+            );
+          }
+          break;
+        case 'nextjs':
+          if (hasCommand(pmBin)) {
+            spinner.start(
+              `Installing Next.js dependencies (${path}/, ${cmds.install})`,
+            );
+            exec(cmds.install, dir);
+            spinner.stop(`Next.js dependencies installed (${path}/).`);
           } else {
             p.log.warn(
               `${pm} not found — run 'cd ${path} && ${cmds.install}' manually.`,

@@ -25,13 +25,19 @@ paths = [
   '''.*/\.env\.test$''',
   # Build artefacts (regenerable, never committed) — copies of *.test.ts.
   '''.*/dist/.*''',
+  # Next.js build output + coverage artefacts (regenerable, gitignored).
+  '''.*/\.next/.*''',
+  '''.*/coverage/.*''',
+  '''.*/\.nyc_output/.*''',
   # Terraform module cache (downloaded by `terraform init`, not committed).
   '''.*/\.terraform/.*''',
   # Local environment files (gitignored; on-disk only for the operator).
   '''.*/\.env\.(local|dev|staging|prod)$''',
   # Auth-feature test fixtures: deterministic test passwords / TOTP secrets.
   '''features/auth/.*/tests/.*''',
-  '''(fastify|express|fastapi)/tests/.*''',
+  '''(fastify|express|fastapi|vitejs|nextjs)/tests/.*''',
+  # Admin-panel Go test fixtures (deterministic keys/TOTP secrets; no real secrets).
+  '''admin-panel/.*_test\.go$''',
   # IaC reference module READMEs that quote example provider configs.
   '''.*/\.terraform/modules/.*''',
 ]

@@ -89,7 +89,19 @@ if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
 fi
 echo "<%= inst.display %> dependencies installed."
 <% } %>
-<% for (const inst of frontendInstances) { %>
+<% for (const inst of vitejsInstances) { %>
+
+(
+  cd <%= inst.path %>
+  <%= pm.install %>
+)
+if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+  cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+  echo "<%= inst.path %>/.env created from .env.example."
+fi
+echo "<%= inst.display %> dependencies installed."
+<% } %>
+<% for (const inst of nextjsInstances) { %>
 
 (
   cd <%= inst.path %>

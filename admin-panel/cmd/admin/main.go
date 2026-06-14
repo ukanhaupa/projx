@@ -45,7 +45,7 @@ func run() error {
 		return err
 	}
 
-	store := auth.NewStore(pool)
+	store := auth.NewStore(pool, cfg.SessionSecret)
 	if err := store.EnsureBootstrap(ctx, cfg.BootstrapEmail, cfg.BootstrapPass); err != nil {
 		return err
 	}
@@ -61,6 +61,7 @@ func run() error {
 		return err
 	}
 	srv.SetCookieSecure(cfg.CookieSecure)
+	srv.SetCredKey(cfg.CredEncryptionKey)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
