@@ -51,7 +51,7 @@ describe('gen entity (interactive)', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastapi', 'frontend', 'mobile'],
+        components: ['fastapi', 'vitejs', 'mobile'],
         git: true,
         install: false,
       },
@@ -103,7 +103,7 @@ describe('gen entity (interactive)', () => {
     expect(model).toContain('__searchable_fields__ = {"title"}');
 
     const iface = await readFile(
-      join(dest, 'frontend/src/types/record.ts'),
+      join(dest, 'vitejs/src/types/record.ts'),
       'utf-8',
     );
     expect(iface).toContain('deleted_at: string | null;');

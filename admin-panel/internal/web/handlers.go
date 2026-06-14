@@ -148,7 +148,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   s.secure,
 	})
-	http.Redirect(w, r, s.base+"/", http.StatusSeeOther)
+	http.Redirect(w, r, s.base+"/2fa", http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

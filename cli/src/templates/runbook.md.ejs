@@ -45,7 +45,7 @@ Let's Encrypt via certbot at `/etc/cron.d/<%= projectName %>-certbot`, daily 03:
 ## Incident channels
 
 - Internal alarms: `<%= projectName %>-alerts` SNS topic (subscribe via `var.alert_emails`)
-- Application crashes: Sentry (Node backends: `service_configs` row with purpose `sentry`; FastAPI/frontend: `SENTRY_DSN` / `VITE_SENTRY_DSN` env)
+- Application crashes: Sentry (Node backends: `service_configs` row with purpose `sentry`; FastAPI/frontend: `SENTRY_DSN` / `VITE_SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` env)
 - Customer-facing: TBD
 
 ## Known recovery cliffs (open items)

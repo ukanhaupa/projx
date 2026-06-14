@@ -1938,7 +1938,8 @@ async function runGen(opts: RunGenOpts): Promise<void> {
   const hasFastapi = discovered.includes('fastapi');
   const hasFastify = discovered.includes('fastify');
   const hasExpress = discovered.includes('express');
-  const hasFrontend = discovered.includes('frontend');
+  const hasVitejs = discovered.includes('vitejs');
+  const hasNextjs = discovered.includes('nextjs');
   const hasMobile = discovered.includes('mobile');
 
   if (!hasFastapi && !hasFastify && !hasExpress) {
@@ -2214,8 +2215,10 @@ async function runGen(opts: RunGenOpts): Promise<void> {
     );
   }
 
-  if (hasFrontend) {
-    const dir = componentPaths.frontend;
+  const frontendDirs: string[] = [];
+  if (hasVitejs) frontendDirs.push(componentPaths.vitejs);
+  if (hasNextjs) frontendDirs.push(componentPaths.nextjs);
+  for (const dir of frontendDirs) {
     const typesDir = join(cwd, dir, 'src/types');
     const fileName = toKebab(config.name) + '.ts';
     const filePath = join(typesDir, fileName);
@@ -2315,7 +2318,7 @@ async function runGen(opts: RunGenOpts): Promise<void> {
     );
   }
 
-  if (hasFrontend) {
+  if (hasVitejs || hasNextjs) {
     p.log.info('');
     p.log.info('Frontend usage:');
     p.log.info(

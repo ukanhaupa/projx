@@ -69,9 +69,16 @@ async function scanDirectory(
       });
     }
 
-    if (allDeps.react || allDeps['react-dom']) {
+    if (allDeps.next) {
       results.push({
-        component: 'frontend',
+        component: 'nextjs',
+        directory: relPath,
+        confidence: 'high',
+        evidence: 'package.json has next dependency',
+      });
+    } else if (allDeps.react || allDeps['react-dom']) {
+      results.push({
+        component: 'vitejs',
         directory: relPath,
         confidence: 'high',
         evidence: 'package.json has react dependency',

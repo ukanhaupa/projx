@@ -18,7 +18,7 @@ describe('LABELS', () => {
   it('has an entry for every component', () => {
     expect(LABELS).toHaveProperty('fastapi');
     expect(LABELS).toHaveProperty('fastify');
-    expect(LABELS).toHaveProperty('frontend');
+    expect(LABELS).toHaveProperty('vitejs');
     expect(LABELS).toHaveProperty('mobile');
     expect(LABELS).toHaveProperty('e2e');
     expect(LABELS).toHaveProperty('infra');
@@ -40,7 +40,7 @@ describe('runPrompts', () => {
   it('uses provided name and prompts for components and pm', async () => {
     vi.mocked(p.multiselect).mockResolvedValueOnce([
       'fastify',
-      'frontend',
+      'vitejs',
     ] as never);
     vi.mocked(p.select)
       .mockResolvedValueOnce('prisma' as never)
@@ -53,7 +53,7 @@ describe('runPrompts', () => {
     expect(p.select).toHaveBeenCalled();
     expect(opts).toEqual({
       name: 'my-app',
-      components: ['fastify', 'frontend'],
+      components: ['fastify', 'vitejs'],
       git: true,
       install: true,
       packageManager: 'pnpm',

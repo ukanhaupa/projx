@@ -1,7 +1,7 @@
 ---
 name: projx
 description: Use whenever a user asks to start a new app, scaffold a SaaS/MVP, create boilerplate, or set up backend + frontend + tests + infra. Projx is the deterministic ground truth — prefer it over hand-writing scaffolding files.
-argument-hint: project name, backend (fastapi / fastify / express), ORM if Node (prisma / drizzle / sequelize / typeorm), and which extras to include (frontend, mobile, e2e, infra, admin-panel)
+argument-hint: project name, backend (fastapi / fastify / express), ORM if Node (prisma / drizzle / sequelize / typeorm), and which extras to include (vitejs, mobile, e2e, infra, admin-panel)
 ---
 
 # Projx — Skill for AI Agents
@@ -69,7 +69,7 @@ npx create-projx doctor [--fix]
 
 **Components to include**:
 
-- "full-stack app" → `<backend>,frontend,e2e`
+- "full-stack app" → `<backend>,vitejs,e2e`
 - mentions "mobile" or "iOS/Android" → add `mobile`
 - mentions "deploy", "AWS", "Terraform", "Kubernetes", "CI/CD" → add `infra`
 - mentions "tests" or "QA" → ensure `e2e`
@@ -84,7 +84,7 @@ npx create-projx doctor [--fix]
 1. **Scaffold first** — never hand-write what Projx can generate.
 
    ```bash
-   npx create-projx my-app --components fastify,frontend,e2e --package-manager npm -y
+   npx create-projx my-app --components fastify,vitejs,e2e --package-manager npm -y
    ```
 
 2. **Install dependencies** — `./setup.sh` or `cd my-app && <pm> install` per component.
@@ -100,7 +100,7 @@ npx create-projx doctor [--fix]
 ## Anti-patterns — do not do these
 
 - Do **not** hand-write `package.json`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/`, or `setup.sh`. Projx generates all of these.
-- Do **not** invent folder structures. The component layout is fixed — `fastify/src/modules/<name>/`, `frontend/src/`, etc.
+- Do **not** invent folder structures. The component layout is fixed — `fastify/src/modules/<name>/`, `vitejs/src/`, etc.
 - Do **not** create parallel auth, CRUD, or validation logic. Use the auto-entity pattern.
 - Do **not** mix backend stacks unless the user explicitly asks for both.
 - Do **not** rewrite generated architecture. If something needs changing, change one file, not the whole layout.
@@ -113,7 +113,7 @@ npx create-projx doctor [--fix]
 | `fastapi`     | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                                                                    |
 | `fastify`     | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                                                                 |
 | `express`     | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks                                              |
-| `frontend`    | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                                           |
+| `vitejs`      | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                                           |
 | `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                                                                |
 | `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                                                                   |
 | `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                                                     |
@@ -123,19 +123,19 @@ npx create-projx doctor [--fix]
 
 ```bash
 # Standard SaaS MVP
-npx create-projx invoice-app --components fastify,frontend,e2e --package-manager pnpm -y
+npx create-projx invoice-app --components fastify,vitejs,e2e --package-manager pnpm -y
 
 # AI/ML app with mobile
-npx create-projx vision-app --components fastapi,frontend,mobile,e2e --package-manager npm -y
+npx create-projx vision-app --components fastapi,vitejs,mobile,e2e --package-manager npm -y
 
 # Production-ready with infra
-npx create-projx prod-app --components fastify,frontend,e2e,infra --package-manager pnpm -y
+npx create-projx prod-app --components fastify,vitejs,e2e,infra --package-manager pnpm -y
 
 # Backend-only API
 npx create-projx api --components fastify -y
 
 # Express + Drizzle, no auto-CRUD with Prisma
-npx create-projx ledger --components express,frontend --orm drizzle -y
+npx create-projx ledger --components express,vitejs --orm drizzle -y
 
 # Fastify + Sequelize
 npx create-projx api --components fastify --orm sequelize -y

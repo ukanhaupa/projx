@@ -69,7 +69,7 @@ describe('update', () => {
       dest,
       REPO_DIR,
     );
-    await add(dest, ['frontend'], REPO_DIR, true, undefined, {
+    await add(dest, ['vitejs'], REPO_DIR, true, undefined, {
       auth: 'fastify',
     });
 
@@ -147,7 +147,7 @@ describe('update', () => {
     await scaffold(
       {
         name: 'my-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -159,7 +159,8 @@ describe('update', () => {
       fastapi: 'fastapi',
       fastify: 'fastify',
       express: 'express',
-      frontend: 'frontend',
+      vitejs: 'vitejs',
+      nextjs: 'nextjs',
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
@@ -171,7 +172,7 @@ describe('update', () => {
       [
         'fastify/src/server.ts',
         'fastify/src/plugins/auth.ts',
-        'frontend/src/App.tsx',
+        'vitejs/src/App.tsx',
       ],
       paths,
     );
@@ -183,7 +184,7 @@ describe('update', () => {
     expect(fastifyMarker.skip).toContain('src/plugins/auth.ts');
 
     const frontendMarker = JSON.parse(
-      await readFile(join(dest, 'frontend/.projx-component'), 'utf-8'),
+      await readFile(join(dest, 'vitejs/.projx-component'), 'utf-8'),
     );
     expect(frontendMarker.skip).toContain('src/App.tsx');
   });
@@ -200,7 +201,8 @@ describe('update', () => {
       fastapi: 'fastapi',
       fastify: 'fastify',
       express: 'express',
-      frontend: 'frontend',
+      vitejs: 'vitejs',
+      nextjs: 'nextjs',
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
@@ -231,7 +233,8 @@ describe('update', () => {
       fastapi: 'fastapi',
       fastify: 'fastify',
       express: 'express',
-      frontend: 'frontend',
+      vitejs: 'vitejs',
+      nextjs: 'nextjs',
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
@@ -847,7 +850,8 @@ describe('learnSkips — edge cases', () => {
       fastapi: 'fastapi',
       fastify: 'fastify',
       express: 'express',
-      frontend: 'frontend',
+      vitejs: 'vitejs',
+      nextjs: 'nextjs',
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',
@@ -876,7 +880,8 @@ describe('learnSkips — edge cases', () => {
       fastapi: 'fastapi',
       fastify: 'fastify',
       express: 'express',
-      frontend: 'frontend',
+      vitejs: 'vitejs',
+      nextjs: 'nextjs',
       mobile: 'mobile',
       e2e: 'e2e',
       infra: 'infra',

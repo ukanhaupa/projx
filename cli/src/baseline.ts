@@ -487,7 +487,8 @@ export async function writeTemplateToDir(
 
   if (
     hasBackend ||
-    components.includes('frontend') ||
+    components.includes('vitejs') ||
+    components.includes('nextjs') ||
     components.includes('admin-panel')
   ) {
     if (shouldWrite('docker-compose.yml'))
@@ -897,13 +898,22 @@ async function substituteNamesForInstance(
         target,
       );
     }
-  } else if (type === 'frontend') {
+  } else if (type === 'vitejs') {
     const target = isCanonical
-      ? (overrides?.frontend ?? `${name}-frontend`)
+      ? (overrides?.vitejs ?? `${name}-vitejs`)
       : `${name}-${path}`;
     await replaceInFile(
       join(dest, `${path}/package.json`),
-      'projx-frontend',
+      'projx-vitejs',
+      target,
+    );
+  } else if (type === 'nextjs') {
+    const target = isCanonical
+      ? (overrides?.nextjs ?? `${name}-nextjs`)
+      : `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/package.json`),
+      'projx-nextjs',
       target,
     );
   } else if (type === 'e2e') {
@@ -945,7 +955,7 @@ export async function detectPackageNameOverrides(
     const name = await readTomlProjectName(file);
     if (name) overrides.fastapi = name;
   }
-  for (const c of ['fastify', 'express', 'frontend', 'e2e'] as const) {
+  for (const c of ['fastify', 'express', 'vitejs', 'nextjs', 'e2e'] as const) {
     if (!components.includes(c)) continue;
     const file = join(cwd, componentPaths[c], 'package.json');
     const name = await readJsonName(file);

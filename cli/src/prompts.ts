@@ -13,7 +13,8 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: 'FastAPI', hint: 'Python — SQLAlchemy, Alembic, uvicorn' },
   fastify: { label: 'Fastify', hint: 'Node.js — Prisma, TypeBox, TypeScript' },
   express: { label: 'Express', hint: 'Node.js — Express 5, TypeScript' },
-  frontend: { label: 'Frontend', hint: 'React 19 + Vite + React Router' },
+  vitejs: { label: 'React + Vite', hint: 'React 19 + Vite + React Router' },
+  nextjs: { label: 'Next.js', hint: 'React 19 + Next.js App Router' },
   mobile: { label: 'Mobile', hint: 'Flutter + Riverpod + GoRouter' },
   e2e: { label: 'E2E Tests', hint: 'Playwright' },
   infra: { label: 'Infrastructure', hint: 'Terraform + AWS' },
@@ -23,7 +24,7 @@ export const LABELS: Record<Component, { label: string; hint: string }> = {
   },
 };
 
-const DEFAULTS: Component[] = ['fastify', 'frontend', 'e2e'];
+const DEFAULTS: Component[] = ['fastify', 'vitejs', 'e2e'];
 
 export async function runPrompts(nameArg?: string): Promise<Options> {
   p.intro('projx');
@@ -60,7 +61,7 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
   }
 
   const hasJs = components.some((c) =>
-    ['fastify', 'express', 'frontend', 'e2e'].includes(c),
+    ['fastify', 'express', 'vitejs', 'nextjs', 'e2e'].includes(c),
   );
   const hasNodeBackend = components.some((c) =>
     ['fastify', 'express'].includes(c),

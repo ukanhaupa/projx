@@ -31,6 +31,7 @@ type Server struct {
 	tmpl   map[string]*template.Template
 	secure bool
 	ready  bool
+	cred   []byte
 }
 
 func NewServer(base string, store *auth.Store, schema *browser.Schema, repo *browser.Repo, audit *audit.Logger) (*Server, error) {
@@ -43,6 +44,10 @@ func NewServer(base string, store *auth.Store, schema *browser.Schema, repo *bro
 
 func (s *Server) SetCookieSecure(secure bool) {
 	s.secure = secure
+}
+
+func (s *Server) SetCredKey(key []byte) {
+	s.cred = key
 }
 
 func (s *Server) SetReadiness(value bool) {
@@ -59,7 +64,7 @@ func (s *Server) parseTemplates() error {
 		"add":             func(a, b int) int { return a + b },
 		"addPageLen":      func(p *browser.Page) int { return p.Offset + len(p.Rows) },
 	}
-	pages := []string{"login", "tables", "explorer", "editor"}
+	pages := []string{"login", "tables", "explorer", "editor", "mfa_enroll", "mfa_challenge", "mfa_recovery"}
 	s.tmpl = make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS,
@@ -98,11 +103,23 @@ func (s *Server) Handler() http.Handler {
 	r.Group(func(pr chi.Router) {
 		pr.Use(noCacheMiddleware)
 		pr.Use(s.requireAuth)
+		pr.Get(s.base+"/2fa", s.challengeForm)
+		pr.Post(s.base+"/2fa", s.challengeSubmit)
+		pr.Get(s.base+"/2fa/enroll", s.enrollForm)
+		pr.Post(s.base+"/2fa/enroll", s.enrollSubmit)
+		pr.Get(s.base+"/2fa/recovery", s.recoveryPage)
+	})
+
+	r.Group(func(pr chi.Router) {
+		pr.Use(noCacheMiddleware)
+		pr.Use(s.requireAuth)
+		pr.Use(s.requireMFA)
 		pr.Post(s.base+"/mode", s.toggleMode)
 		pr.Post(s.base+"/schema", s.switchSchema)
 		pr.Get(s.base+"/", s.tablesPage)
 		pr.Get(s.base+"/tables/{table}.csv", s.exportTableCSV)
 		pr.Get(s.base+"/tables/{table}/_filter", s.addFilter)
+		pr.Get(s.base+"/tables/{table}/{id}/decrypt", s.decryptCell)
 		pr.Get(s.base+"/tables/{table}", s.explorerPage)
 		pr.Get(s.base+"/tables/{table}/new", s.newRowForm)
 		pr.Post(s.base+"/tables/{table}/new", s.createRow)
@@ -115,33 +132,37 @@ func (s *Server) Handler() http.Handler {
 }
 
 type viewData struct {
-	Title        string
-	Base         string
-	User         string
-	Error        string
-	Schemas      []string
-	Schema       string
-	Tables       []string
-	Table        string
-	PrimaryKey   string
-	Columns      []columnView
-	CanWrite     bool
-	WriteMode    bool
-	WriteExpires string
-	Page         *browser.Page
-	PrevOffset   int
-	NextOffset   int
-	PrevURL      string
-	NextURL      string
-	ExportURL    string
-	Sort         []browser.SortKey
-	Search       string
-	ActiveFilter []browser.Filter
-	Total        int
-	Fields       []field
-	Action       string
-	ID           string
-	IsNew        bool
+	Title         string
+	Base          string
+	User          string
+	Error         string
+	Schemas       []string
+	Schema        string
+	Tables        []string
+	Table         string
+	PrimaryKey    string
+	Columns       []columnView
+	CanWrite      bool
+	CanDecrypt    bool
+	WriteMode     bool
+	WriteExpires  string
+	Page          *browser.Page
+	PrevOffset    int
+	NextOffset    int
+	PrevURL       string
+	NextURL       string
+	ExportURL     string
+	Sort          []browser.SortKey
+	Search        string
+	ActiveFilter  []browser.Filter
+	Total         int
+	Fields        []field
+	Action        string
+	ID            string
+	IsNew         bool
+	MFASecret     string
+	OTPAuthURL    string
+	RecoveryCodes []string
 }
 
 type columnView struct {
@@ -196,6 +217,7 @@ func (s *Server) applyChrome(r *http.Request, data *viewData) {
 		data.Schema = currentSchema(r)
 	}
 	data.CanWrite = canWrite(r)
+	data.CanDecrypt = len(s.cred) > 0 && inWriteMode(r)
 	data.WriteMode = inWriteMode(r)
 	if exp := writeExpires(r); !exp.IsZero() {
 		data.WriteExpires = exp.Format("15:04 MST")

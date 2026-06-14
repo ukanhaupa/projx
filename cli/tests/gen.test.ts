@@ -339,7 +339,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastapi', 'frontend', 'mobile'],
+        components: ['fastapi', 'vitejs', 'mobile'],
         git: true,
         install: false,
       },
@@ -370,7 +370,7 @@ describe('gen entity', () => {
     expect(test).toContain('datetime(2026, 1, 1, 0, 0, 0)');
 
     const iface = await readFile(
-      join(dest, 'frontend/src/types/record.ts'),
+      join(dest, 'vitejs/src/types/record.ts'),
       'utf-8',
     );
     expect(iface).toContain('meta: Record<string, unknown>;');
@@ -757,7 +757,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastify', 'frontend', 'mobile'],
+        components: ['fastify', 'vitejs', 'mobile'],
         git: true,
         install: false,
       },
@@ -767,7 +767,7 @@ describe('gen entity', () => {
 
     await gen(dest, 'invoice', 'name:string,amount:number');
 
-    const typePath = join(dest, 'frontend/src/types/invoice.ts');
+    const typePath = join(dest, 'vitejs/src/types/invoice.ts');
     const modelPath = join(dest, 'mobile/lib/entities/invoice/model.dart');
     expect(existsSync(typePath)).toBe(true);
     expect(existsSync(modelPath)).toBe(true);
@@ -1033,7 +1033,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -1059,7 +1059,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -1073,7 +1073,7 @@ describe('gen entity', () => {
       'name:string,price:number,active:boolean,notes:text',
     );
 
-    const typePath = join(dest, 'frontend/src/types/product.ts');
+    const typePath = join(dest, 'vitejs/src/types/product.ts');
     expect(existsSync(typePath)).toBe(true);
 
     const content = await readFile(typePath, 'utf-8');
@@ -1090,7 +1090,7 @@ describe('gen entity', () => {
     expect(content).toContain('export interface UpdateProduct {');
 
     // Barrel file
-    const barrelPath = join(dest, 'frontend/src/types/index.ts');
+    const barrelPath = join(dest, 'vitejs/src/types/index.ts');
     expect(existsSync(barrelPath)).toBe(true);
     const barrel = await readFile(barrelPath, 'utf-8');
     expect(barrel).toContain("export * from './product';");
@@ -1138,7 +1138,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastapi', 'fastify', 'frontend', 'mobile'],
+        components: ['fastapi', 'fastify', 'vitejs', 'mobile'],
         git: true,
         install: false,
       },
@@ -1152,7 +1152,7 @@ describe('gen entity', () => {
     expect(
       existsSync(join(dest, 'fastify/src/modules/invoice/schemas.ts')),
     ).toBe(true);
-    expect(existsSync(join(dest, 'frontend/src/types/invoice.ts'))).toBe(true);
+    expect(existsSync(join(dest, 'vitejs/src/types/invoice.ts'))).toBe(true);
     expect(
       existsSync(join(dest, 'mobile/lib/entities/invoice/model.dart')),
     ).toBe(true);
@@ -1165,7 +1165,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -1177,7 +1177,7 @@ describe('gen entity', () => {
     await gen(dest, 'task', 'title:string,notes:text');
 
     const content = await readFile(
-      join(dest, 'frontend/src/types/task.ts'),
+      join(dest, 'vitejs/src/types/task.ts'),
       'utf-8',
     );
     expect(content).toContain('title: string;');
@@ -1189,7 +1189,7 @@ describe('gen entity', () => {
     await scaffold(
       {
         name: 'gen-app',
-        components: ['fastify', 'frontend'],
+        components: ['fastify', 'vitejs'],
         git: true,
         install: false,
       },
@@ -1201,7 +1201,7 @@ describe('gen entity', () => {
     await gen(dest, 'invoice', 'name:string,amount:number');
 
     const barrel = await readFile(
-      join(dest, 'frontend/src/types/index.ts'),
+      join(dest, 'vitejs/src/types/index.ts'),
       'utf-8',
     );
     expect(barrel).toContain("export * from './product';");

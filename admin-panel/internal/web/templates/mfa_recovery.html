@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="card mfa">
+  <h1>Save your recovery codes</h1>
+  <p>Store these recovery codes somewhere safe. Each one works once if you lose your authenticator. They will not be shown again.</p>
+  <ul class="recovery-codes">
+    {{range .RecoveryCodes}}<li data-recovery="{{.}}"><code>{{.}}</code></li>{{end}}
+  </ul>
+  <a class="button" href="{{.Base}}/">Continue to the admin panel</a>
+</div>
+{{end}}

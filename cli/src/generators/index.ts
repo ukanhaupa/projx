@@ -24,7 +24,8 @@ const CANONICAL_DISPLAY: Record<Component, string> = {
   fastapi: 'FastAPI',
   fastify: 'Fastify',
   express: 'Express',
-  frontend: 'Frontend',
+  vitejs: 'React + Vite',
+  nextjs: 'Next.js',
   mobile: 'Flutter',
   e2e: 'E2E',
   infra: 'Terraform',
@@ -54,7 +55,8 @@ function withInstances(vars: GeneratorVars): GeneratorVars {
     fastapiInstances: byType('fastapi'),
     fastifyInstances: byType('fastify'),
     expressInstances: byType('express'),
-    frontendInstances: byType('frontend'),
+    vitejsInstances: byType('vitejs'),
+    nextjsInstances: byType('nextjs'),
     mobileInstances: byType('mobile'),
     e2eInstances: byType('e2e'),
     infraInstances: byType('infra'),
@@ -158,7 +160,7 @@ export function generateVscodeSettings(vars: GeneratorVars): string {
   settings['eslint.useFlatConfig'] = true;
 
   const prettierComponent = (
-    ['frontend', 'fastify', 'express', 'e2e'] as const
+    ['vitejs', 'nextjs', 'fastify', 'express', 'e2e'] as const
   ).find((c) => vars.components.includes(c));
   if (prettierComponent) {
     settings['prettier.configPath'] =

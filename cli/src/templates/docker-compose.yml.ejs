@@ -112,7 +112,7 @@ services:
           - backend
 <% } %>
 <% } %>
-<% for (const inst of frontendInstances) { %>
+<% for (const inst of vitejsInstances) { %>
   <%= inst.path %>:
     build:
       context: ./<%= inst.path %>
@@ -157,6 +157,37 @@ services:
     networks:
       - app-network
 <% } %>
+<% for (const inst of nextjsInstances) { %>
+  <%= inst.path %>:
+    build:
+      context: ./<%= inst.path %>
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+<% if (fastifyInstances.length > 0) { %>
+    depends_on:
+      <%= fastifyInstances[0].path %>:
+        condition: service_healthy
+<% } else if (expressInstances.length > 0) { %>
+    depends_on:
+      <%= expressInstances[0].path %>:
+        condition: service_healthy
+<% } else if (fastapiInstances.length > 0) { %>
+    depends_on:
+      <%= fastapiInstances[0].path %>:
+        condition: service_healthy
+<% } %>
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - app-network
+<% } %>
 <% for (const inst of adminPanelInstances) { %>
   <%= inst.path %>:
     build: ./<%= inst.path %>
@@ -174,7 +205,7 @@ services:
     networks:
       - app-network
 <% } %>
-<% if (frontendInstances.length > 0) { %>
+<% if (vitejsInstances.length > 0) { %>
   certbot:
     image: certbot/certbot:latest
     volumes:
@@ -183,14 +214,14 @@ services:
     entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"
     restart: unless-stopped
     depends_on:
-      <%= frontendInstances[0].path %>:
+      <%= vitejsInstances[0].path %>:
         condition: service_healthy
     profiles:
       - ssl
     networks:
       - app-network
 <% } %>
-<% if (frontendInstances.length > 0) { %>
+<% if (vitejsInstances.length > 0) { %>
 volumes:
   letsencrypt:
   certbot-www:

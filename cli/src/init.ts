@@ -77,7 +77,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   ) as ComponentPaths;
 
   const hasJs = components.some((c) =>
-    ['fastify', 'express', 'frontend', 'e2e'].includes(c),
+    ['fastify', 'express', 'vitejs', 'nextjs', 'e2e'].includes(c),
   );
   let pm: PackageManager = 'npm';
 

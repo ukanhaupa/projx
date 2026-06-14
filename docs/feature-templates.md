@@ -21,15 +21,15 @@ Optional, opt-in modules that overlay onto an existing component (e.g. `fastify`
 
 ```
 projx create my-app \
-  --components fastify,frontend,mobile \
-  --auth fastify:api,frontend,mobile
+  --components fastify,vitejs,mobile \
+  --auth fastify:api,vitejs,mobile
 
 projx add ./my-app fastify --auth fastify:api
 ```
 
 Flag form: `--<feature>=<target>[:<instance>][,<target>[:<instance>]]...`
 
-- `<target>` is a component (`fastify`, `fastapi`, `frontend`, `mobile`).
+- `<target>` is a component (`fastify`, `fastapi`, `vitejs`, `mobile`). The legacy `frontend` alias resolves to `vitejs`.
 - `<instance>` is the path of a specific instance. Optional; defaults to first instance of that component.
 - Comma-separated targets within one `--<feature>` flag.
 - Validation: each `<target>` must be in `--components`. Each `<instance>` must resolve. Failure exits with `2` and a clear hint.
@@ -49,7 +49,7 @@ features/<feature>/
     files/
     patches/
     alembic/                # alembic revision scripts
-  frontend/
+  vitejs/
     files/
     patches/
   mobile/
@@ -253,7 +253,7 @@ All tests count toward the existing 80% coverage thresholds.
 2. ✓ Wire `parseArgs` for `--auth=` form.
 3. Build `features/auth/fastify` — lift docusift verbatim, adapt to projx conventions.
 4. Build `features/auth/fastapi` — mirror the docusift route contract.
-5. Build `features/auth/frontend`.
+5. Build `features/auth/vitejs`.
 6. Build `features/auth/mobile`.
 7. Update README + `--help` + `cli/src/templates/README.md.ejs`.
 8. CHANGELOG entry, version bump (minor — additive).

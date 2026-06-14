@@ -15,6 +15,8 @@ import {
   detectPackageManager,
   pmCommands,
   suggestComponent,
+  normalizeComponent,
+  readComponentMarker,
   COMPONENT_MARKER,
   type Component,
 } from '../src/utils.js';
@@ -22,7 +24,7 @@ import {
 describe('suggestComponent', () => {
   it('suggests the closest component for a near-miss typo', () => {
     expect(suggestComponent('admiin-panel')).toBe('admin-panel');
-    expect(suggestComponent('frontnd')).toBe('frontend');
+    expect(suggestComponent('vitejs')).toBe('vitejs');
     expect(suggestComponent('fastapy')).toBe('fastapi');
     expect(suggestComponent('FASTIFY')).toBe('fastify');
   });
@@ -30,6 +32,43 @@ describe('suggestComponent', () => {
   it('returns null when nothing is close enough', () => {
     expect(suggestComponent('kubernetes')).toBeNull();
     expect(suggestComponent('xyz')).toBeNull();
+  });
+});
+
+describe('normalizeComponent', () => {
+  it('returns canonical ids unchanged', () => {
+    expect(normalizeComponent('vitejs')).toBe('vitejs');
+    expect(normalizeComponent('nextjs')).toBe('nextjs');
+    expect(normalizeComponent('fastify')).toBe('fastify');
+  });
+
+  it('resolves the legacy frontend alias to vitejs', () => {
+    expect(normalizeComponent('frontend')).toBe('vitejs');
+  });
+
+  it('returns null for unknown ids', () => {
+    expect(normalizeComponent('webpack')).toBeNull();
+    expect(normalizeComponent('')).toBeNull();
+  });
+});
+
+describe('readComponentMarker backward compatibility', () => {
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = join(tmpdir(), `projx-marker-alias-${Date.now()}`);
+    await mkdir(tmp, { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it('recognizes a legacy type: frontend marker as the vitejs component', async () => {
+    await writeFile(
+      join(tmp, COMPONENT_MARKER),
+      JSON.stringify({ component: 'frontend', skip: [] }),
+    );
+    const marker = await readComponentMarker(tmp);
+    expect(marker?.component).toBe('vitejs');
   });
 });
 
@@ -196,7 +235,7 @@ describe('render', () => {
       components: [],
       instances: [
         { type: 'fastify', path: 'backend' },
-        { type: 'frontend', path: 'web' },
+        { type: 'vitejs', path: 'web' },
         { type: 'fastify', path: 'email-ingestor' },
       ],
     });
@@ -279,7 +318,7 @@ describe('upsertComponentMarker', () => {
   });
 
   it('overwrites with new component when called with different name', async () => {
-    await upsertComponentMarker(tmp, 'frontend');
+    await upsertComponentMarker(tmp, 'vitejs');
     await upsertComponentMarker(tmp, 'e2e');
     const content = JSON.parse(
       await readFile(join(tmp, COMPONENT_MARKER), 'utf-8'),
@@ -339,16 +378,16 @@ describe('readComponentMarker — schema migration', () => {
     await writeFile(
       join(tmp, '.projx-component'),
       JSON.stringify({
-        components: ['frontend'],
+        components: ['vitejs'],
         origin: 'scaffold',
         skip: ['dist/**'],
       }),
     );
-    await upsertComponentMarker(tmp, 'frontend');
+    await upsertComponentMarker(tmp, 'vitejs');
     const content = JSON.parse(
       await readFile(join(tmp, COMPONENT_MARKER), 'utf-8'),
     );
-    expect(content.component).toBe('frontend');
+    expect(content.component).toBe('vitejs');
     expect(content.skip).toEqual(['dist/**']);
     expect(content.components).toBeUndefined();
     expect(content.origin).toBeUndefined();
@@ -467,7 +506,7 @@ describe('detectPackageManagerFromComponents', () => {
       await import('../src/utils.js');
     await mkdir(join(tmp, 'web'));
     await writeFile(join(tmp, 'web/package-lock.json'), '{}');
-    const pm = detectPackageManagerFromComponents(tmp, { frontend: 'web' });
+    const pm = detectPackageManagerFromComponents(tmp, { vitejs: 'web' });
     expect(pm).toBe('npm');
   });
 
@@ -495,7 +534,7 @@ describe('detectPackageManagerFromComponents', () => {
     await writeFile(join(tmp, 'web/package-lock.json'), '{}');
     const pm = detectPackageManagerFromComponents(tmp, {
       fastify: 'backend',
-      frontend: 'web',
+      vitejs: 'web',
     });
     expect(pm).toBe('pnpm');
   });
@@ -525,7 +564,7 @@ describe('discoverComponentsFromMarkers — multi-instance', () => {
     await mkdir(join(tmp, 'email-ingestor'));
     await upsertComponentMarker(join(tmp, 'email-ingestor'), 'fastify');
     await mkdir(join(tmp, 'web'));
-    await upsertComponentMarker(join(tmp, 'web'), 'frontend');
+    await upsertComponentMarker(join(tmp, 'web'), 'vitejs');
 
     const result = await discoverComponentsFromMarkers(tmp);
     expect(result.instances).toHaveLength(3);
@@ -535,7 +574,7 @@ describe('discoverComponentsFromMarkers — multi-instance', () => {
       .sort();
     expect(fastifyPaths).toEqual(['backend', 'email-ingestor']);
     const frontendPaths = result.instances
-      .filter((i) => i.type === 'frontend')
+      .filter((i) => i.type === 'vitejs')
       .map((i) => i.path);
     expect(frontendPaths).toEqual(['web']);
   });
@@ -574,14 +613,14 @@ describe('discoverComponentPaths', () => {
     await mkdir(join(tmp, 'backend'));
     await upsertComponentMarker(join(tmp, 'backend'), 'fastapi');
     await mkdir(join(tmp, 'web'));
-    await upsertComponentMarker(join(tmp, 'web'), 'frontend');
+    await upsertComponentMarker(join(tmp, 'web'), 'vitejs');
 
     const paths = await discoverComponentPaths(tmp, [
       'fastapi',
-      'frontend',
+      'vitejs',
     ] as Component[]);
     expect(paths.fastapi).toBe('backend');
-    expect(paths.frontend).toBe('web');
+    expect(paths.vitejs).toBe('web');
   });
 
   it('falls back to component name when no marker found', async () => {

@@ -162,14 +162,27 @@ async function installDeps(
             );
           }
           break;
-        case 'frontend':
+        case 'vitejs':
           if (hasCommand(pmBin)) {
-            spinner.start(`Installing Frontend dependencies (${cmds.install})`);
-            exec(cmds.install, join(dest, 'frontend'));
-            spinner.stop('Frontend dependencies installed.');
+            spinner.start(
+              `Installing React + Vite dependencies (${cmds.install})`,
+            );
+            exec(cmds.install, join(dest, 'vitejs'));
+            spinner.stop('React + Vite dependencies installed.');
           } else {
             p.log.warn(
-              `${pm} not found — run 'cd frontend && ${cmds.install}' manually.`,
+              `${pm} not found — run 'cd vitejs && ${cmds.install}' manually.`,
+            );
+          }
+          break;
+        case 'nextjs':
+          if (hasCommand(pmBin)) {
+            spinner.start(`Installing Next.js dependencies (${cmds.install})`);
+            exec(cmds.install, join(dest, 'nextjs'));
+            spinner.stop('Next.js dependencies installed.');
+          } else {
+            p.log.warn(
+              `${pm} not found — run 'cd nextjs && ${cmds.install}' manually.`,
             );
           }
           break;

@@ -32,9 +32,14 @@ def check_file(path: Path) -> list[str]:
         selector = match.group(1).strip()
         block = match.group(2)
         prefix = content[max(0, match.start() - 120) : match.start()]
-        if "style-check: allow-variant-bypass" in prefix or "style-check: allow-variant-bypass" in block:
+        if (
+            "style-check: allow-variant-bypass" in prefix
+            or "style-check: allow-variant-bypass" in block
+        ):
             continue
-        if not any(RAW_ELEMENT_SELECTOR.search(part.strip()) for part in selector.split(",")):
+        if not any(
+            RAW_ELEMENT_SELECTOR.search(part.strip()) for part in selector.split(",")
+        ):
             continue
         if TARGET_PROPS.isdisjoint(declarations(block)):
             continue
@@ -46,7 +51,7 @@ def check_file(path: Path) -> list[str]:
 
 
 def main() -> int:
-    paths = sys.argv[1:] or ["frontend/src"]
+    paths = sys.argv[1:] or ["vitejs/src"]
     violations: list[str] = []
     for path in iter_css_files(paths):
         violations.extend(check_file(path))

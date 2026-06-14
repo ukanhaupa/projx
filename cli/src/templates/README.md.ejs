@@ -15,8 +15,11 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 <% if (components.includes('express')) { %>
 | **<%= paths.express %>/** | Express 5, TypeScript, <%= orm === 'drizzle' ? 'Drizzle' : 'Prisma' %> |
 <% } %>
-<% if (components.includes('frontend')) { %>
-| **<%= paths.frontend %>/** | React 19, TypeScript, Vite, React Router |
+<% if (components.includes('vitejs')) { %>
+| **<%= paths.vitejs %>/** | React 19, TypeScript, Vite, React Router |
+<% } %>
+<% if (components.includes('nextjs')) { %>
+| **<%= paths.nextjs %>/** | React 19, TypeScript, Next.js App Router |
 <% } %>
 <% if (components.includes('mobile')) { %>
 | **<%= paths.mobile %>/** | Flutter, Dart, Riverpod, GoRouter, Isar |
@@ -70,12 +73,20 @@ cd <%= paths.express %> && cp .env.example .env && <%= pm.install %><%= orm === 
 
 Health check at `http://localhost:3000/api/health`.
 <% } %>
-<% if (components.includes('frontend')) { %>
+<% if (components.includes('vitejs')) { %>
 
-### <%= paths.frontend %>/
+### <%= paths.vitejs %>/
 
 ```bash
-cd <%= paths.frontend %> && cp .env.example .env && <%= pm.install %> && <%= pm.run %> dev
+cd <%= paths.vitejs %> && cp .env.example .env && <%= pm.install %> && <%= pm.run %> dev
+```
+<% } %>
+<% if (components.includes('nextjs')) { %>
+
+### <%= paths.nextjs %>/
+
+```bash
+cd <%= paths.nextjs %> && cp .env.example .env && <%= pm.install %> && <%= pm.run %> dev
 ```
 <% } %>
 <% if (components.includes('mobile')) { %>
@@ -94,7 +105,7 @@ cd <%= paths.mobile %> && cp .env.example .env && flutter pub get && flutter run
 cd <%= paths['admin-panel'] %> && cp .env.example .env   # set DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose up --build <%= paths['admin-panel'] %>
 ```
-<% if (components.includes('frontend')) { %>
+<% if (components.includes('vitejs')) { %>
 Internal-only — reach the admin UI at `https://localhost/admin/` through the frontend proxy.
 <% } else { %>
 Internal-only — publish the port for local admin work: `docker compose run --service-ports --rm <%= paths['admin-panel'] %>`.
@@ -113,8 +124,11 @@ cd <%= paths.fastify %> && <%= pm.run %> test
 <% if (components.includes('express')) { %>
 cd <%= paths.express %> && <%= pm.run %> test
 <% } %>
-<% if (components.includes('frontend')) { %>
-cd <%= paths.frontend %> && <%= pm.exec %> vitest run
+<% if (components.includes('vitejs')) { %>
+cd <%= paths.vitejs %> && <%= pm.exec %> vitest run
+<% } %>
+<% if (components.includes('nextjs')) { %>
+cd <%= paths.nextjs %> && <%= pm.exec %> vitest run
 <% } %>
 <% if (components.includes('mobile')) { %>
 cd <%= paths.mobile %> && flutter test

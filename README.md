@@ -50,19 +50,19 @@ Pick any combination of components — they're all optional:
 npx create-projx vision-api --components fastapi -y
 
 # Node API + React frontend
-npx create-projx saas --components fastify,frontend -y
+npx create-projx saas --components fastify,vitejs -y
 
 # Minimal Express API + React frontend
-npx create-projx api-app --components express,frontend -y
+npx create-projx api-app --components express,vitejs -y
 
 # Drizzle-backed Node API + React frontend
-npx create-projx ledger --components express,frontend --orm drizzle -y
+npx create-projx ledger --components express,vitejs --orm drizzle -y
 
 # Mobile app with backend
 npx create-projx field-app --components fastapi,mobile -y
 
 # Full-stack with infra and E2E
-npx create-projx prod-app --components fastify,frontend,e2e,infra -y
+npx create-projx prod-app --components fastify,vitejs,e2e,infra -y
 
 # Just the infra
 npx create-projx platform --components infra -y
@@ -91,7 +91,8 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 | `fastapi`     | Python, SQLAlchemy, Alembic                                   | Auto-entity CRUD, JWT auth, migrations, OpenAPI docs                                         |
 | `fastify`     | Node.js, Prisma / Drizzle / Sequelize / TypeORM, TypeBox      | Auto-entity CRUD, JWT auth, typed schemas, OpenAPI docs                                      |
 | `express`     | Express 5, TypeScript, Prisma / Drizzle / Sequelize / TypeORM | Auto-entity CRUD, JWT auth, validation, security middleware, health checks                   |
-| `frontend`    | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                |
+| `vitejs`      | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                |
+| `nextjs`      | React 19, TypeScript, Next.js App Router                      | Auth, theming, design tokens, light/dark mode, `output: 'standalone'` node server            |
 | `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                                     |
 | `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                                        |
 | `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                          |
@@ -99,7 +100,7 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 
 Plus, in every project: Docker Compose for dev + prod, GitHub Actions CI per component (path-filtered), pre-commit hooks, secret detection, VS Code settings, and 80% test coverage enforced.
 
-All optional. Pick any combination.
+All optional. Pick any combination. `frontend` is accepted as a deprecated alias for `vitejs`.
 
 ## Optional features
 
@@ -119,7 +120,7 @@ npx create-projx my-app --components fastapi --auth fastapi
 npx create-projx my-app --components fastify,express --auth fastify,express
 
 # Add auth to an existing project
-npx create-projx add frontend --auth fastify
+npx create-projx add vitejs --auth fastify
 ```
 
 `update` re-applies any feature recorded on a component, so template upgrades never strip your auth wiring.
@@ -173,10 +174,10 @@ If you're an AI agent reading this, see [SKILL.md](SKILL.md) for trigger conditi
 npx create-projx my-app
 
 # Non-interactive — specify components
-npx create-projx my-app --components fastify,frontend,e2e
+npx create-projx my-app --components fastify,vitejs,e2e
 
 # Use Drizzle for Node backends instead of Prisma
-npx create-projx my-app --components express,frontend --orm drizzle
+npx create-projx my-app --components express,vitejs --orm drizzle
 
 # Accept defaults (Fastify + Frontend + E2E)
 npx create-projx my-app -y
@@ -203,7 +204,7 @@ npx create-projx my-app
 Interactive prompt lets you pick components. Or specify them directly:
 
 ```bash
-npx create-projx my-app --components fastapi,fastify,frontend,mobile,e2e,infra
+npx create-projx my-app --components fastapi,fastify,vitejs,mobile,e2e,infra
 ```
 
 ### Adopt an Existing Project
@@ -221,7 +222,7 @@ Auto-detects components by scanning for `fastapi` in pyproject.toml, `react`/`fa
 
 ```bash
 cd my-app
-npx create-projx add frontend mobile
+npx create-projx add vitejs mobile
 ```
 
 Copies the new component directories, regenerates shared files (docker-compose, CI, pre-commit hooks) to include them, and installs dependencies.
@@ -257,12 +258,12 @@ Your custom files (controllers, pages, middleware) are never deleted. Files you 
 
 Common user-owned files are **default-skipped** automatically — template updates won't touch them:
 
-| Scope                    | Default skips                                                                                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Root (`.projx`)          | `docker-compose.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `scripts/setup.sh`, `scripts/setup-docker.sh`, `scripts/setup-ssl.sh` |
-| fastapi                  | `pyproject.toml`                                                                                                                                             |
-| fastify / frontend / e2e | `package.json`                                                                                                                                               |
-| mobile                   | `pubspec.yaml`                                                                                                                                               |
+| Scope                           | Default skips                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Root (`.projx`)                 | `docker-compose.yml`, `README.md`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `scripts/setup.sh`, `scripts/setup-docker.sh`, `scripts/setup-ssl.sh` |
+| fastapi                         | `pyproject.toml`                                                                                                                                             |
+| fastify / vitejs / nextjs / e2e | `package.json`                                                                                                                                               |
+| mobile                          | `pubspec.yaml`                                                                                                                                               |
 
 Defaults are applied once on first `update` and saved to the `skip` array. To skip additional files, add them to `skip` in `.projx` (root-level) or `.projx-component` (per-component):
 
@@ -300,13 +301,13 @@ npx create-projx pin --list
 npx create-projx doctor [--fix]
 npx create-projx gen entity <name> [--ai | --backend]
 
---components <list>    Comma-separated: fastapi,fastify,express,frontend,mobile,e2e,infra
+--components <list>    Comma-separated: fastapi,fastify,express,vitejs,nextjs,mobile,e2e,infra
 --name <dir>           Custom directory for `add <type>` (multi-instance)
 --ai                   Target fastapi (AI/ML) for gen entity
 --backend              Target fastify (API backend) for gen entity
 --no-git               Skip git init
 --no-install           Skip dependency installation
--y, --yes              Accept defaults (fastify + frontend + e2e)
+-y, --yes              Accept defaults (fastify + vitejs + e2e)
 -h, --help             Show help
 ```
 
@@ -370,7 +371,8 @@ Override with `--ai` (fastapi) or `--backend` (fastify).
 | ------------------------- | -------------------------------------------------------------------------------------------- |
 | Primary backend (fastapi) | `src/entities/<name>/_model.py` + `tests/test_<name>_entity.py` — model + 11 CRUD/auth tests |
 | Primary backend (fastify) | `src/modules/<name>/schemas.ts` + `index.ts` + Prisma model + `tests/modules/<name>.test.ts` |
-| `frontend`                | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
+| `vitejs`                  | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
+| `nextjs`                  | `src/types/<name>.ts` — TypeScript interface + Create/Update variants                        |
 
 **Tests included**: every `gen entity` writes a working integration test file alongside the model — 11 tests for FastAPI (extending `BaseEntityApiTest`), 11 tests for Fastify (via `describeCrudEntity`). Both run against a real database (Postgres). New entities ship green from day one — no scrambling to bolt on tests at go-live.
 
@@ -397,7 +399,7 @@ Rename `fastapi/` to `backend/`? Just rename the folder — the `.projx-componen
 
 ```
 backend/.projx-component  →  { "components": ["fastapi"] }
-web/.projx-component      →  { "components": ["frontend"] }
+web/.projx-component      →  { "components": ["vitejs"] }
 ```
 
 CI, `scripts/setup.sh`, pre-commit hooks, and docker-compose are all regenerated with your custom directory names.
@@ -408,7 +410,7 @@ CI, `scripts/setup.sh`, pre-commit hooks, and docker-compose are all regenerated
 my-app/
 ├── fastapi/                # Auto-entity CRUD backend
 │   └── .projx-component    # Identifies this as the fastapi component
-├── frontend/               # React + Vite shell
+├── vitejs/                 # React + Vite shell
 │   └── .projx-component
 ├── e2e/                    # Playwright E2E tests
 │   └── .projx-component
@@ -477,7 +479,7 @@ fastify.post(
 );
 ```
 
-For the FastAPI service, edge rate limits are enforced by the frontend nginx (`auth_limit` and `api_limit` zones in [frontend/nginx.conf](frontend/nginx.conf)) — no application-level limiter is wired by default since the service is internal.
+For the FastAPI service, edge rate limits are enforced by the frontend nginx (`auth_limit` and `api_limit` zones in [vitejs/nginx.conf](vitejs/nginx.conf)) — no application-level limiter is wired by default since the service is internal.
 
 ## Development
 
@@ -489,7 +491,7 @@ cd projx
 ./scripts/setup.sh
 ```
 
-The CLI lives in `cli/`. Templates are the root-level component directories (`fastapi/`, `frontend/`, etc.).
+The CLI lives in `cli/`. Templates are the root-level component directories (`fastapi/`, `vitejs/`, etc.).
 
 ```bash
 cd cli

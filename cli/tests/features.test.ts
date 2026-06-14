@@ -30,7 +30,7 @@ describe('parseFeatureFlag', () => {
   it('parses comma-separated targets', () => {
     expect(parseFeatureFlag('fastify:api,frontend,mobile:app')).toEqual([
       { component: 'fastify', instance: 'api' },
-      { component: 'frontend' },
+      { component: 'vitejs' },
       { component: 'mobile', instance: 'app' },
     ]);
   });
@@ -38,7 +38,7 @@ describe('parseFeatureFlag', () => {
   it('trims whitespace around tokens', () => {
     expect(parseFeatureFlag(' fastify : api ,  frontend ')).toEqual([
       { component: 'fastify', instance: 'api' },
-      { component: 'frontend' },
+      { component: 'vitejs' },
     ]);
   });
 
@@ -61,17 +61,17 @@ describe('validateFeatureTargets', () => {
   const instances: ComponentInstance[] = [
     { type: 'fastify', path: 'api' },
     { type: 'fastify', path: 'admin-api' },
-    { type: 'frontend', path: 'frontend' },
+    { type: 'vitejs', path: 'vitejs' },
   ];
 
   it('accepts targets that resolve cleanly', () => {
     const targets: FeatureTarget[] = [
       { component: 'fastify', instance: 'api' },
-      { component: 'frontend' },
+      { component: 'vitejs' },
     ];
     expect(validateFeatureTargets(targets, instances, ['fastify'])).toEqual([
       { component: 'fastify', instance: 'api', path: 'api' },
-      { component: 'frontend', instance: 'frontend', path: 'frontend' },
+      { component: 'vitejs', instance: 'vitejs', path: 'vitejs' },
     ]);
   });
 
@@ -99,7 +99,7 @@ describe('validateFeatureTargets', () => {
 
   it('rejects targets unsupported by feature', () => {
     const targets: FeatureTarget[] = [{ component: 'infra' }];
-    const supports = ['fastify', 'fastapi', 'frontend', 'mobile'];
+    const supports = ['fastify', 'fastapi', 'vitejs', 'mobile'];
     expect(() =>
       validateFeatureTargets(targets, instances, [], supports),
     ).toThrow(/does not support infra/i);
@@ -323,19 +323,17 @@ describe('applyFeature', () => {
 
   it('throws if feature does not support a requested component', async () => {
     await setupFeature();
-    await mkdir(join(dest, 'frontend'), { recursive: true });
+    await mkdir(join(dest, 'vitejs'), { recursive: true });
 
     await expect(
       applyFeature({
         feature: 'sample',
         featureRoot,
-        targets: [
-          { component: 'frontend', instance: 'frontend', path: 'frontend' },
-        ],
+        targets: [{ component: 'vitejs', instance: 'vitejs', path: 'vitejs' }],
         dest,
         vars: {},
       }),
-    ).rejects.toThrow(/does not support frontend/i);
+    ).rejects.toThrow(/does not support vitejs/i);
   });
 
   it('applyFeatures orchestrator parses raw flag, validates, and applies', async () => {

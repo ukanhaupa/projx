@@ -24,7 +24,8 @@ jobs:
       fastapi: ${{ steps.filter.outputs.fastapi }}
       fastify: ${{ steps.filter.outputs.fastify }}
       express: ${{ steps.filter.outputs.express }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      vitejs: ${{ steps.filter.outputs.vitejs }}
+      nextjs: ${{ steps.filter.outputs.nextjs }}
       mobile: ${{ steps.filter.outputs.mobile }}
       e2e: ${{ steps.filter.outputs.e2e }}
       infra: ${{ steps.filter.outputs.infra }}
@@ -45,8 +46,10 @@ jobs:
               - 'fastify/**'
             express:
               - 'express/**'
-            frontend:
-              - 'frontend/**'
+            vitejs:
+              - 'vitejs/**'
+            nextjs:
+              - 'nextjs/**'
             mobile:
               - 'mobile/**'
             e2e:
@@ -70,7 +73,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python3 scripts/style-check.py frontend/src
+      - run: python3 scripts/style-check.py vitejs/src
 
   cli:
     name: CLI (lint + typecheck + build + test + audit)
@@ -199,10 +202,10 @@ jobs:
       - run: pnpm exec vitest run --coverage
       - run: pnpm audit --prod
 
-  frontend:
-    name: Frontend (format + lint + typecheck + test + audit)
+  vitejs:
+    name: React + Vite (format + lint + typecheck + test + audit)
     needs: changes
-    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.vitejs == 'true'
     runs-on: ubuntu-latest
     env:
       VITE_OIDC_URL: http://localhost:8080
@@ -210,7 +213,7 @@ jobs:
       VITE_OIDC_CLIENT_ID: frontend
     defaults:
       run:
-        working-directory: frontend
+        working-directory: vitejs
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -220,10 +223,40 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: vitejs/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prettier --check .
       - run: pnpm exec eslint 'src/**/*.{ts,tsx}'
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build
+      - run: pnpm exec vitest run --coverage
+      - run: pnpm audit --prod
+
+  nextjs:
+    name: Next.js (format + lint + typecheck + build + test + audit)
+    needs: changes
+    if: inputs.run_all || github.event_name == 'workflow_dispatch' || needs.changes.outputs.nextjs == 'true'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_OIDC_URL: http://localhost:8080
+      NEXT_PUBLIC_OIDC_REALM: master
+      NEXT_PUBLIC_OIDC_CLIENT_ID: frontend
+    defaults:
+      run:
+        working-directory: nextjs
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: nextjs/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --check .
+      - run: pnpm exec eslint .
       - run: pnpm exec tsc --noEmit
       - run: pnpm build
       - run: pnpm exec vitest run --coverage
@@ -354,8 +387,8 @@ jobs:
       - name: Create database schema
         working-directory: fastapi
         run: uv run python migrate.py
-      - name: Install frontend dependencies
-        working-directory: frontend
+      - name: Install React + Vite dependencies
+        working-directory: vitejs
         run: pnpm install --frozen-lockfile
       - name: Install Playwright browser
         working-directory: e2e
@@ -364,7 +397,7 @@ jobs:
         run: |
           set -euo pipefail
           (cd fastapi && uv run main.py > /tmp/backend.log 2>&1 &)
-          (cd frontend && pnpm run dev > /tmp/frontend.log 2>&1 &)
+          (cd vitejs && pnpm run dev > /tmp/frontend.log 2>&1 &)
 
           wait_for() {
             local url="$1" name="$2"

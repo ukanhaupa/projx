@@ -41,14 +41,17 @@ type Session struct {
 	User         *AdminUser
 	InWriteMode  bool
 	WriteExpires time.Time
+	MFAEnrolled  bool
+	MFAPassed    bool
 }
 
 type Store struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	sessionSecret string
 }
 
-func NewStore(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool}
+func NewStore(pool *pgxpool.Pool, sessionSecret string) *Store {
+	return &Store{pool: pool, sessionSecret: sessionSecret}
 }
 
 func (s *Store) EnsureBootstrap(ctx context.Context, email, password string) error {
@@ -125,20 +128,22 @@ func (s *Store) LoadSession(ctx context.Context, token string) (*Session, error)
 	}
 	var u AdminUser
 	var writeUntil *time.Time
+	var enrolledAt *time.Time
+	var mfaPassed bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT u.id, u.email, u.role, s.write_mode_until
+		`SELECT u.id, u.email, u.role, s.write_mode_until, u.totp_enrolled_at, s.mfa_passed
 		   FROM admin_panel.admin_sessions s
 		   JOIN admin_panel.admin_users u ON u.id = s.admin_id
 		  WHERE s.token = $1 AND s.expires_at > NOW()`,
 		token,
-	).Scan(&u.ID, &u.Email, &u.Role, &writeUntil)
+	).Scan(&u.ID, &u.Email, &u.Role, &writeUntil, &enrolledAt, &mfaPassed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
 		return nil, err
 	}
-	sess := &Session{User: &u}
+	sess := &Session{User: &u, MFAEnrolled: enrolledAt != nil, MFAPassed: mfaPassed}
 	if u.CanWrite() && writeUntil != nil && writeUntil.After(time.Now()) {
 		sess.InWriteMode = true
 		sess.WriteExpires = *writeUntil
