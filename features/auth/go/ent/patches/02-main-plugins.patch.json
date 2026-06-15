@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "main.go",
+  "anchor": "// projx-anchor: plugins",
+  "insert": "\tauthSigner := authservice.NewSigner(configSvc)\n\tauthCipher := authservice.NewCipher(configSvc)\n\tauthSvc := authservice.NewService(handles.Client, authSigner, authCipher)\n\tauthMailer := mailer.New(logger)\n\tauthMailer.Init(ctx, configSvc)\n\tauthDeps := &handlers.Deps{Service: authSvc, Mailer: authMailer, Verifier: jwtVerifier, Logger: logger}\n\tr.Mount(\"/api/v1/auth\", authDeps.Routes())\n\tcron.Start(ctx, handles.Client, logger)\n"
+}

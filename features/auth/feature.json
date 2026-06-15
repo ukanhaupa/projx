@@ -1,15 +1,28 @@
 {
   "name": "auth",
   "summary": "Password + JWT auth with email verification, MFA, password reset, sessions",
-  "supports": ["fastify", "fastapi", "express"],
-  "requires": { "fastify": [], "fastapi": [], "express": [] },
-  "requiresOrm": ["prisma", "drizzle", "sequelize", "typeorm"],
+  "supports": ["fastify", "fastapi", "express", "go", "rust", "laravel"],
+  "requires": {
+    "fastify": [],
+    "fastapi": [],
+    "express": [],
+    "go": [],
+    "rust": [],
+    "laravel": []
+  },
+  "requiresOrm": [
+    "prisma",
+    "drizzle",
+    "sequelize",
+    "typeorm",
+    "gorm",
+    "sqlc",
+    "ent",
+    "seaorm",
+    "eloquent"
+  ],
   "env": {
-    "fastify": [
-      "JWT_SECRET",
-      "FRONTEND_URL",
-      "AUTH_BACKGROUND_JOBS"
-    ],
+    "fastify": ["JWT_SECRET", "FRONTEND_URL", "AUTH_BACKGROUND_JOBS"],
     "fastapi": [
       "JWT_SECRET",
       "JWT_ALGORITHMS",
@@ -18,9 +31,28 @@
       "AUTH_BACKGROUND_JOBS",
       "AUTH_CLEANUP_INTERVAL_SECONDS"
     ],
-    "express": [
+    "express": ["JWT_SECRET", "FRONTEND_URL", "AUTH_BACKGROUND_JOBS"],
+    "go": [
       "JWT_SECRET",
+      "JWT_PROVIDER",
       "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS",
+      "AUTH_CLEANUP_INTERVAL_SECONDS"
+    ],
+    "rust": [
+      "JWT_SECRET",
+      "JWT_PROVIDER",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
+      "AUTH_BACKGROUND_JOBS",
+      "AUTH_CLEANUP_INTERVAL_SECONDS"
+    ],
+    "laravel": [
+      "JWT_SECRET",
+      "JWT_ALGORITHMS",
+      "FRONTEND_URL",
+      "MFA_ISSUER",
       "AUTH_BACKGROUND_JOBS"
     ]
   }

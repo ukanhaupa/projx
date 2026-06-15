@@ -15,6 +15,15 @@ Scaffolded with [Projx](https://github.com/ukanhaupa/projx).
 <% if (components.includes('express')) { %>
 | **<%= paths.express %>/** | Express 5, TypeScript, <%= orm === 'drizzle' ? 'Drizzle' : 'Prisma' %> |
 <% } %>
+<% if (components.includes('go')) { %>
+| **<%= paths.go %>/** | Go, Chi, GORM, PostgreSQL |
+<% } %>
+<% if (components.includes('rust')) { %>
+| **<%= paths.rust %>/** | Rust, Axum, SeaORM, PostgreSQL |
+<% } %>
+<% if (components.includes('laravel')) { %>
+| **<%= paths.laravel %>/** | Laravel 11, PHP 8.3, Eloquent, PostgreSQL |
+<% } %>
 <% if (components.includes('vitejs')) { %>
 | **<%= paths.vitejs %>/** | React 19, TypeScript, Vite, React Router |
 <% } %>
@@ -73,6 +82,36 @@ cd <%= paths.express %> && cp .env.example .env && <%= pm.install %><%= orm === 
 
 Health check at `http://localhost:3000/api/health`.
 <% } %>
+<% if (components.includes('go')) { %>
+
+### <%= paths.go %>/
+
+```bash
+cd <%= paths.go %> && cp .env.example .env && go mod download && go run .
+```
+
+Health check at `http://localhost:8080/api/health`.
+<% } %>
+<% if (components.includes('rust')) { %>
+
+### <%= paths.rust %>/
+
+```bash
+cd <%= paths.rust %> && cp .env.example .env && cargo run
+```
+
+Health check at `http://localhost:8080/api/health`.
+<% } %>
+<% if (components.includes('laravel')) { %>
+
+### <%= paths.laravel %>/
+
+```bash
+cd <%= paths.laravel %> && cp .env.example .env && composer install && php artisan key:generate && php artisan migrate && php artisan serve
+```
+
+Health check at `http://localhost:8000/api/health`.
+<% } %>
 <% if (components.includes('vitejs')) { %>
 
 ### <%= paths.vitejs %>/
@@ -123,6 +162,15 @@ cd <%= paths.fastify %> && <%= pm.run %> test
 <% } %>
 <% if (components.includes('express')) { %>
 cd <%= paths.express %> && <%= pm.run %> test
+<% } %>
+<% if (components.includes('go')) { %>
+cd <%= paths.go %> && go test ./...
+<% } %>
+<% if (components.includes('rust')) { %>
+cd <%= paths.rust %> && cargo test --all-features
+<% } %>
+<% if (components.includes('laravel')) { %>
+cd <%= paths.laravel %> && ./vendor/bin/pest
 <% } %>
 <% if (components.includes('vitejs')) { %>
 cd <%= paths.vitejs %> && <%= pm.exec %> vitest run

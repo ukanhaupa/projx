@@ -1,0 +1,7 @@
+{
+  "type": "text",
+  "file": "main.go",
+  "anchor": "// projx-anchor: plugins",
+  "position": "after",
+  "insert": "\tauthQuerier := authservice.NewSQLQuerier(pool)\n\tauthSecrets := authservice.NewSecrets(configSvc)\n\tauthSvc := authservice.New(authQuerier, authSecrets)\n\tauthMailer := authmailer.New(authSecrets)\n\tauthHandler := authhandlers.New(authSvc, authMailer)\n\tif jwtVerifier != nil {\n\t\tr.Use(auth.Authenticate(jwtVerifier))\n\t}\n\tr.Mount(\"/api/v1/auth\", authHandler.Routes())\n\tauthcron.Start(ctx, authQuerier)\n"
+}

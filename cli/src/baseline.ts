@@ -16,7 +16,10 @@ import {
   type Component,
   type ComponentInstance,
   type ComponentPaths,
+  BACKEND_COMPONENTS,
   DEFAULT_COMPONENT_SKIP_PATTERNS,
+  GO_ORM_PROVIDERS,
+  NODE_ORM_PROVIDERS,
   copyComponent,
   copyStaticFiles,
   readComponentMarker,
@@ -474,10 +477,7 @@ export async function writeTemplateToDir(
     });
   }
 
-  const hasBackend =
-    components.includes('fastapi') ||
-    components.includes('fastify') ||
-    components.includes('express');
+  const hasBackend = BACKEND_COMPONENTS.some((c) => components.includes(c));
 
   const userSkip = rootSkip ?? [];
   const shouldWrite = (file: string) => {
@@ -646,17 +646,32 @@ async function applyOrmProviderToInstance(
   vars: GeneratorVars,
 ): Promise<void> {
   const orm = typeof vars.orm === 'string' ? vars.orm : undefined;
-  if (!orm || orm === 'prisma') return;
-  if (component !== 'fastify' && component !== 'express') return;
-  await applyOrmAddon(repoDir, orm, component, dir, vars);
+  if (!orm) return;
+  if (component === 'fastify' || component === 'express') {
+    if (orm === 'prisma') return;
+    if (!(NODE_ORM_PROVIDERS as readonly string[]).includes(orm)) return;
+    await applyOrmAddon(repoDir, orm, component, dir, vars);
+    return;
+  }
+  if (component === 'go') {
+    if (orm === 'gorm') return;
+    if (!(GO_ORM_PROVIDERS as readonly string[]).includes(orm)) return;
+    await applyOrmAddon(repoDir, orm, component, dir, vars);
+    return;
+  }
 }
 
-interface OrmManifest {
+interface GomodOverrides {
+  add?: Record<string, string>;
+  remove?: string[];
+}
+
+export interface OrmManifest {
   name: string;
   displayName: string;
   frameworks: string[];
   removeFromBase: string[];
-  packageOverrides: {
+  packageOverrides?: {
     descriptionReplace?: { from: string; to: string };
     removeDependencies?: string[];
     removeDevDependencies?: string[];
@@ -665,6 +680,7 @@ interface OrmManifest {
     removeScriptPrefixes?: string[];
     addScripts?: Record<string, string>;
   };
+  gomodOverrides?: GomodOverrides;
 }
 
 async function loadOrmManifest(
@@ -682,7 +698,7 @@ async function loadOrmManifest(
 
 function applyPackageOverrides(
   pkg: Record<string, unknown>,
-  overrides: OrmManifest['packageOverrides'],
+  overrides: NonNullable<OrmManifest['packageOverrides']>,
 ): void {
   if (overrides.descriptionReplace && typeof pkg.description === 'string') {
     pkg.description = pkg.description.replaceAll(
@@ -717,7 +733,7 @@ function applyPackageOverrides(
 async function applyOrmAddon(
   repoDir: string,
   orm: string,
-  framework: 'fastify' | 'express',
+  framework: 'fastify' | 'express' | 'go',
   dir: string,
   vars: GeneratorVars,
 ): Promise<void> {
@@ -732,11 +748,17 @@ async function applyOrmAddon(
     await rm(join(dir, relPath), { recursive: true, force: true });
   }
 
-  const pkgPath = join(dir, 'package.json');
-  if (existsSync(pkgPath)) {
-    const pkg = await readJsonObject(pkgPath);
-    applyPackageOverrides(pkg, manifest.packageOverrides);
-    await writeJsonObject(pkgPath, pkg);
+  if (framework === 'go') {
+    if (manifest.gomodOverrides) {
+      await applyGomodOverrides(join(dir, 'go.mod'), manifest.gomodOverrides);
+    }
+  } else {
+    const pkgPath = join(dir, 'package.json');
+    if (existsSync(pkgPath) && manifest.packageOverrides) {
+      const pkg = await readJsonObject(pkgPath);
+      applyPackageOverrides(pkg, manifest.packageOverrides);
+      await writeJsonObject(pkgPath, pkg);
+    }
   }
 
   const addonRoot = join(repoDir, 'addons', 'orms', orm);
@@ -750,10 +772,103 @@ async function applyOrmAddon(
     await cp(frameworkSrc, dir, { recursive: true, force: true });
   }
 
-  await writeFile(
-    join(dir, 'Dockerfile'),
-    ormNodeDockerfileSource(manifest, vars),
-  );
+  if (framework === 'go') {
+    await writeFile(join(dir, 'Dockerfile'), ormGoDockerfileSource(manifest));
+  } else {
+    await writeFile(
+      join(dir, 'Dockerfile'),
+      ormNodeDockerfileSource(manifest, vars),
+    );
+  }
+}
+
+export async function applyGomodOverrides(
+  goModPath: string,
+  overrides: GomodOverrides,
+): Promise<void> {
+  if (!existsSync(goModPath)) return;
+  const original = await readFile(goModPath, 'utf-8');
+  const lines = original.split('\n');
+  const requireBlock = findRequireBlock(lines);
+  const removeSet = new Set(overrides.remove ?? []);
+  const addEntries = new Map(Object.entries(overrides.add ?? {}));
+  if (!requireBlock) {
+    if (addEntries.size === 0) return;
+    const block = [
+      '',
+      'require (',
+      ...[...addEntries].map(([m, v]) => `\t${m} ${v}`),
+      ')',
+    ].join('\n');
+    await writeFile(goModPath, original.trimEnd() + '\n' + block + '\n');
+    return;
+  }
+
+  const kept: string[] = [];
+  for (let i = requireBlock.start + 1; i < requireBlock.end; i++) {
+    const line = lines[i];
+    const m = /^\s*([^\s]+)\s+([^\s]+)(.*)$/.exec(line);
+    if (!m) {
+      kept.push(line);
+      continue;
+    }
+    const [, mod, , trailing] = m;
+    if (removeSet.has(mod)) continue;
+    if (addEntries.has(mod)) {
+      const newVer = addEntries.get(mod)!;
+      kept.push(`\t${mod} ${newVer}${trailing}`);
+      addEntries.delete(mod);
+      continue;
+    }
+    kept.push(line);
+  }
+  for (const [mod, ver] of addEntries) {
+    kept.push(`\t${mod} ${ver}`);
+  }
+
+  const next = [
+    ...lines.slice(0, requireBlock.start + 1),
+    ...kept,
+    ...lines.slice(requireBlock.end),
+  ].join('\n');
+  await writeFile(goModPath, next);
+}
+
+function findRequireBlock(
+  lines: string[],
+): { start: number; end: number } | null {
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*require\s*\(\s*$/.test(lines[i])) {
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s*\)\s*$/.test(lines[j])) return { start: i, end: j };
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+export function ormGoDockerfileSource(manifest: OrmManifest): string {
+  const dockerCfg = ((
+    manifest as unknown as { dockerfile?: DockerfileManifest }
+  ).dockerfile ?? {}) as DockerfileManifest;
+  const extra = (dockerCfg.extraConfigFiles ?? []).join(' ');
+  const copyExtra = extra ? `COPY ${extra} ./` : '';
+  const preBuild = dockerCfg.preBuild ? `RUN ${dockerCfg.preBuild}\n` : '';
+  return `FROM golang:1.25-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+${copyExtra}
+${preBuild}RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app .
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /app /app
+EXPOSE 8080
+USER nonroot
+ENTRYPOINT ["/app"]
+`;
 }
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -770,6 +885,7 @@ async function writeJsonObject(
 interface DockerfileManifest {
   extraConfigFiles?: string[];
   migrateCommand?: string;
+  preBuild?: string;
 }
 
 function ormNodeDockerfileSource(
@@ -940,7 +1056,27 @@ async function substituteNamesForInstance(
       `package:${target}/`,
       '.dart',
     );
+  } else if (type === 'rust') {
+    if (isCanonical) return;
+    const target = `${name}-${path}`;
+    await replaceInFile(join(dest, `${path}/Cargo.toml`), 'projx-rust', target);
+  } else if (type === 'laravel') {
+    if (isCanonical) return;
+    const target = `${name}-${path}`;
+    await replaceInFile(
+      join(dest, `${path}/composer.json`),
+      'projx-laravel',
+      target,
+    );
+  } else if (type === 'go' || type === 'infra' || type === 'admin-panel') {
+    return;
+  } else {
+    assertNever(type);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled component type: ${String(value)}`);
 }
 
 export async function detectPackageNameOverrides(

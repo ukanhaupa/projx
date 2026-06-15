@@ -38,6 +38,14 @@ interface PackageJsonPatch {
   };
 }
 
+interface ComposerJsonPatch {
+  type: 'composer-json';
+  merge: {
+    require?: Record<string, string>;
+    'require-dev'?: Record<string, string>;
+  };
+}
+
 interface TextPatch {
   type: 'text';
   file: string;
@@ -46,7 +54,7 @@ interface TextPatch {
   position?: 'after' | 'before';
 }
 
-type Patch = PackageJsonPatch | TextPatch;
+type Patch = PackageJsonPatch | ComposerJsonPatch | TextPatch;
 
 export interface ApplyFeatureOptions {
   feature: string;
@@ -351,6 +359,8 @@ async function applyPatches(
     const patch = JSON.parse(raw) as Patch;
     if (patch.type === 'package-json') {
       await applyPackageJsonPatch(targetPath, patch);
+    } else if (patch.type === 'composer-json') {
+      await applyComposerJsonPatch(targetPath, patch);
     } else if (patch.type === 'text') {
       await applyTextPatch(
         targetPath,
@@ -385,6 +395,44 @@ async function applyPackageJsonPatch(
     pkg[key] = { ...((pkg[key] as Record<string, string>) ?? {}), ...incoming };
   }
   await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+}
+
+async function applyComposerJsonPatch(
+  targetPath: string,
+  patch: ComposerJsonPatch,
+): Promise<void> {
+  const composerPath = join(targetPath, 'composer.json');
+  if (!existsSync(composerPath)) {
+    throw new Error(`composer-json patch failed: ${composerPath} not found.`);
+  }
+  const composer = JSON.parse(await readFile(composerPath, 'utf-8')) as Record<
+    string,
+    unknown
+  >;
+  let changed = false;
+  for (const key of ['require', 'require-dev'] as const) {
+    const incoming = patch.merge[key];
+    if (!incoming) continue;
+    const current = (composer[key] as Record<string, string>) ?? {};
+    const merged = { ...current };
+    for (const [name, constraint] of Object.entries(incoming)) {
+      if (merged[name] !== constraint) {
+        merged[name] = constraint;
+        changed = true;
+      }
+    }
+    composer[key] = sortObjectKeys(merged);
+  }
+  if (!changed) return;
+  await writeFile(composerPath, JSON.stringify(composer, null, 4) + '\n');
+}
+
+function sortObjectKeys(obj: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.keys(obj)
+      .sort()
+      .map((k) => [k, obj[k]]),
+  );
 }
 
 async function applyTextPatch(

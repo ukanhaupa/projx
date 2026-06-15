@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "main.go",
+  "anchor": "// projx-anchor: plugins",
+  "insert": "\tif err := gdb.AutoMigrate(&authmodels.User{}, &authmodels.RefreshToken{}, &authmodels.VerificationToken{}); err != nil {\n\t\tlogger.Error(\"auth automigrate failed\", \"error\", err)\n\t\tos.Exit(1)\n\t}\n\tauthDeps := authhandlers.NewDeps(gdb, configSvc)\n\tif err := authDeps.Mailer.Load(ctx); err != nil {\n\t\tlogger.Error(\"mailer init failed\", \"error\", err)\n\t}\n\tr.Mount(\"/api/v1\", authhandlers.Routes(authDeps, jwtVerifier))\n\tauthCleanup := authcron.New(gdb)\n\tauthCleanup.Start(ctx)\n\tdefer authCleanup.Stop()\n"
+}

@@ -1,0 +1,6 @@
+coverage.out
+coverage.html
+/bin
+/dist
+/go
+.env

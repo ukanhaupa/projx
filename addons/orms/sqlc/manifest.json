@@ -1,0 +1,38 @@
+{
+  "name": "sqlc",
+  "displayName": "sqlc",
+  "frameworks": ["go"],
+  "removeFromBase": [
+    "internal/apperr/errors.go",
+    "internal/apperr/middleware_test.go",
+    "internal/db/client.go",
+    "internal/db/client_test.go",
+    "internal/entities/auto_routes.go",
+    "internal/entities/auto_routes_test.go",
+    "internal/entities/query.go",
+    "internal/entities/query_test.go",
+    "internal/entities/query_extra_test.go",
+    "internal/entities/reflectutil.go",
+    "internal/entities/registry.go",
+    "internal/entities/registry_test.go",
+    "internal/entities/types.go",
+    "internal/sync/sync.go",
+    "internal/sync/sync_test.go",
+    "internal/serviceconfig/model.go",
+    "internal/serviceconfig/serviceconfig.go",
+    "internal/serviceconfig/serviceconfig_test.go",
+    "internal/posts/post.go",
+    "internal/posts/post_test.go",
+    "internal/posts/post_integration_test.go",
+    "internal/health/health.go",
+    "internal/health/health_test.go",
+    "main.go",
+    "go.mod",
+    "go.sum"
+  ],
+  "packageOverrides": {},
+  "dockerfile": {
+    "extraConfigFiles": ["sqlc.yaml", "migrations"],
+    "migrateCommand": "/app/migrate -path migrations -database $DATABASE_URL up"
+  }
+}

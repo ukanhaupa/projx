@@ -1,0 +1,7 @@
+/target
+/bin
+/dist
+.env
+*.profraw
+coverage/
+lcov.info

@@ -24,6 +24,9 @@ jobs:
       fastapi: ${{ steps.filter.outputs.fastapi }}
       fastify: ${{ steps.filter.outputs.fastify }}
       express: ${{ steps.filter.outputs.express }}
+      go: ${{ steps.filter.outputs.go }}
+      rust: ${{ steps.filter.outputs.rust }}
+      laravel: ${{ steps.filter.outputs.laravel }}
       vitejs: ${{ steps.filter.outputs.vitejs }}
       nextjs: ${{ steps.filter.outputs.nextjs }}
       mobile: ${{ steps.filter.outputs.mobile }}
@@ -32,6 +35,8 @@ jobs:
       admin-panel: ${{ steps.filter.outputs.admin-panel }}
       addons: ${{ steps.filter.outputs.addons }}
       features: ${{ steps.filter.outputs.features }}
+      fuzz: ${{ steps.filter.outputs.fuzz }}
+      gencompile: ${{ steps.filter.outputs.gencompile }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
@@ -46,6 +51,12 @@ jobs:
               - 'fastify/**'
             express:
               - 'express/**'
+            go:
+              - 'go/**'
+            rust:
+              - 'rust/**'
+            laravel:
+              - 'laravel/**'
             vitejs:
               - 'vitejs/**'
             nextjs:
@@ -62,6 +73,10 @@ jobs:
               - 'addons/**'
             features:
               - 'features/**'
+            fuzz:
+              - 'scripts/scaffold-fuzz.py'
+            gencompile:
+              - 'scripts/ci-gen-compile.sh'
 
   secrets:
     name: Secret scan
@@ -307,6 +322,121 @@ jobs:
       - run: pnpm exec vitest run --coverage
       - run: pnpm audit --prod
 
+  go:
+    name: Go (format + vet + lint + build + test + audit)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - run: go mod download
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$out"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go build ./...
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        with:
+          version: v2.12.2
+          working-directory: go
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - run: go test -race -coverprofile=coverage.out ./...
+      - run: bash scripts/check-coverage.sh
+
+  rust:
+    name: Rust (fmt + clippy + test + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: "1.83"
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test --all-features
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version 0.31.5 --locked
+      - name: Coverage (≥80%)
+        run: cargo tarpaulin --fail-under 80 --out Xml --workspace --all-features
+
+  laravel:
+    name: Laravel (pint + phpstan + pest + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.laravel == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_DATABASE: ci_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    defaults:
+      run:
+        working-directory: laravel
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql,pcntl,bcmath,intl
+          coverage: pcov
+      - run: composer install --no-interaction --prefer-dist
+      - run: ./vendor/bin/pint --test
+      - run: ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
+      - run: ./vendor/bin/pest --coverage --min=80
+
   mobile:
     name: Flutter (format + analyze + test + coverage)
     needs: changes
@@ -525,3 +655,87 @@ jobs:
         working-directory: fastapi
         run: uv sync --group dev
       - run: scripts/ci-scaffold-matrix.sh ${{ matrix.framework }} ${{ matrix.orm }}
+
+  scaffold-fuzz:
+    name: Scaffold fuzz (all templates × orm × feature × lifecycle)
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.addons == 'true' ||
+      needs.changes.outputs.features == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.fuzz == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - run: pnpm build
+        working-directory: cli
+      - run: python3 scripts/scaffold-fuzz.py --runs 200 --jobs 4 --cli cli/dist/index.js
+
+  gen-compile:
+    name: Gen-compile (scaffold + gen entity + build)
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.addons == 'true' ||
+      needs.changes.outputs.features == 'true' ||
+      needs.changes.outputs.go == 'true' ||
+      needs.changes.outputs.rust == 'true' ||
+      needs.changes.outputs.laravel == 'true' ||
+      needs.changes.outputs.fastapi == 'true' ||
+      needs.changes.outputs.fastify == 'true' ||
+      needs.changes.outputs.gencompile == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - go-gorm
+          - go-sqlc
+          - go-ent
+          - rust
+          - node-prisma
+          - node-drizzle
+          - node-sequelize
+          - node-typeorm
+          - fastapi
+          - laravel
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - run: pnpm build
+        working-directory: cli
+      - if: startsWith(matrix.backend, 'go-')
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: "1.26"
+      - if: matrix.backend == 'rust'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - if: matrix.backend == 'fastapi'
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+      - if: matrix.backend == 'laravel'
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql,pcntl,bcmath,intl
+      - run: bash scripts/ci-gen-compile.sh ${{ matrix.backend }}

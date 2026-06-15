@@ -89,6 +89,96 @@ if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
 fi
 echo "<%= inst.display %> dependencies installed."
 <% } %>
+<% for (const inst of goInstances) { %>
+
+if command -v go &>/dev/null; then
+  (
+    cd <%= inst.path %>
+    go mod download
+<% if (orm === 'sqlc') { %>
+    if [ -f scripts/db-sync.sh ]; then
+      if [ -n "$DATABASE_URL" ]; then
+        bash scripts/db-sync.sh
+      else
+        echo "<%= inst.display %>: skipping sqlc db-sync (DATABASE_URL not set)."
+      fi
+    fi
+<% } else if (orm === 'ent') { %>
+    if [ -d ent/schema ]; then
+      go generate ./ent/...
+      go mod tidy
+      if [ -f scripts/db-sync.sh ]; then
+        if [ -n "$DATABASE_URL" ]; then
+          bash scripts/db-sync.sh
+        else
+          echo "<%= inst.display %>: skipping ent migrate (DATABASE_URL not set)."
+        fi
+      fi
+    fi
+<% } else { %>
+    if [ -f scripts/db-sync.sh ]; then
+      if [ -n "$DATABASE_URL" ]; then
+        bash scripts/db-sync.sh
+      else
+        echo "<%= inst.display %>: skipping GORM schema sync (DATABASE_URL not set)."
+      fi
+    fi
+<% } %>
+  )
+  if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+    cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+    echo "<%= inst.path %>/.env created from .env.example."
+  fi
+  echo "<%= inst.display %> dependencies installed."
+else
+  echo "<%= inst.display %> skipped (Go toolchain not installed)."
+fi
+<% } %>
+<% for (const inst of rustInstances) { %>
+
+if command -v cargo &>/dev/null; then
+  (
+    cd <%= inst.path %>
+    cargo fetch
+    if [ -f scripts/db-sync.sh ]; then
+      if [ -n "$DATABASE_URL" ]; then
+        bash scripts/db-sync.sh
+      else
+        echo "<%= inst.display %>: skipping db-sync (DATABASE_URL not set)."
+      fi
+    fi
+  )
+  if [ ! -f <%= inst.path %>/.env ] && [ -f <%= inst.path %>/.env.example ]; then
+    cp <%= inst.path %>/.env.example <%= inst.path %>/.env
+    echo "<%= inst.path %>/.env created from .env.example."
+  fi
+  echo "<%= inst.display %> dependencies installed."
+else
+  echo "<%= inst.display %> skipped (Rust toolchain not installed)."
+fi
+<% } %>
+<% for (const inst of laravelInstances) { %>
+
+if command -v php &>/dev/null && command -v composer &>/dev/null; then
+  (
+    cd <%= inst.path %>
+    composer install --no-interaction
+    if [ ! -f .env ] && [ -f .env.example ]; then
+      cp .env.example .env
+      echo "<%= inst.path %>/.env created from .env.example."
+    fi
+    php artisan key:generate --force
+    if [ -n "$DATABASE_URL" ]; then
+      php artisan migrate --force
+    else
+      echo "<%= inst.display %>: skipping migrations (DATABASE_URL not set)."
+    fi
+  )
+  echo "<%= inst.display %> dependencies installed."
+else
+  echo "<%= inst.display %> skipped (php/composer not installed)."
+fi
+<% } %>
 <% for (const inst of vitejsInstances) { %>
 
 (

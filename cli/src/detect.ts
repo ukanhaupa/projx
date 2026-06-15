@@ -1,13 +1,19 @@
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type Component, EXCLUDE, readFileOrNull } from './utils.js';
+import {
+  type Component,
+  type OrmProvider,
+  EXCLUDE,
+  readFileOrNull,
+} from './utils.js';
 
 export interface DetectedComponent {
   component: Component;
   directory: string;
   confidence: 'high' | 'medium';
   evidence: string;
+  orm?: OrmProvider;
 }
 
 export async function detectComponents(
@@ -105,6 +111,59 @@ async function scanDirectory(
     });
   }
 
+  if (existsSync(join(dir, 'go.mod'))) {
+    const goMod = await readFileOrNull(join(dir, 'go.mod'));
+    if (!goMod || !/^module\s+adminpanel\b/m.test(goMod)) {
+      const orm = detectGoOrm(dir);
+      results.push({
+        component: 'go',
+        directory: relPath,
+        confidence: 'high',
+        evidence: orm ? `go.mod present (orm: ${orm})` : 'go.mod present',
+        orm,
+      });
+    }
+  }
+
+  const cargo = await readFileOrNull(join(dir, 'Cargo.toml'));
+  if (cargo && /(^|\n)\s*axum\s*=/.test(cargo)) {
+    const orm: OrmProvider | undefined = /(^|\n)\s*sea-orm\s*=/.test(cargo)
+      ? 'seaorm'
+      : undefined;
+    results.push({
+      component: 'rust',
+      directory: relPath,
+      confidence: 'high',
+      evidence: orm ? 'Cargo.toml has axum + sea-orm' : 'Cargo.toml has axum',
+      orm,
+    });
+  }
+
+  const composer = await readFileOrNull(join(dir, 'composer.json'));
+  if (composer) {
+    try {
+      const parsed = JSON.parse(composer) as {
+        require?: Record<string, string>;
+        'require-dev'?: Record<string, string>;
+      };
+      const deps = {
+        ...(parsed.require ?? {}),
+        ...(parsed['require-dev'] ?? {}),
+      };
+      if (deps['laravel/framework']) {
+        results.push({
+          component: 'laravel',
+          directory: relPath,
+          confidence: 'high',
+          evidence: 'composer.json has laravel/framework',
+          orm: 'eloquent',
+        });
+      }
+    } catch {
+      // not valid json
+    }
+  }
+
   const hasTf =
     existsSync(join(dir, 'main.tf')) ||
     existsSync(join(dir, 'variables.tf')) ||
@@ -130,6 +189,20 @@ async function scanDirectory(
   }
 
   return results;
+}
+
+function detectGoOrm(dir: string): OrmProvider | undefined {
+  if (
+    existsSync(join(dir, 'sqlc.yaml')) ||
+    existsSync(join(dir, 'sqlc.yml')) ||
+    existsSync(join(dir, 'sqlc.json'))
+  ) {
+    return 'sqlc';
+  }
+  if (existsSync(join(dir, 'ent')) && existsSync(join(dir, 'ent/schema'))) {
+    return 'ent';
+  }
+  return undefined;
 }
 
 async function readPkg(dir: string): Promise<{

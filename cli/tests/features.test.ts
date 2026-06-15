@@ -608,3 +608,169 @@ describe('applyFeature', () => {
     ).rejects.toThrow(/package-json patch failed.*not found/i);
   });
 });
+
+describe('composer-json patch', () => {
+  let dest: string;
+  let featureRoot: string;
+
+  beforeEach(async () => {
+    dest = await mkdtemp(join(tmpdir(), 'projx-composer-'));
+    featureRoot = await mkdtemp(join(tmpdir(), 'projx-composer-src-'));
+  });
+
+  afterEach(async () => {
+    await rm(dest, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
+    await rm(featureRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
+  });
+
+  async function setupComposerFeature(
+    merge: Record<string, Record<string, string>>,
+  ): Promise<void> {
+    const featureDir = join(featureRoot, 'sample');
+    await mkdir(join(featureDir, 'laravel/patches'), { recursive: true });
+    await writeFile(
+      join(featureDir, 'feature.json'),
+      JSON.stringify({
+        name: 'sample',
+        summary: 'Sample feature',
+        supports: ['laravel'],
+      }),
+    );
+    await writeFile(
+      join(featureDir, 'laravel/patches/01-composer.patch.json'),
+      JSON.stringify({ type: 'composer-json', merge }),
+    );
+  }
+
+  async function setupLaravelTarget(
+    composer: Record<string, unknown>,
+  ): Promise<void> {
+    await mkdir(join(dest, 'laravel'), { recursive: true });
+    await writeFile(
+      join(dest, 'laravel/composer.json'),
+      JSON.stringify(composer, null, 4) + '\n',
+    );
+  }
+
+  function apply(): Promise<void> {
+    return applyFeature({
+      feature: 'sample',
+      featureRoot,
+      targets: [{ component: 'laravel', instance: 'laravel', path: 'laravel' }],
+      dest,
+      vars: { orm: 'eloquent' },
+    });
+  }
+
+  it('deep-merges require and require-dev without injecting a comment', async () => {
+    await setupComposerFeature({
+      require: {
+        'pragmarx/google2fa': '^8.0',
+        'bacon/bacon-qr-code': '^2.0',
+      },
+      'require-dev': { 'phpstan/phpstan-strict-rules': '^2.0' },
+    });
+    await setupLaravelTarget({
+      name: 'demo/app',
+      require: { php: '^8.3', 'laravel/framework': '^12.0' },
+      'require-dev': { 'pestphp/pest': '^3.7' },
+    });
+
+    await apply();
+
+    const raw = await readFile(join(dest, 'laravel/composer.json'), 'utf-8');
+    expect(raw).not.toContain('projx-feature');
+    expect(raw).not.toContain('//');
+    const composer = JSON.parse(raw) as {
+      require: Record<string, string>;
+      'require-dev': Record<string, string>;
+    };
+    expect(composer.require).toMatchObject({
+      php: '^8.3',
+      'laravel/framework': '^12.0',
+      'pragmarx/google2fa': '^8.0',
+      'bacon/bacon-qr-code': '^2.0',
+    });
+    expect(composer['require-dev']).toMatchObject({
+      'pestphp/pest': '^3.7',
+      'phpstan/phpstan-strict-rules': '^2.0',
+    });
+  });
+
+  it('sorts the merged require keys alphabetically', async () => {
+    await setupComposerFeature({
+      require: { 'pragmarx/google2fa': '^8.0' },
+    });
+    await setupLaravelTarget({
+      name: 'demo/app',
+      require: { 'laravel/framework': '^12.0', php: '^8.3' },
+    });
+
+    await apply();
+
+    const composer = JSON.parse(
+      await readFile(join(dest, 'laravel/composer.json'), 'utf-8'),
+    ) as { require: Record<string, string> };
+    expect(Object.keys(composer.require)).toEqual([
+      'laravel/framework',
+      'php',
+      'pragmarx/google2fa',
+    ]);
+  });
+
+  it('is idempotent — re-running keeps valid JSON and no duplicates', async () => {
+    await setupComposerFeature({
+      require: { 'pragmarx/google2fa': '^8.0' },
+    });
+    await setupLaravelTarget({
+      name: 'demo/app',
+      require: { php: '^8.3' },
+    });
+
+    await apply();
+    const first = await readFile(join(dest, 'laravel/composer.json'), 'utf-8');
+    await apply();
+    const second = await readFile(join(dest, 'laravel/composer.json'), 'utf-8');
+
+    expect(second).toBe(first);
+    const composer = JSON.parse(second) as {
+      require: Record<string, string>;
+    };
+    expect(composer.require['pragmarx/google2fa']).toBe('^8.0');
+  });
+
+  it('creates a require block when the target has none', async () => {
+    await setupComposerFeature({
+      require: { 'pragmarx/google2fa': '^8.0' },
+    });
+    await setupLaravelTarget({ name: 'demo/app' });
+
+    await apply();
+
+    const composer = JSON.parse(
+      await readFile(join(dest, 'laravel/composer.json'), 'utf-8'),
+    ) as { require: Record<string, string> };
+    expect(composer.require).toEqual({ 'pragmarx/google2fa': '^8.0' });
+  });
+
+  it('throws when composer.json is missing in the target', async () => {
+    await setupComposerFeature({
+      require: { 'pragmarx/google2fa': '^8.0' },
+    });
+    await mkdir(join(dest, 'laravel'), { recursive: true });
+
+    await expect(apply()).rejects.toThrow(
+      /composer-json patch failed.*not found/i,
+    );
+  });
+});

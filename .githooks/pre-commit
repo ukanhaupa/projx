@@ -35,6 +35,9 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 FASTAPI_PY=$(echo "$STAGED_FILES" | grep '^fastapi/.*\.py$' || true)
 FASTIFY_TS=$(echo "$STAGED_FILES" | grep '^fastify/.*\.ts$' || true)
 FASTIFY_ALL=$(echo "$STAGED_FILES" | grep '^fastify/' || true)
+GO_FILES=$(echo "$STAGED_FILES" | grep '^go/.*\.go$' || true)
+RUST_FILES=$(echo "$STAGED_FILES" | grep -E '^rust/.*\.rs$' || true)
+LARAVEL_FILES=$(echo "$STAGED_FILES" | grep -E '^laravel/.*\.php$' || true)
 VITEJS_TS=$(echo "$STAGED_FILES" | grep '^vitejs/.*\.tsx\?$' || true)
 VITEJS_ALL=$(echo "$STAGED_FILES" | grep '^vitejs/' || true)
 NEXTJS_TS=$(echo "$STAGED_FILES" | grep '^nextjs/.*\.tsx\?$' || true)
@@ -75,6 +78,66 @@ if [ -n "$FASTIFY_ALL" ]; then
   fi
   cd ..
   echo "$FASTIFY_ALL" | xargs git add
+fi
+
+# ── Go ────────────────────────────────────────────────────────────
+if [ -n "$GO_FILES" ]; then
+  if command -v go &> /dev/null; then
+    echo "Checking go..."
+    cd go
+    # shellcheck disable=SC2001
+    REL_GO=$(echo "$GO_FILES" | sed 's|^go/||')
+    # shellcheck disable=SC2086
+    UNFORMATTED=$(gofmt -l $REL_GO)
+    if [ -n "$UNFORMATTED" ]; then
+      echo "ERROR: gofmt found unformatted files in go/:"
+      echo "$UNFORMATTED"
+      echo "Run 'gofmt -w' on these files and re-stage."
+      exit 1
+    fi
+    go vet ./...
+    if command -v golangci-lint &> /dev/null; then
+      golangci-lint run ./...
+    else
+      echo "Skipping golangci-lint (not installed — \`brew install golangci-lint\` to enable)"
+    fi
+    cd ..
+    echo "$GO_FILES" | xargs git add
+  else
+    echo "Skipping go gates (go toolchain not installed)"
+  fi
+fi
+
+# ── Rust ──────────────────────────────────────────────────────────
+if [ -n "$RUST_FILES" ]; then
+  if command -v cargo &>/dev/null; then
+    echo "Checking rust..."
+    cd rust
+    REL_RS=$(echo "$RUST_FILES" | sed 's|^rust/||')
+    # shellcheck disable=SC2086
+    echo "$REL_RS" | xargs cargo fmt --check --
+    cargo clippy -- -D warnings
+    cd ..
+    echo "$RUST_FILES" | xargs git add
+  else
+    echo "Skipping rust gates (cargo not installed)"
+  fi
+fi
+
+# ── Laravel ───────────────────────────────────────────────────────
+if [ -n "$LARAVEL_FILES" ]; then
+  if command -v php &>/dev/null && [ -x laravel/vendor/bin/pint ]; then
+    echo "Checking laravel..."
+    cd laravel
+    REL_PHP=$(echo "$LARAVEL_FILES" | sed 's|^laravel/||')
+    # shellcheck disable=SC2086
+    echo "$REL_PHP" | xargs ./vendor/bin/pint
+    ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
+    cd ..
+    echo "$LARAVEL_FILES" | xargs git add
+  else
+    echo "Skipping laravel gates (php or vendor/bin/pint not available — run 'composer install' in laravel/)"
+  fi
 fi
 
 # ── Vite (React) ──────────────────────────────────────────────────
