@@ -1,0 +1,7 @@
+{
+  "type": "text",
+  "file": "go.mod",
+  "anchor": "require (",
+  "position": "after",
+  "insert": "\tgolang.org/x/crypto v0.36.0\n\tgithub.com/pquerna/otp v1.4.0\n"
+}

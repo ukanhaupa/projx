@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "app/Console/Kernel.php",
+  "anchor": "// projx-anchor: scheduler",
+  "insert": "$schedule->command('auth:cleanup-expired-tokens')->everyFiveMinutes()->withoutOverlapping();\n        "
+}

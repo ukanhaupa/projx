@@ -21,6 +21,9 @@ export const COMPONENTS = [
   'fastapi',
   'fastify',
   'express',
+  'go',
+  'rust',
+  'laravel',
   'vitejs',
   'nextjs',
   'mobile',
@@ -81,6 +84,15 @@ export function suggestComponent(input: string): Component | null {
   return bestDistance <= maxAllowed ? best : null;
 }
 
+export const BACKEND_COMPONENTS = [
+  'fastapi',
+  'fastify',
+  'express',
+  'go',
+  'rust',
+  'laravel',
+] as const satisfies readonly Component[];
+
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 
@@ -89,8 +101,44 @@ export const ORM_PROVIDERS = [
   'drizzle',
   'sequelize',
   'typeorm',
+  'gorm',
+  'sqlc',
+  'ent',
+  'seaorm',
+  'eloquent',
 ] as const;
 export type OrmProvider = (typeof ORM_PROVIDERS)[number];
+
+export const NODE_ORM_PROVIDERS = [
+  'prisma',
+  'drizzle',
+  'sequelize',
+  'typeorm',
+] as const satisfies readonly OrmProvider[];
+
+export const GO_ORM_PROVIDERS = [
+  'gorm',
+  'sqlc',
+  'ent',
+] as const satisfies readonly OrmProvider[];
+
+export const RUST_ORM_PROVIDERS = [
+  'seaorm',
+] as const satisfies readonly OrmProvider[];
+
+export const PHP_ORM_PROVIDERS = [
+  'eloquent',
+] as const satisfies readonly OrmProvider[];
+
+export function ormBackendFamily(
+  orm: OrmProvider,
+): 'node' | 'go' | 'rust' | 'php' {
+  if ((GO_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)) return 'go';
+  if ((RUST_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm))
+    return 'rust';
+  if ((PHP_ORM_PROVIDERS as readonly OrmProvider[]).includes(orm)) return 'php';
+  return 'node';
+}
 
 export interface PmCommands {
   name: PackageManager;
@@ -296,6 +344,7 @@ export const EXCLUDE = new Set([
   '.nyc_output',
   '.swc',
   'dist-e2e',
+  'vendor',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -309,6 +358,8 @@ const EXCLUDE_FILES = new Set([
   '.env.prod',
   'dev.tfplan',
   '.coverage',
+  'coverage.out',
+  'coverage.html',
 ]);
 
 export async function copyComponent(
@@ -564,6 +615,19 @@ export const INSTANCE_AWARE_SHARED: string[] = [
   '.github/workflows/ci.yml',
   '.githooks/pre-commit',
   'scripts/setup.sh',
+];
+
+export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
+  'docker-compose.yml',
+  'README.md',
+  '.githooks/pre-commit',
+  '.github/workflows/ci.yml',
+  'scripts/ci-local.sh',
+  'scripts/ci-runner-gc.sh',
+  'scripts/check-bundle-size.sh',
+  'scripts/setup.sh',
+  'scripts/setup-docker.sh',
+  'scripts/setup-ssl.sh',
 ];
 
 export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<

@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "composer.json",
+  "anchor": "\"firebase/php-jwt\": \"^6.10\",",
+  "insert": "        \"pragmarx/google2fa\": \"^8.0\",\n        \"bacon/bacon-qr-code\": \"^2.0\",\n"
+}

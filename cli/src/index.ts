@@ -3,10 +3,16 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  BACKEND_COMPONENTS,
   COMPONENTS,
+  GO_ORM_PROVIDERS,
   KNOWN_FEATURES,
+  NODE_ORM_PROVIDERS,
   ORM_PROVIDERS,
+  PHP_ORM_PROVIDERS,
+  RUST_ORM_PROVIDERS,
   normalizeComponent,
+  ormBackendFamily,
   suggestComponent,
   type Component,
   type Feature,
@@ -23,6 +29,7 @@ import { pin, unpin, listPins } from './pin.js';
 import { doctor } from './doctor.js';
 import { diff } from './diff.js';
 import { gen } from './gen.js';
+import { sync } from './sync.js';
 
 export interface ParsedArgs {
   command:
@@ -34,7 +41,8 @@ export interface ParsedArgs {
     | 'unpin'
     | 'diff'
     | 'doctor'
-    | 'gen';
+    | 'gen'
+    | 'sync';
   name?: string;
   options: Partial<Options>;
   localRepo?: string;
@@ -44,6 +52,8 @@ export interface ParsedArgs {
     fix?: boolean;
     ai?: boolean;
     backend?: boolean;
+    syncBackend?: (typeof BACKEND_COMPONENTS)[number];
+    syncUrl?: string;
   };
 }
 
@@ -118,6 +128,10 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       command = 'gen';
       continue;
     }
+    if (arg === 'sync' && !name) {
+      command = 'sync';
+      continue;
+    }
 
     if (arg === '--components') {
       const val = args[++i];
@@ -185,7 +199,38 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       continue;
     }
     if (arg === '--backend') {
+      const next = args[i + 1];
+      if (
+        command === 'sync' &&
+        next &&
+        BACKEND_COMPONENTS.includes(next as (typeof BACKEND_COMPONENTS)[number])
+      ) {
+        flags.syncBackend = next as (typeof BACKEND_COMPONENTS)[number];
+        i++;
+        continue;
+      }
       flags.backend = true;
+      continue;
+    }
+    if (arg.startsWith('--backend=')) {
+      const val = arg.slice('--backend='.length);
+      if (
+        BACKEND_COMPONENTS.includes(val as (typeof BACKEND_COMPONENTS)[number])
+      ) {
+        flags.syncBackend = val as (typeof BACKEND_COMPONENTS)[number];
+      } else {
+        throw new Error(
+          `Invalid --backend. Use one of: ${BACKEND_COMPONENTS.join(', ')}.`,
+        );
+      }
+      continue;
+    }
+    if (arg === '--url') {
+      flags.syncUrl = args[++i];
+      continue;
+    }
+    if (arg.startsWith('--url=')) {
+      flags.syncUrl = arg.slice('--url='.length);
       continue;
     }
 
@@ -234,6 +279,50 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
   return { command, name, options, localRepo, extraArgs, flags };
 }
 
+function validateOrmAgainstComponents(
+  orm: OrmProvider,
+  components: Component[],
+): void {
+  const family = ormBackendFamily(orm);
+  const hasNodeBackend = components.some(
+    (c) => c === 'fastify' || c === 'express',
+  );
+  const hasGo = components.includes('go');
+  const hasRust = components.includes('rust');
+  const hasLaravel = components.includes('laravel');
+  if (family === 'go' && !hasGo) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'go'. Go ORMs: ${GO_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (family === 'node' && !hasNodeBackend) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'fastify' or 'express'. Node ORMs: ${NODE_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (family === 'rust' && !hasRust) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'rust'. Rust ORMs: ${RUST_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (family === 'php' && !hasLaravel) {
+    throw new Error(
+      `--orm ${orm} requires --components to include 'laravel'. PHP ORMs: ${PHP_ORM_PROVIDERS.join(', ')}.`,
+    );
+  }
+}
+
+function defaultOrmForComponents(components: Component[]): OrmProvider | null {
+  const hasNodeBackend = components.some(
+    (c) => c === 'fastify' || c === 'express',
+  );
+  if (hasNodeBackend) return 'prisma';
+  if (components.includes('go')) return 'gorm';
+  if (components.includes('rust')) return 'seaorm';
+  if (components.includes('laravel')) return 'eloquent';
+  return null;
+}
+
 function printHelp(): void {
   console.log(`
   Usage:
@@ -248,10 +337,13 @@ function printHelp(): void {
     projx pin --list              Show all skip patterns
     projx doctor [--fix]          Health check for projx project
     projx gen entity <name>       Generate a new entity
+    projx sync [--backend N]      Pull entity types from a running backend
 
   Options:
-    --components <list>  Comma-separated: fastapi,fastify,express,vitejs,nextjs,mobile,e2e,infra,admin-panel
-    --orm <provider>     Node backend ORM: prisma (default), drizzle, sequelize, typeorm
+    --components <list>  Comma-separated: fastapi,fastify,express,go,rust,laravel,vitejs,nextjs,mobile,e2e,infra,admin-panel
+    --orm <provider>     Backend ORM. Node (fastify/express): prisma (default) | drizzle | sequelize | typeorm.
+                         Go: gorm (default) | sqlc | ent.
+                         Rust: seaorm. PHP/Laravel: eloquent.
     --auth <targets>     Add auth feature. Targets: <component>[:<instance>] (comma-separated)
     --no-git             Skip git init
     --no-install         Skip dependency installation
@@ -266,6 +358,9 @@ function printHelp(): void {
     npx create-projx my-app --components fastify,nextjs
     npx create-projx my-app --components fastify,vitejs,mobile --auth fastify
     npx create-projx my-app --components fastify,vitejs,admin-panel
+    npx create-projx my-app --components go,vitejs,e2e --orm sqlc
+    npx create-projx my-app --components rust,vitejs --orm seaorm
+    npx create-projx my-app --components laravel,vitejs --orm eloquent
     npx create-projx my-app -y
     npx create-projx add vitejs mobile
     npx create-projx add fastify --name email-ingestor
@@ -364,6 +459,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'sync') {
+    await sync(process.cwd(), {
+      backend: flags.syncBackend,
+      url: flags.syncUrl,
+    });
+    return;
+  }
+
   if (command === 'gen') {
     const subcommand = extraArgs[0];
     if (subcommand !== 'entity' || !extraArgs[1]) {
@@ -394,19 +497,27 @@ async function main(): Promise<void> {
       console.error('Error: project name required. Usage: projx <name>');
       return process.exit(1);
     }
+    const components = options.components;
+    const orm = options.orm ?? defaultOrmForComponents(components);
+    if (orm) validateOrmAgainstComponents(orm, components);
     opts = {
       name,
-      components: options.components,
+      components,
       git: options.git ?? true,
       install: options.install ?? true,
-      orm: options.orm ?? 'prisma',
+      orm: orm ?? undefined,
       features: options.features,
     };
   } else {
     opts = await runPrompts(name);
     opts.git = options.git ?? opts.git;
     opts.install = options.install ?? opts.install;
-    opts.orm = options.orm ?? opts.orm ?? 'prisma';
+    opts.orm =
+      options.orm ??
+      opts.orm ??
+      defaultOrmForComponents(opts.components) ??
+      undefined;
+    if (opts.orm) validateOrmAgainstComponents(opts.orm, opts.components);
     opts.features = options.features ?? opts.features;
   }
 

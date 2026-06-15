@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "go.mod",
+  "anchor": "require (",
+  "insert": "\tgithub.com/mattn/go-sqlite3 v1.14.22\n\tgithub.com/pquerna/otp v1.4.0\n\tgolang.org/x/crypto v0.36.0\n"
+}

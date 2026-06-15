@@ -277,7 +277,59 @@ sec_express() {
   express_boot_smoke
 }
 
+sec_go() {
+  [ -d "$ROOT_DIR/go" ] || return 0
+  cd "$ROOT_DIR/go" || exit 1
+  run_step "go install" go mod download
+  gofmt -w .
+  local go_unformatted
+  go_unformatted="$(gofmt -l .)"
+  if [ -n "$go_unformatted" ]; then
+    xfail "gofmt could not normalize: $go_unformatted"
+    return 1
+  fi
+  run_step "go vet" go vet ./...
+  run_step "go build" go build ./...
+  if command -v golangci-lint >/dev/null 2>&1; then
+    run_step "go lint" golangci-lint run ./...
+  else
+    warn "golangci-lint not installed — skipping (install: brew install golangci-lint)"
+  fi
+  run_step "go test" go test -race -coverprofile=coverage.out ./...
+  run_step "go coverage" bash scripts/check-coverage.sh
+}
+
+sec_rust() {
+  [ -d "$ROOT_DIR/rust" ] || return 0
+  if ! command -v cargo >/dev/null 2>&1; then
+    warn "rust toolchain not installed, skipping (install: https://rustup.rs)"
+    return 0
+  fi
+  cd "$ROOT_DIR/rust" || exit 1
+  run_step "rust format" cargo fmt
+  run_step "rust lint" cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+  git diff --quiet -- . 2>/dev/null || warn "rust: cargo fmt/clippy rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+  run_step "rust test" cargo test --all-features
+}
+
+sec_laravel() {
+  [ -d "$ROOT_DIR/laravel" ] || return 0
+  if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1; then
+    warn "php/composer not installed, skipping (install: https://www.php.net + https://getcomposer.org)"
+    return 0
+  fi
+  cd "$ROOT_DIR/laravel" || exit 1
+  run_step "laravel install" composer install --no-interaction
+  run_step "laravel format" ./vendor/bin/pint
+  git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress
+  run_step "laravel tests" ./vendor/bin/pest --no-coverage
+}
+
 sec_vitejs() {
+  export VITE_OIDC_URL="${VITE_OIDC_URL:-http://localhost:8080}"
+  export VITE_OIDC_REALM="${VITE_OIDC_REALM:-master}"
+  export VITE_OIDC_CLIENT_ID="${VITE_OIDC_CLIENT_ID:-frontend}"
   run_js_component vitejs
   if [ -d "$ROOT_DIR/vitejs/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
     (cd "$ROOT_DIR/vitejs" && run_step "vitejs bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
@@ -546,6 +598,9 @@ available_sections() {
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
+  [ -d "$ROOT_DIR/go" ] && found+=("go")
+  [ -d "$ROOT_DIR/rust" ] && found+=("rust")
+  [ -d "$ROOT_DIR/laravel" ] && found+=("laravel")
   [ -d "$ROOT_DIR/vitejs" ] && found+=("vitejs")
   [ -d "$ROOT_DIR/nextjs" ] && found+=("nextjs")
   [ -d "$ROOT_DIR/mobile" ] && found+=("mobile")

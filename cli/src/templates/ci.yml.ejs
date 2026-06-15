@@ -28,6 +28,15 @@ jobs:
 <% for (const inst of expressInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
+<% for (const inst of goInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
+<% for (const inst of rustInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
+<% for (const inst of laravelInstances) { %>
+      <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
+<% } %>
 <% for (const inst of vitejsInstances) { %>
       <%= inst.path %>: ${{ steps.filter.outputs.<%= inst.path %> }}
 <% } %>
@@ -64,6 +73,18 @@ jobs:
               - '<%= inst.path %>/**'
 <% } %>
 <% for (const inst of expressInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of goInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of rustInstances) { %>
+            <%= inst.path %>:
+              - '<%= inst.path %>/**'
+<% } %>
+<% for (const inst of laravelInstances) { %>
             <%= inst.path %>:
               - '<%= inst.path %>/**'
 <% } %>
@@ -287,6 +308,148 @@ jobs:
       - run: <%= pm.run %> build
       - run: <%= pm.audit %>
 <% } %>
+<% for (const inst of goInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (format + vet + lint + build + test + audit)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_test
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version-file: ${{ env.WS }}/<%= inst.path %>/go.mod
+          cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/go.sum
+      - run: go mod download
+<% if (orm === 'sqlc') { %>
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
+      - name: sqlc generate --check (drift gate)
+        run: "$(go env GOPATH)/bin/sqlc generate --check"
+<% } else if (orm === 'ent') { %>
+      - name: ent generate (drift gate)
+        run: |
+          go generate ./ent/...
+          if ! git diff --quiet; then
+            echo "::error::ent generate produced uncommitted drift:"
+            git diff --stat
+            exit 1
+          fi
+<% } %>
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$out"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go build ./...
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        with:
+          version: v2.12.2
+          working-directory: ${{ env.WS }}/<%= inst.path %>
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - run: go test -race -coverprofile=coverage.out ./...
+      - run: bash scripts/check-coverage.sh
+<% } %>
+<% for (const inst of rustInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (fmt + clippy + test + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: '1.83'
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test --all-features
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version 0.31.5 --locked
+      - name: Coverage (≥80%)
+        run: cargo tarpaulin --fail-under 80 --out Xml --workspace --all-features
+<% } %>
+<% for (const inst of laravelInstances) { %>
+
+  <%= inst.path %>:
+    name: <%= inst.display %> (pint + phpstan + pest + coverage)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.<%= inst.path %> == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_DATABASE: ci_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    defaults:
+      run:
+        working-directory: ${{ env.WS }}/<%= inst.path %>
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: ${{ env.WS }}
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql,pcntl,bcmath,intl
+          coverage: pcov
+      - run: composer install --no-interaction --prefer-dist
+      - run: ./vendor/bin/pint --test
+      - run: ./vendor/bin/phpstan analyse --no-progress --level=8
+      - run: ./vendor/bin/pest --coverage --min=80
+<% } %>
 <% for (const inst of vitejsInstances) { %>
 
   <%= inst.path %>:
@@ -322,7 +485,18 @@ jobs:
       - run: <%= pm.exec %> tsc --noEmit
       - run: <%= pm.run %> build
       - run: bash scripts/check-bundle-size.sh
-      - run: <%= pm.audit %>
+      # Validates frontend/nginx.conf against the same nginx image the Dockerfile
+      # uses. Catches unknown / module-dependent directives (e.g. `brotli on;` on
+      # stock nginx:alpine) BEFORE deploy — without it, the directive only fails
+      # when the container tries to start in prod, after CI is green.
+      #
+      # GOTCHA: if you convert this job to self-hosted runners (shared outbound
+      # IP), `docker run` against `public.ecr.aws/...` will fall back to anonymous
+      # pulls and hit rate limits across concurrent runs. Add OIDC + ECR Public
+      # login steps before this step (see memoria/.github/workflows/ci.yml).
+      - name: Validate nginx config against runtime image
+        working-directory: ${{ env.WS }}
+        run: bash scripts/validate-nginx-config.sh
 <% } %>
 <% for (const inst of nextjsInstances) { %>
 

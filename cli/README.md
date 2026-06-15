@@ -1,6 +1,6 @@
 # create-projx
 
-Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, Express, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.
+Scaffold production-grade fullstack projects in seconds. FastAPI, Fastify, Express, Go, React, Flutter, Terraform — with auth, database, CI/CD, E2E tests, and Docker. One command, ready to deploy.
 
 ```bash
 npx create-projx my-app
@@ -54,6 +54,7 @@ Full spec in [docs/feature-templates.md](../docs/feature-templates.md).
 - `fastify` — Fastify + Prisma (or Drizzle / Sequelize / TypeORM) backend with auto-CRUD entity registry, JWT auth primitives, encrypted service-config table, request_id error envelope.
 - `express` — Same surface on Express 5.
 - `fastapi` — FastAPI + SQLAlchemy + Alembic backend with identical external contract.
+- `go` — Chi + GORM backend with auto-CRUD entity registry, request_id error envelope, soft-delete, and the same lifecycle-hook contract. M1 base only — no `--auth` feature yet.
 - `frontend` — React + Vite + TypeScript with type-sync against any backend instance.
 - `mobile` — Flutter app with auth, FCM, Isar, theming, Fastlane.
 - `e2e` — Playwright end-to-end tests pre-wired against the scaffolded stack.
