@@ -112,6 +112,93 @@ services:
           - backend
 <% } %>
 <% } %>
+<% for (const inst of goInstances) { %>
+  <%= inst.path %>:
+    build:
+      context: ./<%= inst.path %>
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    env_file:
+      - ./<%= inst.path %>/.env
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8080/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      app-network:
+<% if (fastifyInstances.length === 0 && expressInstances.length === 0 && fastapiInstances.length === 0 && inst.path === goInstances[0].path) { %>
+        aliases:
+          - backend
+<% } %>
+<% } %>
+<% for (const inst of rustInstances) { %>
+  <%= inst.path %>:
+    build:
+      context: ./<%= inst.path %>
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    env_file:
+      - ./<%= inst.path %>/.env
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8080/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      app-network:
+<% if (fastifyInstances.length === 0 && expressInstances.length === 0 && fastapiInstances.length === 0 && goInstances.length === 0 && inst.path === rustInstances[0].path) { %>
+        aliases:
+          - backend
+<% } %>
+<% } %>
+<% for (const inst of laravelInstances) { %>
+  <%= inst.path %>:
+    build:
+      context: ./<%= inst.path %>
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    env_file:
+      - ./<%= inst.path %>/.env
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "php",
+          "-r",
+          "exit(@file_get_contents('http://localhost:8000/api/health') === false ? 1 : 0);",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      app-network:
+<% if (fastifyInstances.length === 0 && expressInstances.length === 0 && fastapiInstances.length === 0 && goInstances.length === 0 && rustInstances.length === 0 && inst.path === laravelInstances[0].path) { %>
+        aliases:
+          - backend
+<% } %>
+<% } %>
 <% for (const inst of vitejsInstances) { %>
   <%= inst.path %>:
     build:
@@ -137,6 +224,18 @@ services:
 <% } else if (fastapiInstances.length > 0) { %>
     depends_on:
       <%= fastapiInstances[0].path %>:
+        condition: service_healthy
+<% } else if (goInstances.length > 0) { %>
+    depends_on:
+      <%= goInstances[0].path %>:
+        condition: service_healthy
+<% } else if (rustInstances.length > 0) { %>
+    depends_on:
+      <%= rustInstances[0].path %>:
+        condition: service_healthy
+<% } else if (laravelInstances.length > 0) { %>
+    depends_on:
+      <%= laravelInstances[0].path %>:
         condition: service_healthy
 <% } %>
     restart: unless-stopped

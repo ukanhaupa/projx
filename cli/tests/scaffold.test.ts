@@ -111,6 +111,81 @@ describe('scaffold', () => {
     expect(readme).toContain('Express 5, TypeScript');
   });
 
+  it('scaffolds a Go backend with production wiring', async () => {
+    dest = join(tmpdir(), `projx-go-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'go-app',
+        components: ['go'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    expect(existsSync(join(dest, 'go/main.go'))).toBe(true);
+    expect(existsSync(join(dest, 'go/go.mod'))).toBe(true);
+    expect(existsSync(join(dest, 'go/internal/entities/registry.go'))).toBe(
+      true,
+    );
+    expect(existsSync(join(dest, 'go/internal/posts/post.go'))).toBe(true);
+    expect(existsSync(join(dest, 'go/Dockerfile'))).toBe(true);
+
+    const marker = JSON.parse(
+      await readFile(join(dest, 'go/.projx-component'), 'utf-8'),
+    );
+    expect(marker.component).toBe('go');
+    expect(Array.isArray(marker.skip)).toBe(true);
+
+    const ci = await readFile(join(dest, '.github/workflows/ci.yml'), 'utf-8');
+    expect(ci).toContain('go:');
+    expect(ci).toContain('name: Go (');
+
+    const compose = await readFile(join(dest, 'docker-compose.yml'), 'utf-8');
+    expect(compose).toContain('go:');
+    expect(compose).toContain('http://localhost:8080/api/health');
+  });
+
+  it('scaffolds a Rust backend and tolerates a missing cargo toolchain', async () => {
+    dest = join(tmpdir(), `projx-rust-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'rust-app',
+        components: ['rust'],
+        orm: 'seaorm',
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+    expect(existsSync(join(dest, 'rust/Cargo.toml'))).toBe(true);
+    expect(existsSync(join(dest, 'rust/src/main.rs'))).toBe(true);
+    expect(existsSync(join(dest, 'rust/Dockerfile'))).toBe(true);
+  });
+
+  it('scaffolds a Laravel backend and tolerates a missing composer toolchain', async () => {
+    dest = join(tmpdir(), `projx-laravel-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'laravel-app',
+        components: ['laravel'],
+        orm: 'eloquent',
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+    expect(existsSync(join(dest, 'laravel/composer.json'))).toBe(true);
+    expect(
+      existsSync(join(dest, 'laravel/app/Http/Middleware/RequestId.php')),
+    ).toBe(true);
+    expect(existsSync(join(dest, 'laravel/bootstrap/app.php'))).toBe(true);
+    expect(existsSync(join(dest, 'laravel/Dockerfile'))).toBe(true);
+  });
+
   it('scaffolds Node backends with Drizzle when --orm drizzle is selected', async () => {
     dest = join(tmpdir(), `projx-drizzle-${Date.now()}`);
     await scaffold(
@@ -709,6 +784,45 @@ describe('scaffold install paths (mocked)', () => {
     const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
     expect(calls.some((c) => c.includes('install'))).toBe(false);
     expect(calls.some((c) => c.includes('flutter'))).toBe(false);
+  });
+
+  it('runs go mod download for go component when toolchain is on PATH', async () => {
+    dest = join(tmpdir(), `projx-scaffold-go-install-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(true);
+
+    await scaffold(
+      {
+        name: 'go-install-app',
+        components: ['go'],
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('go mod download'))).toBe(true);
+  });
+
+  it('warns when go toolchain is missing', async () => {
+    dest = join(tmpdir(), `projx-scaffold-go-missing-${Date.now()}`);
+    hasCommandSpy.mockReturnValue(false);
+
+    await scaffold(
+      {
+        name: 'go-missing-app',
+        components: ['go'],
+        git: false,
+        install: true,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    const calls = (execSpy.mock.calls as [string, string][]).map((c) => c[0]);
+    expect(calls.some((c) => c.includes('go mod download'))).toBe(false);
+    expect(existsSync(join(dest, 'go'))).toBe(true);
   });
 });
 

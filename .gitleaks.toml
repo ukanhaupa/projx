@@ -23,6 +23,15 @@ paths = [
   # Test-only deterministic fixtures used by CI to exercise crypto round-trips.
   # These keys are committed deliberately; rotating them breaks the test suite.
   '''.*/\.env\.test$''',
+  # Laravel loads .env.testing when APP_ENV=testing; committed test fixture.
+  '''.*/\.env\.testing$''',
+  # Dependency dirs (gitignored, third-party, never committed). gitleaks --no-git
+  # scans the working tree, so installed deps must be excluded or their vendored
+  # code trips generic-api-key / private-key rules (false positives).
+  '''.*/node_modules/.*''',
+  '''.*/vendor/.*''',
+  '''.*/target/.*''',
+  '''.*/\.venv/.*''',
   # Build artefacts (regenerable, never committed) — copies of *.test.ts.
   '''.*/dist/.*''',
   # Next.js build output + coverage artefacts (regenerable, gitignored).
@@ -35,7 +44,7 @@ paths = [
   '''.*/\.env\.(local|dev|staging|prod)$''',
   # Auth-feature test fixtures: deterministic test passwords / TOTP secrets.
   '''features/auth/.*/tests/.*''',
-  '''(fastify|express|fastapi|vitejs|nextjs)/tests/.*''',
+  '''(fastify|express|fastapi|vitejs|nextjs|laravel)/tests/.*''',
   # Admin-panel Go test fixtures (deterministic keys/TOTP secrets; no real secrets).
   '''admin-panel/.*_test\.go$''',
   # IaC reference module READMEs that quote example provider configs.

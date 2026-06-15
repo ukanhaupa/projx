@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "src/main.rs",
+  "anchor": "// projx-anchor: plugins",
+  "insert": "        .merge(projx::auth::bootstrap::mount(db.clone()))\n"
+}

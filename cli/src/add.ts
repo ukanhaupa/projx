@@ -423,6 +423,39 @@ async function installDeps(
             );
           }
           break;
+        case 'go':
+          if (hasCommand('go')) {
+            spinner.start(`Downloading Go modules (${path}/)`);
+            exec('go mod download', dir);
+            spinner.stop(`Go modules downloaded (${path}/).`);
+          } else {
+            p.log.warn(
+              `Go not found — run 'cd ${path} && go mod download' manually.`,
+            );
+          }
+          break;
+        case 'rust':
+          if (hasCommand('cargo')) {
+            spinner.start(`Fetching Rust crates (${path}/)`);
+            exec('cargo fetch', dir);
+            spinner.stop(`Rust crates fetched (${path}/).`);
+          } else {
+            p.log.warn(
+              `cargo not found — run 'cd ${path} && cargo fetch' manually.`,
+            );
+          }
+          break;
+        case 'laravel':
+          if (hasCommand('composer')) {
+            spinner.start(`Installing Laravel dependencies (${path}/)`);
+            exec('composer install --no-interaction --prefer-dist', dir);
+            spinner.stop(`Laravel dependencies installed (${path}/).`);
+          } else {
+            p.log.warn(
+              `composer not found — run 'cd ${path} && composer install' manually.`,
+            );
+          }
+          break;
         case 'infra':
           break;
         case 'admin-panel':

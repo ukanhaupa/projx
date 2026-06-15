@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
 import {
   COMPONENTS,
-  ORM_PROVIDERS,
+  GO_ORM_PROVIDERS,
+  NODE_ORM_PROVIDERS,
   type Component,
   type OrmProvider,
   type Options,
@@ -9,10 +10,25 @@ import {
   PACKAGE_MANAGERS,
 } from './utils.js';
 
+const ORM_LABELS: Record<OrmProvider, string> = {
+  prisma: 'Prisma (Node)',
+  drizzle: 'Drizzle (Node)',
+  sequelize: 'Sequelize (Node)',
+  typeorm: 'TypeORM (Node)',
+  gorm: 'GORM (Go)',
+  sqlc: 'sqlc (Go)',
+  ent: 'ent (Go)',
+  seaorm: 'SeaORM (Rust)',
+  eloquent: 'Eloquent (PHP)',
+};
+
 export const LABELS: Record<Component, { label: string; hint: string }> = {
   fastapi: { label: 'FastAPI', hint: 'Python — SQLAlchemy, Alembic, uvicorn' },
   fastify: { label: 'Fastify', hint: 'Node.js — Prisma, TypeBox, TypeScript' },
   express: { label: 'Express', hint: 'Node.js — Express 5, TypeScript' },
+  go: { label: 'Go', hint: 'Go — Chi + GORM, entity registry' },
+  rust: { label: 'Rust', hint: 'Rust (Axum + SeaORM)' },
+  laravel: { label: 'Laravel', hint: 'Laravel (PHP 8.3+)' },
   vitejs: { label: 'React + Vite', hint: 'React 19 + Vite + React Router' },
   nextjs: { label: 'Next.js', hint: 'React 19 + Next.js App Router' },
   mobile: { label: 'Mobile', hint: 'Flutter + Riverpod + GoRouter' },
@@ -66,17 +82,30 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
   const hasNodeBackend = components.some((c) =>
     ['fastify', 'express'].includes(c),
   );
-  let orm: OrmProvider = 'prisma';
+  const hasGoBackend = components.includes('go');
+  let orm: OrmProvider = hasGoBackend && !hasNodeBackend ? 'gorm' : 'prisma';
   let packageManager: PackageManager = 'npm';
 
   if (hasNodeBackend) {
     const choice = (await p.select({
       message: 'Node backend ORM',
-      options: ORM_PROVIDERS.map((provider) => ({
+      options: NODE_ORM_PROVIDERS.map((provider) => ({
         value: provider,
-        label: provider === 'prisma' ? 'Prisma' : 'Drizzle',
+        label: ORM_LABELS[provider],
       })),
       initialValue: 'prisma' as OrmProvider,
+    })) as OrmProvider | symbol;
+
+    if (p.isCancel(choice)) process.exit(0);
+    orm = choice as OrmProvider;
+  } else if (hasGoBackend) {
+    const choice = (await p.select({
+      message: 'Go backend ORM',
+      options: GO_ORM_PROVIDERS.map((provider) => ({
+        value: provider,
+        label: ORM_LABELS[provider],
+      })),
+      initialValue: 'gorm' as OrmProvider,
     })) as OrmProvider | symbol;
 
     if (p.isCancel(choice)) process.exit(0);

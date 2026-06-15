@@ -9,6 +9,7 @@ import {
   type PackageManager,
   cleanupRepo,
   downloadRepo,
+  ensureGitIdentity,
   exec,
   hasCommand,
   pmCommands,
@@ -31,13 +32,18 @@ export async function scaffold(
   const paths = Object.fromEntries(
     opts.components.map((c) => [c, c]),
   ) as ComponentPaths;
+  const defaultOrm = opts.components.includes('go') ? 'gorm' : 'prisma';
   const vars: GeneratorVars = {
     projectName: name,
     components: opts.components,
     paths,
     pm: pmCommands(pm),
-    orm: opts.orm ?? 'prisma',
+    orm: opts.orm ?? defaultOrm,
   };
+  const goOrm = opts.components.includes('go')
+    ? (opts.orm ?? 'gorm')
+    : undefined;
+  const goNeedsTidy = goOrm !== undefined && goOrm !== 'gorm';
   const isLocal = !!localRepo;
 
   await mkdir(dest, { recursive: true });
@@ -63,6 +69,7 @@ export async function scaffold(
 
     if (opts.git) {
       exec('git init', dest);
+      ensureGitIdentity(dest);
     }
 
     const spinner = p.spinner();
@@ -95,7 +102,7 @@ export async function scaffold(
     }
 
     if (opts.install) {
-      await installDeps(dest, opts.components, pm);
+      await installDeps(dest, opts.components, pm, { goNeedsTidy });
     }
 
     copyEnvExamples(dest, opts.components);
@@ -119,10 +126,15 @@ export async function scaffold(
   );
 }
 
+interface InstallDepsOptions {
+  goNeedsTidy?: boolean;
+}
+
 async function installDeps(
   dest: string,
   components: Component[],
   pm: PackageManager,
+  options: InstallDepsOptions = {},
 ): Promise<void> {
   const cmds = pmCommands(pm);
   const pmBin = pm === 'bun' ? 'bun' : pm;
@@ -205,6 +217,50 @@ async function installDeps(
           } else {
             p.log.warn(
               "Flutter not found — run 'cd mobile && flutter pub get' manually.",
+            );
+          }
+          break;
+        case 'go':
+          if (hasCommand('go')) {
+            if (options.goNeedsTidy) {
+              spinner.start('Tidying Go modules (ORM addon applied)');
+              exec('go mod tidy', join(dest, 'go'));
+              spinner.stop('Go modules tidied.');
+            } else {
+              spinner.start('Downloading Go modules');
+              exec('go mod download', join(dest, 'go'));
+              spinner.stop('Go modules downloaded.');
+            }
+          } else {
+            p.log.warn(
+              options.goNeedsTidy
+                ? "Go not found — run 'cd go && go mod tidy' manually."
+                : "Go not found — run 'cd go && go mod download' manually.",
+            );
+          }
+          break;
+        case 'rust':
+          if (hasCommand('cargo')) {
+            spinner.start('Fetching Rust crates (cargo fetch)');
+            exec('cargo fetch', join(dest, 'rust'));
+            spinner.stop('Rust crates fetched.');
+          } else {
+            p.log.warn(
+              "cargo not found — run 'cd rust && cargo fetch' manually.",
+            );
+          }
+          break;
+        case 'laravel':
+          if (hasCommand('composer')) {
+            spinner.start('Installing Laravel dependencies (composer install)');
+            exec(
+              'composer install --no-interaction --prefer-dist',
+              join(dest, 'laravel'),
+            );
+            spinner.stop('Laravel dependencies installed.');
+          } else {
+            p.log.warn(
+              "composer not found — run 'cd laravel && composer install' manually.",
             );
           }
           break;

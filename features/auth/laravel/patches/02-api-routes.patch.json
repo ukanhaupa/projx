@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "routes/api.php",
+  "anchor": "// projx-anchor: routes",
+  "insert": "Route::prefix('v1/auth')->group(__DIR__.'/auth.php');\n\n"
+}

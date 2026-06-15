@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "main.go",
+  "anchor": "// projx-anchor: imports",
+  "insert": "\tauthcron \"projx.local/go/internal/auth/cron\"\n\tauthhandlers \"projx.local/go/internal/auth/handlers\"\n\tauthmodels \"projx.local/go/internal/auth/models\"\n"
+}

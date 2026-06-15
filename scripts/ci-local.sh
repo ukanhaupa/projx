@@ -277,7 +277,59 @@ sec_express() {
   express_boot_smoke
 }
 
+sec_go() {
+  [ -d "$ROOT_DIR/go" ] || return 0
+  cd "$ROOT_DIR/go" || exit 1
+  run_step "go install" go mod download
+  gofmt -w .
+  local go_unformatted
+  go_unformatted="$(gofmt -l .)"
+  if [ -n "$go_unformatted" ]; then
+    xfail "gofmt could not normalize: $go_unformatted"
+    return 1
+  fi
+  run_step "go vet" go vet ./...
+  run_step "go build" go build ./...
+  if command -v golangci-lint >/dev/null 2>&1; then
+    run_step "go lint" golangci-lint run ./...
+  else
+    warn "golangci-lint not installed — skipping (install: brew install golangci-lint)"
+  fi
+  run_step "go test" go test -race -coverprofile=coverage.out ./...
+  run_step "go coverage" bash scripts/check-coverage.sh
+}
+
+sec_rust() {
+  [ -d "$ROOT_DIR/rust" ] || return 0
+  if ! command -v cargo >/dev/null 2>&1; then
+    warn "rust toolchain not installed, skipping (install: https://rustup.rs)"
+    return 0
+  fi
+  cd "$ROOT_DIR/rust" || exit 1
+  run_step "rust format" cargo fmt
+  run_step "rust lint" cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+  git diff --quiet -- . 2>/dev/null || warn "rust: cargo fmt/clippy rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+  run_step "rust test" cargo test --all-features
+}
+
+sec_laravel() {
+  [ -d "$ROOT_DIR/laravel" ] || return 0
+  if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1; then
+    warn "php/composer not installed, skipping (install: https://www.php.net + https://getcomposer.org)"
+    return 0
+  fi
+  cd "$ROOT_DIR/laravel" || exit 1
+  run_step "laravel install" composer install --no-interaction
+  run_step "laravel format" ./vendor/bin/pint
+  git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+  run_step "laravel tests" ./vendor/bin/pest --no-coverage
+}
+
 sec_vitejs() {
+  export VITE_OIDC_URL="${VITE_OIDC_URL:-http://localhost:8080}"
+  export VITE_OIDC_REALM="${VITE_OIDC_REALM:-master}"
+  export VITE_OIDC_CLIENT_ID="${VITE_OIDC_CLIENT_ID:-frontend}"
   run_js_component vitejs
   if [ -d "$ROOT_DIR/vitejs/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
     (cd "$ROOT_DIR/vitejs" && run_step "vitejs bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
@@ -292,6 +344,10 @@ sec_e2e() {
     run_js_component e2e
     return $?
   fi
+
+  export VITE_OIDC_URL="${VITE_OIDC_URL:-http://localhost:8080}"
+  export VITE_OIDC_REALM="${VITE_OIDC_REALM:-master}"
+  export VITE_OIDC_CLIENT_ID="${VITE_OIDC_CLIENT_ID:-frontend}"
 
   local backend_kind=""
   local port="$E2E_BACKEND_PORT"
@@ -527,6 +583,14 @@ sec_scaffold_fuzz() {
   run_step "scaffold-fuzz ($runs runs)" python3 "$ROOT_DIR/scripts/scaffold-fuzz.py" "${args[@]}"
 }
 
+sec_gen_compile() {
+  cd "$ROOT_DIR/cli" || exit 1
+  run_step "cli build for gen-compile" pm_run build
+  cd "$ROOT_DIR" || exit 1
+  local backend="${GEN_COMPILE_BACKEND:-all}"
+  run_step "gen-compile ($backend)" "$ROOT_DIR/scripts/ci-gen-compile.sh" "$backend"
+}
+
 sec_scripts() {
   cd "$ROOT_DIR" || exit 1
   shopt -s nullglob
@@ -546,6 +610,9 @@ available_sections() {
   [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
   [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
   [ -d "$ROOT_DIR/express" ] && found+=("express")
+  [ -d "$ROOT_DIR/go" ] && found+=("go")
+  [ -d "$ROOT_DIR/rust" ] && found+=("rust")
+  [ -d "$ROOT_DIR/laravel" ] && found+=("laravel")
   [ -d "$ROOT_DIR/vitejs" ] && found+=("vitejs")
   [ -d "$ROOT_DIR/nextjs" ] && found+=("nextjs")
   [ -d "$ROOT_DIR/mobile" ] && found+=("mobile")
@@ -554,6 +621,7 @@ available_sections() {
   [ -d "$ROOT_DIR/admin-panel" ] && found+=("admin_panel")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
   [ -f "$ROOT_DIR/scripts/scaffold-fuzz.py" ] && found+=("scaffold_fuzz")
+  [ -f "$ROOT_DIR/scripts/ci-gen-compile.sh" ] && found+=("gen_compile")
   compgen -G "$ROOT_DIR/scripts/*.test.sh" >/dev/null 2>&1 && found+=("scripts")
   printf '%s\n' "${found[@]}"
 }
@@ -587,6 +655,11 @@ elif [[ "${1:-}" == "changed" ]]; then
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
       scaffold_fuzz)
         { has_changes_in "cli/" || has_changes_in "addons/" || has_changes_in "features/"; } && SECTIONS+=("$s") ;;
+      gen_compile)
+        { has_changes_in "cli/" || has_changes_in "addons/" || has_changes_in "features/" ||
+          has_changes_in "go/" || has_changes_in "rust/" || has_changes_in "laravel/" ||
+          has_changes_in "fastapi/" || has_changes_in "fastify/" ||
+          has_changes_in "scripts/ci-gen-compile.sh"; } && SECTIONS+=("$s") ;;
       scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;
       *) has_changes_in "$s/" && SECTIONS+=("$s") ;;
     esac

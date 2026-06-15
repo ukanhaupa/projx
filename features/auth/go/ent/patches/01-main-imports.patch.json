@@ -1,0 +1,6 @@
+{
+  "type": "text",
+  "file": "main.go",
+  "anchor": "// projx-anchor: imports",
+  "insert": "\t\"projx.local/go/internal/auth/cron\"\n\t\"projx.local/go/internal/auth/handlers\"\n\t\"projx.local/go/internal/auth/mailer\"\n\tauthservice \"projx.local/go/internal/auth/service\"\n"
+}

@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Exceptions\AppException;
+use App\Exceptions\Handler;
+use App\Http\Middleware\RequestId;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            RequestId::class,
+        ]);
+
+        $middleware->api(prepend: [
+            Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
+
+        $middleware->api(append: [
+            RequestId::class,
+        ]);
+
+        $middleware->trustProxies(at: '*');
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontReport([AppException::class]);
+
+        $exceptions->render(function (Throwable $e, Request $request): ?JsonResponse {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            return Handler::render($e, $request);
+        });
+    })
+    ->create();

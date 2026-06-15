@@ -1462,4 +1462,80 @@ describe('gen entity', () => {
     const afterContent = await readFile(testPath, 'utf-8');
     expect(afterContent.startsWith('// custom test\n')).toBe(true);
   });
+
+  it('renders ?-suffixed fields as optional for FastAPI, frontend, and mobile', async () => {
+    dest = join(tmpdir(), `projx-gen-opt-fastapi-${Date.now()}`);
+    await scaffold(
+      {
+        name: 'gen-app',
+        components: ['fastapi', 'vitejs', 'mobile'],
+        git: true,
+        install: false,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'title:string,note?:text,qty?:number,active?:boolean,extra?:json',
+      'fastapi',
+    );
+
+    const model = await readFile(
+      join(dest, 'fastapi/src/entities/invoice/_model.py'),
+      'utf-8',
+    );
+    expect(model).toContain('title = Column(String(255), nullable=False)');
+    expect(model).toContain('note = Column(Text, nullable=True)');
+    expect(model).toContain('qty = Column(Integer, nullable=True)');
+    expect(model).toContain('active = Column(Boolean, nullable=True)');
+
+    const iface = await readFile(
+      join(dest, 'vitejs/src/types/invoice.ts'),
+      'utf-8',
+    );
+    expect(iface).toContain('title: string;');
+    expect(iface).toContain('note: string | null;');
+    expect(iface).toContain('qty: number | null;');
+
+    const dart = await readFile(
+      join(dest, 'mobile/lib/entities/invoice/model.dart'),
+      'utf-8',
+    );
+    expect(dart).toContain('final String? note;');
+    expect(dart).toContain('final int? qty;');
+    expect(dart).toContain('this.note,');
+    expect(dart).toContain('required this.title,');
+  });
+
+  it('renders ?-suffixed fields as optional for Fastify + Prisma + TypeBox', async () => {
+    dest = join(tmpdir(), `projx-gen-opt-fastify-${Date.now()}`);
+    await scaffold(
+      { name: 'gen-app', components: ['fastify'], git: true, install: false },
+      dest,
+      REPO_DIR,
+    );
+
+    await gen(
+      dest,
+      'invoice',
+      'title:string,note?:text,qty?:number,extra?:json',
+    );
+
+    const prisma = await readFile(
+      join(dest, 'fastify/prisma/schema.prisma'),
+      'utf-8',
+    );
+    expect(prisma).toMatch(/note\s+String\?/);
+    expect(prisma).toMatch(/qty\s+Int\?/);
+    expect(prisma).toMatch(/extra\s+Json\?/);
+
+    const schemas = await readFile(
+      join(dest, 'fastify/src/modules/invoice/schemas.ts'),
+      'utf-8',
+    );
+    expect(schemas).toContain('Type.Optional(');
+  });
 });

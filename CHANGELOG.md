@@ -2,6 +2,26 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-06-02
+
+### Added
+
+- **Go backend template** (`go/`) — Chi + GORM + entity registry + auto-routes, with JWT verifier (alg-confusion guarded), CORS, per-user rate limit (X-RateLimit headers), apperr → `{detail, request_id}` envelope, `/api/v1/_meta/schemas` sync emitter, distroless Dockerfile. `--auth=go` ports the full auth feature across **gorm/sqlc/ent** ORMs (signup / login / MFA TOTP+recovery / refresh rotation+replay detection / email verify / password reset / mailer / cron cleanup).
+- **Rust backend template** (`rust/`) — Axum + SeaORM + tower middleware (`RequestId` task-local, CORS, logging, panic-recoverer), `ServiceConfig` (AES-256-GCM, NIST GCM TC13 wire-format compat with Node/Python/Go), per-user rate-limit, sync emitter, distroless runtime. `--auth=rust` lands the same auth surface.
+- **Laravel (PHP 8.3+) backend template** (`laravel/`) — Laravel 11 + Sanctum + Eloquent + Pest + larastan, `RequestId` middleware, exception handler emitting `{detail, request_id}`, FrankenPHP-based Dockerfile, queue worker config, `service_configs` migration. `--auth=laravel` ports the auth feature with Eloquent.
+- **Two new Go ORM addons**: `sqlc/` (typed-query generator) and `ent/` (schema-as-code). Each ships its own `internal/db/client.go`, entity-registry adapter preserving the GORM auto-routes contract (pagination / filter / search / order_by / soft-delete / lifecycle hooks / bulk ops), gen-entity templates, and Dockerfile/setup wiring. `addons/orms/_shared/` consolidates auto_routes + apperr/errors across sqlc + ent (single source of truth).
+
+### Changed
+
+- `applyOrmAddon` now supports `framework: 'go' | 'laravel' | 'rust'` in addition to the Node frameworks; Go addons can declare `gomodOverrides` (add / remove require entries) and ship a multi-stage Go Dockerfile (`golang:1.25-alpine` builder → `gcr.io/distroless/static-debian12:nonroot` runtime).
+- CLI surface extended: `ORM_PROVIDERS` adds `gorm`, `sqlc`, `ent`, `seaorm`, `eloquent` with backend-family validation (`--orm=seaorm` requires `--components=rust`, etc.). `BACKEND_COMPONENTS` now lists `fastapi | fastify | express | go | rust | laravel`. `doctor` checks Go/Rust/PHP toolchain versions. `detect` recognizes Go (go.mod), Rust (Cargo.toml + axum), Laravel (composer.json + laravel/framework), sqlc (sqlc.yaml), ent (ent/schema/). `gen entity` dispatches per ORM (`appendGoEntity`, `appendSqlcEntity`, `appendEntEntity`, etc.).
+- Templates (`ci.yml.ejs`, `setup.sh.ejs`, `docker-compose.yml.ejs`, `pre-commit.ejs`, `README.md.ejs`) and repo-level CI (`.github/workflows/ci.yml`, `scripts/ci-local.sh`, `.githooks/pre-commit`) all carry rust + laravel + go (with all 3 ORMs) sections.
+
+### Security
+
+- Go sqlc auth port: JWT verifier pins `*jwt.SigningMethodHMAC` type + `jwt.WithValidMethods()` to match gorm/ent — closes the RS256-vs-HS256 alg-confusion vector.
+- Laravel auth port: removed `if (env('APP_ENV') !== 'production') $response['reset_token'] = …` branch that leaked raw password-reset tokens in non-prod responses. Tokens travel only via the email channel.
+
 ## [1.8.1] - 2026-06-14
 
 ### Added
