@@ -116,3 +116,73 @@ async fn shutdown_signal() {
         _ = terminate => tracing::info!("received SIGTERM, shutting down"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use tower::ServiceExt;
+
+    fn mock_db() -> Arc<DatabaseConnection> {
+        Arc::new(
+            MockDatabase::new(DatabaseBackend::Postgres)
+                .append_exec_results([MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                }])
+                .into_connection(),
+        )
+    }
+
+    #[tokio::test]
+    async fn build_router_serves_health() {
+        let app = build_router(mock_db());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn build_router_propagates_request_id_header() {
+        let app = build_router(mock_db());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp.headers().get("x-request-id").is_some());
+    }
+
+    #[tokio::test]
+    async fn build_router_unknown_route_404() {
+        let app = build_router(mock_db());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/no-such-path")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn load_dotenv_ok_when_absent() {
+        assert!(load_dotenv().is_ok());
+    }
+}

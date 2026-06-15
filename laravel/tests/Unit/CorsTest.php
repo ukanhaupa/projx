@@ -7,18 +7,11 @@ use Illuminate\Http\Request;
 
 function setCorsOrigins(string $value): void
 {
-    putenv('CORS_ALLOW_ORIGINS='.$value);
-    $_ENV['CORS_ALLOW_ORIGINS'] = $value;
-    $_SERVER['CORS_ALLOW_ORIGINS'] = $value;
+    config(['security.cors_allow_origins' => $value]);
 }
 
-afterEach(function (): void {
-    putenv('CORS_ALLOW_ORIGINS');
-    unset($_ENV['CORS_ALLOW_ORIGINS'], $_SERVER['CORS_ALLOW_ORIGINS']);
-});
-
 it('passes through when no Origin header is set', function (): void {
-    $mw = new Cors();
+    $mw = new Cors;
     $req = Request::create('/x', 'GET');
     $resp = $mw->handle($req, fn () => response('ok'));
     expect($resp->getStatusCode())->toBe(200);
@@ -27,7 +20,7 @@ it('passes through when no Origin header is set', function (): void {
 
 it('allows an origin in the allow-list', function (): void {
     setCorsOrigins('http://localhost:5173,https://app.test');
-    $mw = new Cors();
+    $mw = new Cors;
     $req = Request::create('/x', 'GET');
     $req->headers->set('Origin', 'https://app.test');
 
@@ -38,7 +31,7 @@ it('allows an origin in the allow-list', function (): void {
 
 it('rejects an origin that is not allow-listed with 403', function (): void {
     setCorsOrigins('http://localhost:5173');
-    $mw = new Cors();
+    $mw = new Cors;
     $req = Request::create('/x', 'GET');
     $req->headers->set('Origin', 'https://evil.test');
 
@@ -48,7 +41,7 @@ it('rejects an origin that is not allow-listed with 403', function (): void {
 
 it('responds 204 on a valid preflight', function (): void {
     setCorsOrigins('http://localhost:5173');
-    $mw = new Cors();
+    $mw = new Cors;
     $req = Request::create('/x', 'OPTIONS');
     $req->headers->set('Origin', 'http://localhost:5173');
     $req->headers->set('Access-Control-Request-Method', 'POST');
@@ -61,7 +54,7 @@ it('responds 204 on a valid preflight', function (): void {
 
 it('rejects a preflight from a denied origin', function (): void {
     setCorsOrigins('http://localhost:5173');
-    $mw = new Cors();
+    $mw = new Cors;
     $req = Request::create('/x', 'OPTIONS');
     $req->headers->set('Origin', 'https://evil.test');
     $req->headers->set('Access-Control-Request-Method', 'POST');

@@ -23,6 +23,8 @@ paths = [
   # Test-only deterministic fixtures used by CI to exercise crypto round-trips.
   # These keys are committed deliberately; rotating them breaks the test suite.
   '''.*/\.env\.test$''',
+  # Laravel loads .env.testing when APP_ENV=testing; committed test fixture.
+  '''.*/\.env\.testing$''',
   # Build artefacts (regenerable, never committed) — copies of *.test.ts.
   '''.*/dist/.*''',
   # Next.js build output + coverage artefacts (regenerable, gitignored).

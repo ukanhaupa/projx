@@ -11,10 +11,15 @@ use RuntimeException;
 final class ServiceConfig
 {
     private const IV_LEN = 12;
+
     private const TAG_LEN = 16;
+
     private const CACHE_TTL_SECONDS = 600;
+
     private const CIPHER = 'aes-256-gcm';
+
     private const TABLE = 'service_configs';
+
     private const CACHE_PREFIX = 'service-configs:';
 
     private readonly string $key;
@@ -24,7 +29,7 @@ final class ServiceConfig
         private readonly CacheRepository $cache,
         ?string $encodedKey = null,
     ) {
-        $raw = $encodedKey ?? (string) env('CRED_ENCRYPTION_KEY', '');
+        $raw = $encodedKey ?? (string) config('security.cred_encryption_key', '');
         if ($raw === '') {
             throw new RuntimeException('CRED_ENCRYPTION_KEY is required.');
         }

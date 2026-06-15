@@ -132,7 +132,7 @@ if [ -n "$LARAVEL_FILES" ]; then
     REL_PHP=$(echo "$LARAVEL_FILES" | sed 's|^laravel/||')
     # shellcheck disable=SC2086
     echo "$REL_PHP" | xargs ./vendor/bin/pint
-    ./vendor/bin/phpstan analyse --no-progress --level=8
+    ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
     cd ..
     echo "$LARAVEL_FILES" | xargs git add
   else

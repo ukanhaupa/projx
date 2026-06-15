@@ -22,6 +22,15 @@ pub struct VerifierConfig {
     pub audience: Option<String>,
 }
 
+struct EnvParts {
+    provider_name: String,
+    jwks_url: String,
+    secret: Option<String>,
+    algorithms: String,
+    issuer: Option<String>,
+    audience: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,
@@ -80,29 +89,38 @@ impl Verifier {
     }
 
     pub fn from_env() -> Result<Self, AppError> {
-        let provider_name = std::env::var("JWT_PROVIDER").unwrap_or_default();
-        let jwks_url = std::env::var("JWT_JWKS_URL").unwrap_or_default();
-        let provider = if provider_name == "jwks"
-            || (provider_name.is_empty() && !jwks_url.is_empty())
+        Self::from_parts(EnvParts {
+            provider_name: std::env::var("JWT_PROVIDER").unwrap_or_default(),
+            jwks_url: std::env::var("JWT_JWKS_URL").unwrap_or_default(),
+            secret: std::env::var("JWT_SECRET").ok(),
+            algorithms: std::env::var("JWT_ALGORITHMS").unwrap_or_default(),
+            issuer: std::env::var("JWT_ISSUER").ok(),
+            audience: std::env::var("JWT_AUDIENCE").ok(),
+        })
+    }
+
+    fn from_parts(parts: EnvParts) -> Result<Self, AppError> {
+        let provider = if parts.provider_name == "jwks"
+            || (parts.provider_name.is_empty() && !parts.jwks_url.is_empty())
         {
-            if jwks_url.is_empty() {
+            if parts.jwks_url.is_empty() {
                 return Err(AppError::Validation(
                     "JWT_JWKS_URL is required for jwks".into(),
                 ));
             }
-            Provider::Jwks(jwks_url)
+            Provider::Jwks(parts.jwks_url)
         } else {
-            let secret = std::env::var("JWT_SECRET").map_err(|_| {
+            let secret = parts.secret.filter(|s| !s.is_empty()).ok_or_else(|| {
                 AppError::Validation("JWT_SECRET is required when provider=shared_secret".into())
             })?;
             Provider::SharedSecret(secret.into_bytes())
         };
         let algs = parse_algorithms(
-            &std::env::var("JWT_ALGORITHMS").unwrap_or_default(),
+            &parts.algorithms,
             matches!(provider, Provider::SharedSecret(_)),
         )?;
-        let issuer = std::env::var("JWT_ISSUER").ok().filter(|s| !s.is_empty());
-        let audience = std::env::var("JWT_AUDIENCE").ok().filter(|s| !s.is_empty());
+        let issuer = parts.issuer.filter(|s| !s.is_empty());
+        let audience = parts.audience.filter(|s| !s.is_empty());
         Self::new(VerifierConfig {
             provider,
             algorithms: algs,
@@ -378,5 +396,220 @@ mod tests {
             audience: None,
         })
         .is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_malformed_token() {
+        let v = shared(b"k");
+        let err = v.verify("not.a.jwt").await.unwrap_err();
+        assert_eq!(err.detail(), "malformed token");
+    }
+
+    #[tokio::test]
+    async fn rejects_not_yet_valid_nbf() {
+        let exp = now_secs() + 600;
+        let nbf = now_secs() + 300;
+        let claims = serde_json::json!({"sub": "u", "exp": exp, "nbf": nbf});
+        let tok = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(b"k"),
+        )
+        .unwrap();
+        let v = shared(b"k");
+        let err = v.verify(&tok).await.unwrap_err();
+        assert_eq!(err.detail(), "token not yet valid");
+    }
+
+    #[tokio::test]
+    async fn rejects_missing_required_claim() {
+        let claims = serde_json::json!({"sub": "u"});
+        let tok = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(b"k"),
+        )
+        .unwrap();
+        let v = shared(b"k");
+        let err = v.verify(&tok).await.unwrap_err();
+        assert_eq!(err.detail(), "token missing required claim");
+    }
+
+    #[tokio::test]
+    async fn enforces_audience() {
+        let v = Verifier::new(VerifierConfig {
+            provider: Provider::SharedSecret(b"k".to_vec()),
+            algorithms: vec![Algorithm::HS256],
+            issuer: None,
+            audience: Some("api".into()),
+        })
+        .unwrap();
+        let exp = now_secs() + 600;
+        let bad = serde_json::json!({"sub": "u", "exp": exp, "aud": "other"});
+        let bad_tok = encode(
+            &Header::new(Algorithm::HS256),
+            &bad,
+            &EncodingKey::from_secret(b"k"),
+        )
+        .unwrap();
+        assert!(v.verify(&bad_tok).await.is_err());
+        let good = serde_json::json!({"sub": "u", "exp": exp, "aud": "api"});
+        let good_tok = encode(
+            &Header::new(Algorithm::HS256),
+            &good,
+            &EncodingKey::from_secret(b"k"),
+        )
+        .unwrap();
+        assert!(v.verify(&good_tok).await.is_ok());
+    }
+
+    fn jwks_verifier() -> Verifier {
+        Verifier::new(VerifierConfig {
+            provider: Provider::Jwks("https://issuer.example/jwks".into()),
+            algorithms: vec![Algorithm::HS256],
+            issuer: None,
+            audience: None,
+        })
+        .unwrap()
+    }
+
+    fn kid_token(secret: &[u8], kid: &str, sub: &str) -> String {
+        let mut header = Header::new(Algorithm::HS256);
+        header.kid = Some(kid.to_string());
+        let exp = now_secs() + 600;
+        let claims = serde_json::json!({"sub": sub, "exp": exp});
+        encode(&header, &claims, &EncodingKey::from_secret(secret)).unwrap()
+    }
+
+    #[tokio::test]
+    async fn jwks_unknown_kid_before_install() {
+        let v = jwks_verifier();
+        let tok = kid_token(b"s", "key-1", "u");
+        let err = v.verify(&tok).await.unwrap_err();
+        assert_eq!(err.detail(), "jwks: kid not found");
+    }
+
+    #[tokio::test]
+    async fn jwks_missing_kid_in_header() {
+        let v = jwks_verifier();
+        let tok = encode(
+            &Header::new(Algorithm::HS256),
+            &serde_json::json!({"sub": "u", "exp": now_secs() + 600}),
+            &EncodingKey::from_secret(b"s"),
+        )
+        .unwrap();
+        let err = v.verify(&tok).await.unwrap_err();
+        assert_eq!(err.detail(), "token missing kid for jwks lookup");
+    }
+
+    #[tokio::test]
+    async fn jwks_resolves_installed_key_and_verifies() {
+        let v = jwks_verifier();
+        let mut keys = HashMap::new();
+        keys.insert(
+            "key-1".to_string(),
+            DecodingKey::from_secret(b"jwks-secret"),
+        );
+        v.install_jwks(keys).await;
+        let tok = kid_token(b"jwks-secret", "key-1", "subject-7");
+        let claims = v.verify(&tok).await.unwrap();
+        assert_eq!(claims.sub, "subject-7");
+    }
+
+    #[tokio::test]
+    async fn jwks_installed_but_wrong_kid_not_found() {
+        let v = jwks_verifier();
+        let mut keys = HashMap::new();
+        keys.insert("key-1".to_string(), DecodingKey::from_secret(b"s"));
+        v.install_jwks(keys).await;
+        let tok = kid_token(b"s", "other-kid", "u");
+        let err = v.verify(&tok).await.unwrap_err();
+        assert_eq!(err.detail(), "jwks: kid not found");
+    }
+
+    mod from_parts {
+        use super::super::*;
+
+        fn base() -> EnvParts {
+            EnvParts {
+                provider_name: String::new(),
+                jwks_url: String::new(),
+                secret: None,
+                algorithms: String::new(),
+                issuer: None,
+                audience: None,
+            }
+        }
+
+        #[test]
+        fn shared_secret_with_issuer() {
+            let v = Verifier::from_parts(EnvParts {
+                secret: Some("topsecret".into()),
+                issuer: Some("me".into()),
+                ..base()
+            })
+            .unwrap();
+            assert!(matches!(v.cfg.provider, Provider::SharedSecret(_)));
+            assert_eq!(v.cfg.issuer.as_deref(), Some("me"));
+            assert_eq!(v.cfg.algorithms, vec![Algorithm::HS256]);
+        }
+
+        #[test]
+        fn missing_secret_errors() {
+            assert!(Verifier::from_parts(base()).is_err());
+        }
+
+        #[test]
+        fn blank_secret_errors() {
+            assert!(Verifier::from_parts(EnvParts {
+                secret: Some(String::new()),
+                ..base()
+            })
+            .is_err());
+        }
+
+        #[test]
+        fn jwks_inferred_from_url() {
+            let v = Verifier::from_parts(EnvParts {
+                jwks_url: "https://issuer/jwks".into(),
+                ..base()
+            })
+            .unwrap();
+            assert!(matches!(v.cfg.provider, Provider::Jwks(_)));
+            assert_eq!(v.cfg.algorithms, vec![Algorithm::RS256]);
+        }
+
+        #[test]
+        fn jwks_provider_requires_url() {
+            assert!(Verifier::from_parts(EnvParts {
+                provider_name: "jwks".into(),
+                ..base()
+            })
+            .is_err());
+        }
+
+        #[test]
+        fn explicit_algorithms_parsed() {
+            let v = Verifier::from_parts(EnvParts {
+                secret: Some("s".into()),
+                algorithms: "HS256,RS256".into(),
+                ..base()
+            })
+            .unwrap();
+            assert_eq!(v.cfg.algorithms, vec![Algorithm::HS256, Algorithm::RS256]);
+        }
+
+        #[test]
+        fn blank_issuer_and_audience_dropped() {
+            let v = Verifier::from_parts(EnvParts {
+                secret: Some("s".into()),
+                issuer: Some(String::new()),
+                audience: Some("  ".into()),
+                ..base()
+            })
+            .unwrap();
+            assert!(v.cfg.issuer.is_none());
+            assert_eq!(v.cfg.audience.as_deref(), Some("  "));
+        }
     }
 }

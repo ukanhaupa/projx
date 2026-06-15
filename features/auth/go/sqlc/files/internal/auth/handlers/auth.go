@@ -10,6 +10,7 @@ import (
 	"projx.local/go/internal/apperr"
 	"projx.local/go/internal/auth"
 	authservice "projx.local/go/internal/auth/service"
+	"projx.local/go/internal/requestid"
 	"projx.local/go/internal/uuid"
 )
 
@@ -114,7 +115,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	go h.sendInitialVerification(user.ID, user.Email)
+	go h.sendInitialVerification(requestid.FromContext(r.Context()), user.ID, user.Email)
 	return writeJSON(w, http.StatusCreated, map[string]any{
 		"user":          serializeUser(user),
 		"token":         session.Tokens.AccessToken,
@@ -140,7 +141,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperr.AppError{Code: "rate_limited", Detail: "too many failed attempts. try again later.", Status: http.StatusTooManyRequests}
 	}
 	if !authservice.VerifyPassword(body.Password, user.PasswordHash) {
-		_, _, _ = h.svc.Querier().RecordLoginFailure(r.Context(), user.ID, LoginMaxAttempts, LoginLockoutMinutes)
+		_, locked, ferr := h.svc.Querier().RecordLoginFailure(r.Context(), user.ID, LoginMaxAttempts, LoginLockoutMinutes)
+		if ferr != nil {
+			return ferr
+		}
+		if locked.Valid && locked.Time.After(time.Now().UTC()) {
+			return apperr.AppError{Code: "rate_limited", Detail: "too many failed attempts. try again later.", Status: http.StatusTooManyRequests}
+		}
 		return apperr.Unauthorized("invalid credentials")
 	}
 	if user.MFAEnabled {
@@ -207,7 +214,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 	session, err := h.svc.Querier().GetSessionByID(r.Context(), sessionID)
 	if err != nil {
 		if isNotFound(err) {
-			return writeJSON(w, http.StatusOK, okStatus())
+			return writeNoContent(w)
 		}
 		return err
 	}
@@ -217,7 +224,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 	if err := h.svc.Querier().RevokeSession(r.Context(), sessionID); err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, okStatus())
+	return writeNoContent(w)
 }
 
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) error {
@@ -250,7 +257,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) error {
 	if err := h.svc.Querier().RevokeSessionsForUser(r.Context(), user.ID, except); err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, okStatus())
+	return writeNoContent(w)
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
@@ -317,7 +324,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	link, err := h.mailer.BuildResetLink(r.Context(), raw)
 	if err == nil {
 		if err := h.mailer.SendPasswordReset(r.Context(), user.Email, link); err != nil {
-			slog.Warn("password reset email failed", "error", err)
+			slog.Warn("password reset email failed", "error", err, "request_id", requestid.FromContext(r.Context()), "user_id", user.ID)
 		}
 	}
 	return writeJSON(w, http.StatusOK, message)
@@ -348,7 +355,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) error {
 	if err := h.svc.Querier().RevokeSessionsForUser(r.Context(), rec.UserID, sqlNullStringFrom("")); err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, okStatus())
+	return writeNoContent(w)
 }
 
 func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
@@ -395,14 +402,14 @@ func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) err
 		link, err := h.mailer.BuildVerificationLink(r.Context(), raw)
 		if err == nil {
 			if err := h.mailer.SendVerification(r.Context(), user.Email, link); err != nil {
-				slog.Warn("verification email failed", "error", err)
+				slog.Warn("verification email failed", "error", err, "request_id", requestid.FromContext(r.Context()), "user_id", user.ID)
 			}
 		}
 	}
 	return writeJSON(w, http.StatusAccepted, map[string]any{"sent": true})
 }
 
-func (h *Handler) sendInitialVerification(userID, email string) {
+func (h *Handler) sendInitialVerification(requestID, userID, email string) {
 	raw, err := authservice.RandomToken(32)
 	if err != nil {
 		return
@@ -414,7 +421,7 @@ func (h *Handler) sendInitialVerification(userID, email string) {
 		TokenHash: authservice.HashToken(raw),
 		ExpiresAt: time.Now().UTC().Add(VerifyTokenTTL),
 	}); err != nil {
-		slog.Warn("initial verification token create failed", "error", err)
+		slog.Warn("initial verification token create failed", "error", err, "request_id", requestID, "user_id", userID)
 		return
 	}
 	link, err := h.mailer.BuildVerificationLink(ctx, raw)
@@ -422,7 +429,7 @@ func (h *Handler) sendInitialVerification(userID, email string) {
 		return
 	}
 	if err := h.mailer.SendVerification(ctx, email, link); err != nil {
-		slog.Warn("initial verification email failed", "error", err)
+		slog.Warn("initial verification email failed", "error", err, "request_id", requestID, "user_id", userID)
 	}
 }
 

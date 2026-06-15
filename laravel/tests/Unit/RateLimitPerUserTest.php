@@ -8,10 +8,12 @@ use Illuminate\Cache\RateLimiter;
 use Illuminate\Http\Request;
 
 beforeEach(function (): void {
+    /** @var Tests\TestCase $this */
     $this->limiter = Mockery::mock(RateLimiter::class);
 });
 
 it('passes through when no AuthUser is attached', function (): void {
+    /** @var Tests\TestCase $this */
     $this->limiter->shouldNotReceive('hit');
     $mw = new RateLimitPerUser($this->limiter);
     $req = Request::create('/x', 'GET');
@@ -20,6 +22,7 @@ it('passes through when no AuthUser is attached', function (): void {
 });
 
 it('hits the limiter and writes X-RateLimit headers on success', function (): void {
+    /** @var Tests\TestCase $this */
     $this->limiter->shouldReceive('tooManyAttempts')->with('rl:user:u-1', 120)->andReturnFalse();
     $this->limiter->shouldReceive('hit')->with('rl:user:u-1', 60)->once();
     $this->limiter->shouldReceive('retriesLeft')->with('rl:user:u-1', 120)->andReturn(119);
@@ -35,6 +38,7 @@ it('hits the limiter and writes X-RateLimit headers on success', function (): vo
 });
 
 it('returns 429 with Retry-After when over the limit', function (): void {
+    /** @var Tests\TestCase $this */
     $this->limiter->shouldReceive('tooManyAttempts')->andReturnTrue();
     $this->limiter->shouldReceive('availableIn')->andReturn(42);
 
@@ -50,6 +54,7 @@ it('returns 429 with Retry-After when over the limit', function (): void {
 });
 
 it('honours custom max-attempts + decay arguments', function (): void {
+    /** @var Tests\TestCase $this */
     $this->limiter->shouldReceive('tooManyAttempts')->with('rl:user:u', 5)->andReturnFalse();
     $this->limiter->shouldReceive('hit')->with('rl:user:u', 30)->once();
     $this->limiter->shouldReceive('retriesLeft')->andReturn(4);

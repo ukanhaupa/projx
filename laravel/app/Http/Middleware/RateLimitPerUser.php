@@ -13,11 +13,10 @@ use Symfony\Component\HttpFoundation\Response;
 final class RateLimitPerUser
 {
     private const DEFAULT_MAX_ATTEMPTS = 120;
+
     private const DEFAULT_DECAY_SECONDS = 60;
 
-    public function __construct(private readonly RateLimiter $limiter)
-    {
-    }
+    public function __construct(private readonly RateLimiter $limiter) {}
 
     public function handle(
         Request $request,

@@ -5,20 +5,29 @@ declare(strict_types=1);
 use App\Services\JwtVerifier;
 use Firebase\JWT\JWT;
 
+/**
+ * @return array{0: string, 1: string}
+ */
 function rsaKeypair(): array
 {
     $res = openssl_pkey_new([
         'private_key_bits' => 2048,
         'private_key_type' => OPENSSL_KEYTYPE_RSA,
     ]);
+    if ($res === false) {
+        throw new RuntimeException('failed to generate RSA key');
+    }
     openssl_pkey_export($res, $private);
     $details = openssl_pkey_get_details($res);
+    if ($details === false) {
+        throw new RuntimeException('failed to read RSA key details');
+    }
 
-    return [$private, $details['key']];
+    return [(string) $private, (string) $details['key']];
 }
 
 it('verifies a valid HS256 token', function (): void {
-    $secret = 'topsecret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $now = time();
     $token = JWT::encode([
         'sub' => 'user-1',
@@ -44,7 +53,7 @@ it('verifies a valid HS256 token', function (): void {
 });
 
 it('rejects an expired token', function (): void {
-    $secret = 'topsecret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $token = JWT::encode([
         'sub' => 'u',
         'iat' => time() - 3600,
@@ -52,18 +61,18 @@ it('rejects an expired token', function (): void {
     ], $secret, 'HS256');
 
     $v = new JwtVerifier(JwtVerifier::PROVIDER_SHARED_SECRET, ['HS256'], $secret);
-    expect(fn () => $v->verify($token))->toThrow(Throwable::class);
+    expect(fn () => $v->verify($token))->toThrow(UnexpectedValueException::class);
 });
 
 it('rejects a token missing the sub claim', function (): void {
-    $secret = 'topsecret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $token = JWT::encode(['iat' => time(), 'exp' => time() + 60], $secret, 'HS256');
     $v = new JwtVerifier(JwtVerifier::PROVIDER_SHARED_SECRET, ['HS256'], $secret);
     expect(fn () => $v->verify($token))->toThrow(UnexpectedValueException::class);
 });
 
 it('rejects a wrong issuer', function (): void {
-    $secret = 'topsecret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $token = JWT::encode([
         'sub' => 'u', 'iss' => 'wrong',
         'iat' => time(), 'exp' => time() + 60,
@@ -73,7 +82,7 @@ it('rejects a wrong issuer', function (): void {
 });
 
 it('rejects a wrong audience', function (): void {
-    $secret = 'topsecret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $token = JWT::encode([
         'sub' => 'u', 'aud' => 'other',
         'iat' => time(), 'exp' => time() + 60,
@@ -120,6 +129,52 @@ it('panics when algorithm list is empty', function (): void {
         ->toThrow(RuntimeException::class);
 });
 
+it('builds a shared_secret verifier from config and verifies a token', function (): void {
+    config([
+        'jwt.provider' => '',
+        'jwt.algorithms' => 'HS256',
+        'jwt.secret' => 'test-hs256-secret-key-0123456789abcdef',
+        'jwt.jwks_url' => '',
+        'jwt.issuer' => 'iss-cfg',
+        'jwt.audience' => 'aud-cfg',
+    ]);
+
+    $token = JWT::encode([
+        'sub' => 'cfg-user',
+        'iss' => 'iss-cfg',
+        'aud' => 'aud-cfg',
+        'iat' => time(),
+        'exp' => time() + 60,
+    ], 'test-hs256-secret-key-0123456789abcdef', 'HS256');
+
+    $claims = JwtVerifier::fromConfig()->verify($token);
+    expect($claims['sub'])->toBe('cfg-user');
+});
+
+it('infers the jwks provider from config when a jwks url is present', function (): void {
+    config([
+        'jwt.provider' => '',
+        'jwt.algorithms' => '',
+        'jwt.secret' => '',
+        'jwt.jwks_url' => 'https://issuer.test/.well-known/jwks.json',
+        'jwt.issuer' => '',
+        'jwt.audience' => '',
+    ]);
+
+    [$private, $public] = rsaKeypair();
+    $kid = 'kc';
+    $token = JWT::encode(['sub' => 'jwks-user', 'iat' => time(), 'exp' => time() + 60], $private, 'RS256', $kid);
+
+    $jwks = ['keys' => [rsaPublicJwk($public, $kid)]];
+    $tmp = tempnam(sys_get_temp_dir(), 'jwks');
+    file_put_contents($tmp, json_encode($jwks));
+    config(['jwt.jwks_url' => 'file://'.$tmp]);
+
+    $claims = JwtVerifier::fromConfig()->verify($token);
+    expect($claims['sub'])->toBe('jwks-user');
+    @unlink($tmp);
+});
+
 it('verifies RS256 tokens via parsed JWKS', function (): void {
     [$private, $public] = rsaKeypair();
     $kid = 'k1';
@@ -147,10 +202,19 @@ it('verifies RS256 tokens via parsed JWKS', function (): void {
     @unlink($tmp);
 });
 
+/**
+ * @return array{kty: string, kid: string, use: string, alg: string, n: string, e: string}
+ */
 function rsaPublicJwk(string $pem, string $kid): array
 {
     $key = openssl_pkey_get_public($pem);
+    if ($key === false) {
+        throw new RuntimeException('failed to parse public key');
+    }
     $details = openssl_pkey_get_details($key);
+    if ($details === false) {
+        throw new RuntimeException('failed to read public key details');
+    }
     $n = rtrim(strtr(base64_encode($details['rsa']['n']), '+/', '-_'), '=');
     $e = rtrim(strtr(base64_encode($details['rsa']['e']), '+/', '-_'), '=');
 

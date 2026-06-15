@@ -15,9 +15,11 @@ final class AuthUser
         public readonly string $role = '',
         public readonly array $permissions = [],
         public readonly string $sid = '',
-    ) {
-    }
+    ) {}
 
+    /**
+     * @param  array<string, mixed>  $claims
+     */
     public static function fromClaims(array $claims): self
     {
         $perms = $claims['permissions'] ?? [];

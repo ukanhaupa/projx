@@ -29,6 +29,7 @@ final class QueryBuilder
         $query = $model->newQuery();
 
         if ($this->config->softDelete && $this->isTruthy($request->query('include_deleted'))) {
+            /** @phpstan-ignore method.notFound (SoftDeletes macro on a runtime-resolved model) */
             $query->withTrashed();
         }
 

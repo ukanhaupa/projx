@@ -21,6 +21,7 @@ beforeEach(function (): void {
 });
 
 it('lists posts paginated and ordered by created_at desc', function (): void {
+    /** @var Tests\TestCase $this */
     Post::factory()->count(3)->create();
 
     $response = $this->getJson('/api/v1/posts');
@@ -33,6 +34,7 @@ it('lists posts paginated and ordered by created_at desc', function (): void {
 });
 
 it('paginates with page and page_size', function (): void {
+    /** @var Tests\TestCase $this */
     Post::factory()->count(30)->create();
 
     $response = $this->getJson('/api/v1/posts?page=2&page_size=10');
@@ -44,6 +46,7 @@ it('paginates with page and page_size', function (): void {
 });
 
 it('filters by exact column value', function (): void {
+    /** @var Tests\TestCase $this */
     Post::factory()->published()->create(['title' => 'Yes']);
     Post::factory()->draft()->create(['title' => 'No']);
 
@@ -54,6 +57,7 @@ it('filters by exact column value', function (): void {
 });
 
 it('searches across searchable fields case-insensitively', function (): void {
+    /** @var Tests\TestCase $this */
     Post::factory()->create(['title' => 'Alpha headline', 'body' => 'lorem']);
     Post::factory()->create(['title' => 'Beta', 'body' => 'ALPHA inside body']);
     Post::factory()->create(['title' => 'Gamma', 'body' => 'unrelated']);
@@ -64,6 +68,7 @@ it('searches across searchable fields case-insensitively', function (): void {
 });
 
 it('orders by column with - prefix for desc', function (): void {
+    /** @var Tests\TestCase $this */
     Post::factory()->create(['title' => 'A']);
     Post::factory()->create(['title' => 'B']);
     Post::factory()->create(['title' => 'C']);
@@ -75,6 +80,7 @@ it('orders by column with - prefix for desc', function (): void {
 });
 
 it('shows a single post and returns 404 for unknown id', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create();
 
     $this->getJson('/api/v1/posts/'.$post->id)
@@ -86,6 +92,7 @@ it('shows a single post and returns 404 for unknown id', function (): void {
 });
 
 it('creates a post with 201 and envelope', function (): void {
+    /** @var Tests\TestCase $this */
     $response = $this->postJson('/api/v1/posts', [
         'title' => 'New title',
         'body' => 'New body',
@@ -98,17 +105,20 @@ it('creates a post with 201 and envelope', function (): void {
 });
 
 it('rejects bulk create with empty items', function (): void {
+    /** @var Tests\TestCase $this */
     $this->postJson('/api/v1/posts/bulk', ['items' => []])
         ->assertStatus(422);
 });
 
 it('rejects bulk create exceeding 100 items', function (): void {
+    /** @var Tests\TestCase $this */
     $items = array_fill(0, 101, ['title' => 't', 'body' => 'b', 'published' => false]);
     $this->postJson('/api/v1/posts/bulk', ['items' => $items])
         ->assertStatus(422);
 });
 
 it('bulk creates up to 100 items', function (): void {
+    /** @var Tests\TestCase $this */
     $items = array_fill(0, 3, ['title' => 't', 'body' => 'b', 'published' => false]);
     $response = $this->postJson('/api/v1/posts/bulk', ['items' => $items]);
     $response->assertStatus(201);
@@ -117,6 +127,7 @@ it('bulk creates up to 100 items', function (): void {
 });
 
 it('updates only allow-listed columns', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create(['title' => 'Old', 'published' => false]);
 
     $response = $this->patchJson('/api/v1/posts/'.$post->id, [
@@ -132,17 +143,20 @@ it('updates only allow-listed columns', function (): void {
 });
 
 it('rejects empty patch body', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create();
     $this->patchJson('/api/v1/posts/'.$post->id, [])
         ->assertStatus(422);
 });
 
 it('returns 404 on patch when missing', function (): void {
+    /** @var Tests\TestCase $this */
     $this->patchJson('/api/v1/posts/00000000-0000-0000-0000-000000000000', ['title' => 'x'])
         ->assertNotFound();
 });
 
 it('soft-deletes a post and returns 204', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create();
     $this->deleteJson('/api/v1/posts/'.$post->id)->assertNoContent();
     expect(Post::find($post->id))->toBeNull();
@@ -150,11 +164,13 @@ it('soft-deletes a post and returns 204', function (): void {
 });
 
 it('returns 404 on destroy when missing', function (): void {
+    /** @var Tests\TestCase $this */
     $this->deleteJson('/api/v1/posts/00000000-0000-0000-0000-000000000000')
         ->assertNotFound();
 });
 
 it('lists soft-deleted rows when include_deleted=true', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create();
     $post->delete();
     Post::factory()->count(2)->create();
@@ -164,6 +180,7 @@ it('lists soft-deleted rows when include_deleted=true', function (): void {
 });
 
 it('bulk deletes by ids and returns 204', function (): void {
+    /** @var Tests\TestCase $this */
     $posts = Post::factory()->count(3)->create();
     $ids = $posts->pluck('id')->all();
     $this->deleteJson('/api/v1/posts/bulk', ['ids' => $ids])->assertNoContent();
@@ -171,6 +188,7 @@ it('bulk deletes by ids and returns 204', function (): void {
 });
 
 it('returns 404 from bulk delete when no rows matched', function (): void {
+    /** @var Tests\TestCase $this */
     $this->deleteJson('/api/v1/posts/bulk', ['ids' => ['00000000-0000-0000-0000-000000000000']])
         ->assertNotFound();
 });

@@ -19,7 +19,7 @@ it('passes through when no Authorization header is present', function (): void {
 });
 
 it('attaches AuthUser on a valid bearer token', function (): void {
-    $secret = 'sekret';
+    $secret = 'test-hs256-secret-key-0123456789abcdef';
     $token = JWT::encode([
         'sub' => 'u-1', 'email' => 'a@b', 'role' => 'admin',
         'iat' => time(), 'exp' => time() + 60,

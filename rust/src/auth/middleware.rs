@@ -209,4 +209,184 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, AppError::Unauthorized(_)));
     }
+
+    #[tokio::test]
+    async fn from_request_parts_missing_user_unauthorized() {
+        let req = Request::builder().body(axum::body::Body::empty()).unwrap();
+        let (mut parts, _) = req.into_parts();
+        let err = AuthUser::from_request_parts(&mut parts, &())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Unauthorized(_)));
+    }
+
+    #[tokio::test]
+    async fn from_request_parts_present_user_ok() {
+        let user = AuthUser {
+            id: "u".into(),
+            email: String::new(),
+            role: String::new(),
+            permissions: vec![],
+            sid: String::new(),
+        };
+        let req = Request::builder().body(axum::body::Body::empty()).unwrap();
+        let (mut parts, _) = req.into_parts();
+        parts.extensions.insert(user);
+        let got = AuthUser::from_request_parts(&mut parts, &()).await.unwrap();
+        assert_eq!(got.id, "u");
+        let wrapped = RequireAuth::from_request_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(wrapped.0.id, "u");
+    }
+
+    mod authenticate_flow {
+        use super::super::*;
+        use crate::auth::verifier::{Provider, Verifier, VerifierConfig};
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request, StatusCode};
+        use axum::routing::get;
+        use axum::{Extension, Router};
+        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+        use std::sync::Arc;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use tower::ServiceExt;
+
+        #[tokio::test]
+        async fn require_auth_layer_blocks_without_user() {
+            let app = Router::new()
+                .route("/guard", get(|| async { "ok" }))
+                .layer(axum::middleware::from_fn(require_auth_layer));
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/guard")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[tokio::test]
+        async fn require_auth_layer_allows_with_user() {
+            async fn inject(mut req: Request<Body>, next: Next) -> axum::response::Response {
+                req.extensions_mut().insert(AuthUser {
+                    id: "u".into(),
+                    email: String::new(),
+                    role: String::new(),
+                    permissions: vec![],
+                    sid: String::new(),
+                });
+                next.run(req).await
+            }
+            let app = Router::new()
+                .route("/guard", get(|| async { "ok" }))
+                .layer(axum::middleware::from_fn(require_auth_layer))
+                .layer(axum::middleware::from_fn(inject));
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/guard")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        fn verifier(secret: &[u8]) -> Arc<Verifier> {
+            Arc::new(
+                Verifier::new(VerifierConfig {
+                    provider: Provider::SharedSecret(secret.to_vec()),
+                    algorithms: vec![Algorithm::HS256],
+                    issuer: None,
+                    audience: None,
+                })
+                .unwrap(),
+            )
+        }
+
+        fn token(secret: &[u8], sub: &str) -> String {
+            let exp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 60;
+            let claims = serde_json::json!({"sub": sub, "exp": exp, "role": "admin"});
+            encode(
+                &Header::new(Algorithm::HS256),
+                &claims,
+                &EncodingKey::from_secret(secret),
+            )
+            .unwrap()
+        }
+
+        async fn whoami(user: Option<Extension<AuthUser>>) -> String {
+            match user {
+                Some(Extension(u)) => u.id,
+                None => "anon".into(),
+            }
+        }
+
+        fn app(secret: &[u8]) -> Router {
+            Router::new()
+                .route("/me", get(whoami))
+                .layer(axum::middleware::from_fn_with_state(
+                    verifier(secret),
+                    authenticate,
+                ))
+        }
+
+        #[tokio::test]
+        async fn valid_token_injects_user() {
+            let app = app(b"sek");
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/me")
+                        .header(
+                            "authorization",
+                            format!("Bearer {}", token(b"sek", "user-9")),
+                        )
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = to_bytes(resp.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], b"user-9");
+        }
+
+        #[tokio::test]
+        async fn no_token_passes_through_anonymous() {
+            let app = app(b"sek");
+            let resp = app
+                .oneshot(Request::builder().uri("/me").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = to_bytes(resp.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], b"anon");
+        }
+
+        #[tokio::test]
+        async fn invalid_token_rejected_401() {
+            let app = app(b"sek");
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/me")
+                        .header("authorization", format!("Bearer {}", token(b"wrong", "x")))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
 }

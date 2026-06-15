@@ -11,7 +11,9 @@ use Symfony\Component\HttpFoundation\Response;
 final class Cors
 {
     private const ALLOWED_METHODS = 'GET, POST, PATCH, DELETE, OPTIONS';
+
     private const ALLOWED_HEADERS = 'Content-Type, Authorization, X-Request-Id';
+
     private const MAX_AGE = '600';
 
     public function handle(Request $request, Closure $next): Response
@@ -52,7 +54,7 @@ final class Cors
      */
     private function allowedOrigins(): array
     {
-        $raw = (string) env('CORS_ALLOW_ORIGINS', 'http://localhost:5173');
+        $raw = (string) config('security.cors_allow_origins', 'http://localhost:5173');
         $parts = array_map('trim', explode(',', $raw));
 
         return array_values(array_filter($parts, static fn ($s): bool => $s !== ''));

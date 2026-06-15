@@ -7,6 +7,7 @@ use App\Exceptions\NotFoundError;
 use Illuminate\Support\Facades\Route;
 
 it('renders unknown routes as 404 JSON with detail and request_id', function (): void {
+    /** @var Tests\TestCase $this */
     $response = $this->withHeaders(['X-Request-Id' => 'rid-404'])
         ->getJson('/api/__nope__');
 
@@ -16,6 +17,7 @@ it('renders unknown routes as 404 JSON with detail and request_id', function ():
 });
 
 it('maps AppException subclasses to their declared status', function (): void {
+    /** @var Tests\TestCase $this */
     Route::get('/api/__test_business__', function (): void {
         throw new BusinessRuleError('business rule failed');
     });

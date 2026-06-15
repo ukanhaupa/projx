@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"time"
 
 	"projx.local/go/internal/apperr"
 	"projx.local/go/internal/auth"
@@ -116,6 +117,9 @@ func (h *Handler) MFAVerifyChallenge(w http.ResponseWriter, r *http.Request) err
 	if !user.MFAEnabled || !user.MFASecret.Valid {
 		return apperr.Unauthorized("MFA not configured")
 	}
+	if user.LockedUntil.Valid && user.LockedUntil.Time.After(time.Now().UTC()) {
+		return apperr.AppError{Code: "rate_limited", Detail: "too many failed attempts. try again later.", Status: http.StatusTooManyRequests}
+	}
 	ok := false
 	if body.UseRecovery {
 		codes, err := h.svc.Querier().GetUnusedRecoveryCodes(r.Context(), user.ID)
@@ -136,7 +140,13 @@ func (h *Handler) MFAVerifyChallenge(w http.ResponseWriter, r *http.Request) err
 		ok = authservice.VerifyTOTP(body.Code, user.MFASecret.String)
 	}
 	if !ok {
-		_, _, _ = h.svc.Querier().RecordLoginFailure(r.Context(), user.ID, LoginMaxAttempts, LoginLockoutMinutes)
+		_, locked, ferr := h.svc.Querier().RecordLoginFailure(r.Context(), user.ID, LoginMaxAttempts, LoginLockoutMinutes)
+		if ferr != nil {
+			return ferr
+		}
+		if locked.Valid && locked.Time.After(time.Now().UTC()) {
+			return apperr.AppError{Code: "rate_limited", Detail: "too many failed attempts. try again later.", Status: http.StatusTooManyRequests}
+		}
 		return apperr.Unauthorized("invalid MFA code")
 	}
 	if err := h.svc.Querier().UpdateUserLastLogin(r.Context(), user.ID); err != nil {
@@ -200,7 +210,7 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) error {
 	if err := h.svc.Querier().DeleteRecoveryCodesForUser(r.Context(), user.ID); err != nil {
 		return err
 	}
-	return writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return writeNoContent(w)
 }
 
 func (h *Handler) MFARegenerate(w http.ResponseWriter, r *http.Request) error {

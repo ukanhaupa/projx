@@ -134,7 +134,7 @@ if [ -n "$<%= inst.upper %>_PHP" ]; then
     cd <%= inst.path %>
     REL_PHP=$(echo "$<%= inst.upper %>_PHP" | sed 's|^<%= inst.path %>/||')
     echo "$REL_PHP" | xargs ./vendor/bin/pint
-    ./vendor/bin/phpstan analyse --no-progress --level=8
+    ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
     cd ..
     echo "$<%= inst.upper %>_PHP" | xargs git add
   else

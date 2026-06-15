@@ -732,4 +732,286 @@ mod tests {
         let body = json_body(resp).await;
         assert!(body.get("secret").is_none());
     }
+
+    fn app_with_hooks(hooks: Hooks) -> Router {
+        let cfg = Arc::new(EntityConfig {
+            name: "thing",
+            base_path: "/things",
+            handler: Arc::new(FakeHandler::default()),
+            searchable_fields: vec!["title"],
+            hidden_fields: vec![],
+            soft_delete: false,
+            hooks,
+        });
+        mount_entity(Router::new(), Arc::new(mock_db()), cfg)
+    }
+
+    async fn create_thing(app: &Router, body: &str) -> Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/things")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_owned()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn before_create_hook_mutates_payload() {
+        let mut hooks = Hooks::default();
+        hooks.before_create = Some(Arc::new(|_headers, payload| {
+            Box::pin(async move {
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert("title".into(), json!("rewritten"));
+                }
+                Ok(())
+            })
+        }));
+        let app = app_with_hooks(hooks);
+        let resp = create_thing(&app, r#"{"title":"original"}"#).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = json_body(resp).await;
+        assert_eq!(body["title"], "rewritten");
+    }
+
+    #[tokio::test]
+    async fn before_create_hook_error_aborts() {
+        let mut hooks = Hooks::default();
+        hooks.before_create = Some(Arc::new(|_headers, _payload| {
+            Box::pin(async move { Err(AppError::Forbidden("nope".into())) })
+        }));
+        let app = app_with_hooks(hooks);
+        let resp = create_thing(&app, r#"{"title":"x"}"#).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn after_create_hook_error_is_swallowed() {
+        let mut hooks = Hooks::default();
+        hooks.after_create = Some(Arc::new(|_headers, _record| {
+            Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("boom"))) })
+        }));
+        let app = app_with_hooks(hooks);
+        let resp = create_thing(&app, r#"{"title":"persisted"}"#).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = json_body(resp).await;
+        assert_eq!(body["title"], "persisted");
+    }
+
+    #[tokio::test]
+    async fn before_update_hook_short_circuits() {
+        let create_hooks = Hooks::default();
+        let app = app_with_hooks(create_hooks);
+        let created = create_thing(&app, r#"{"title":"a"}"#).await;
+        let id = json_body(created).await["id"].as_str().unwrap().to_string();
+
+        let mut hooks = Hooks::default();
+        hooks.before_update = Some(Arc::new(|_headers, _patch| {
+            Box::pin(async move { Ok(true) })
+        }));
+        let app2 = Router::new();
+        let cfg = Arc::new(EntityConfig {
+            name: "thing",
+            base_path: "/things",
+            handler: Arc::new(FakeHandler::default()),
+            searchable_fields: vec!["title"],
+            hidden_fields: vec![],
+            soft_delete: false,
+            hooks,
+        });
+        let app2 = mount_entity(app2, Arc::new(mock_db()), cfg);
+        let resp = app2
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/v1/things/{id}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"title":"b"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn after_update_hook_error_is_swallowed() {
+        let mut hooks = Hooks::default();
+        hooks.after_update = Some(Arc::new(|_headers, _before, _after| {
+            Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("late"))) })
+        }));
+        let app = app_with_hooks(hooks);
+        let created = create_thing(&app, r#"{"title":"a"}"#).await;
+        let id = json_body(created).await["id"].as_str().unwrap().to_string();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/v1/things/{id}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"title":"b"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = json_body(resp).await;
+        assert_eq!(body["title"], "b");
+    }
+
+    #[tokio::test]
+    async fn before_delete_hook_aborts() {
+        let mut hooks = Hooks::default();
+        hooks.before_delete = Some(Arc::new(|_headers, _id| {
+            Box::pin(async move { Err(AppError::Forbidden("locked".into())) })
+        }));
+        let app = app_with_hooks(hooks);
+        let created = create_thing(&app, r#"{"title":"a"}"#).await;
+        let id = json_body(created).await["id"].as_str().unwrap().to_string();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/things/{id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn update_rejects_non_object_body() {
+        let (app, _) = build_app(false, vec![]);
+        let created = create_thing(&app, r#"{"title":"a"}"#).await;
+        let id = json_body(created).await["id"].as_str().unwrap().to_string();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/v1/things/{id}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from("[]"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn bulk_create_rejects_empty_array() {
+        let (app, _) = build_app(false, vec![]);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/things/bulk")
+                    .header("content-type", "application/json")
+                    .body(Body::from("[]"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn bulk_create_rejects_non_object_item() {
+        let (app, _) = build_app(false, vec![]);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/things/bulk")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"[123]"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn bulk_delete_rejects_empty_ids() {
+        let (app, _) = build_app(false, vec![]);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/things/bulk")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"ids":[]}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn bulk_delete_rejects_oversize() {
+        let (app, _) = build_app(false, vec![]);
+        let ids: Vec<String> = (0..101).map(|i| format!("id-{i}")).collect();
+        let body = json!({ "ids": ids });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/things/bulk")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn bulk_delete_succeeds_for_existing() {
+        let (app, _) = build_app(false, vec![]);
+        let mut ids = Vec::new();
+        for t in ["a", "b"] {
+            let created = create_thing(&app, &format!(r#"{{"title":"{t}"}}"#)).await;
+            ids.push(json_body(created).await["id"].as_str().unwrap().to_string());
+        }
+        let body = json!({ "ids": ids });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/things/bulk")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn soft_delete_path_returns_204() {
+        let (app, _) = build_app(true, vec![]);
+        let created = create_thing(&app, r#"{"title":"a"}"#).await;
+        let id = json_body(created).await["id"].as_str().unwrap().to_string();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/things/{id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
 }

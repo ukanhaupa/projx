@@ -79,4 +79,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) error {
 	return httputil.WriteJSON(w, status, body)
 }
 
-func okStatus() map[string]any { return map[string]any{"status": "ok"} }
+func writeNoContent(w http.ResponseWriter) error {
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}

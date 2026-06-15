@@ -13,6 +13,9 @@ beforeEach(function (): void {
     EntityRegistry::resetInstance();
 });
 
+/**
+ * @param  array<string, Closure>  $hooks
+ */
 function registerWithHooks(array $hooks): void
 {
     EntityRegistry::instance()->register(new EntityConfig(
@@ -29,6 +32,7 @@ function registerWithHooks(array $hooks): void
 }
 
 it('invokes beforeCreate then afterCreate in order with payload mutation', function (): void {
+    /** @var Tests\TestCase $this */
     $calls = [];
     registerWithHooks([
         'beforeCreate' => function (Request $r, array &$data) use (&$calls): void {
@@ -44,13 +48,14 @@ it('invokes beforeCreate then afterCreate in order with payload mutation', funct
 
     $response->assertStatus(201);
     expect($calls)->toBe(['before', 'after:mutated']);
-    expect(Post::first()->title)->toBe('mutated');
+    expect(Post::firstOrFail()->title)->toBe('mutated');
 });
 
 it('beforeCreate that throws aborts the create', function (): void {
+    /** @var Tests\TestCase $this */
     registerWithHooks([
         'beforeCreate' => function (): void {
-            throw new \App\Exceptions\BusinessRuleError('nope');
+            throw new App\Exceptions\BusinessRuleError('nope');
         },
     ]);
 
@@ -60,10 +65,11 @@ it('beforeCreate that throws aborts the create', function (): void {
 });
 
 it('afterCreate failure is best-effort and record stays', function (): void {
-    Log::spy();
+    /** @var Tests\TestCase $this */
+    $log = Log::spy();
     registerWithHooks([
         'afterCreate' => function (): void {
-            throw new \RuntimeException('hook boom');
+            throw new RuntimeException('hook boom');
         },
     ]);
 
@@ -71,10 +77,11 @@ it('afterCreate failure is best-effort and record stays', function (): void {
         ->assertStatus(201);
 
     expect(Post::count())->toBe(1);
-    Log::shouldHaveReceived('warning')->atLeast()->once();
+    $log->shouldHaveReceived('warning')->atLeast()->once();
 });
 
 it('beforeUpdate can short-circuit by returning a response', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create(['title' => 'orig']);
     registerWithHooks([
         'beforeUpdate' => fn (): JsonResponse => new JsonResponse(['short' => true], 200),
@@ -82,10 +89,11 @@ it('beforeUpdate can short-circuit by returning a response', function (): void {
 
     $response = $this->patchJson('/api/v1/posts/'.$post->id, ['title' => 'new']);
     $response->assertOk()->assertJson(['short' => true]);
-    expect($post->fresh()->title)->toBe('orig');
+    expect($post->fresh()?->title)->toBe('orig');
 });
 
 it('afterUpdate receives before and after snapshots', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create(['title' => 'before']);
     $captured = null;
     registerWithHooks([
@@ -100,10 +108,11 @@ it('afterUpdate receives before and after snapshots', function (): void {
 });
 
 it('beforeDelete that throws aborts the delete', function (): void {
+    /** @var Tests\TestCase $this */
     $post = Post::factory()->create();
     registerWithHooks([
         'beforeDelete' => function (): void {
-            throw new \App\Exceptions\BusinessRuleError('locked');
+            throw new App\Exceptions\BusinessRuleError('locked');
         },
     ]);
 

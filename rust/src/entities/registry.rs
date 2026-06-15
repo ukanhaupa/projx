@@ -25,7 +25,11 @@ pub fn reset() {
 }
 
 #[cfg(test)]
+pub(crate) static TEST_REGISTRY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[cfg(test)]
 mod tests {
+    use super::TEST_REGISTRY_LOCK as TEST_LOCK;
     use super::*;
     use crate::entities::query::{ListParams, PageResult};
     use crate::entities::types::{EntityHandler, Hooks};
@@ -33,9 +37,6 @@ mod tests {
     use async_trait::async_trait;
     use sea_orm::DatabaseConnection;
     use serde_json::Value;
-    use std::sync::Mutex;
-
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     struct StubHandler;
 
@@ -126,9 +127,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn register_appends_and_all_clones() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    #[tokio::test]
+    async fn register_appends_and_all_clones() {
+        let _g = TEST_LOCK.lock().await;
         reset();
         register(cfg("a", "/a"));
         register(cfg("b", "/b"));
@@ -139,26 +140,26 @@ mod tests {
         reset();
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "name is required")]
-    fn register_panics_on_empty_name() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    async fn register_panics_on_empty_name() {
+        let _g = TEST_LOCK.lock().await;
         reset();
         register(cfg("", "/x"));
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "base_path must start with /")]
-    fn register_panics_on_bad_path() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    async fn register_panics_on_bad_path() {
+        let _g = TEST_LOCK.lock().await;
         reset();
         register(cfg("x", "bad"));
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "is not a column")]
-    fn register_panics_on_unknown_hook_field() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    async fn register_panics_on_unknown_hook_field() {
+        let _g = TEST_LOCK.lock().await;
         reset();
         let mut c = cfg("x", "/x");
         c.hooks.before_create_fields = vec!["nonexistent"];

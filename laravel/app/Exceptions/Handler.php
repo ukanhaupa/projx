@@ -8,60 +8,35 @@ use App\Http\Middleware\RequestId;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
-class Handler extends ExceptionHandler
+final class Handler
 {
-    /**
-     * @var array<int, class-string<Throwable>>
-     */
-    protected $dontReport = [];
-
-    /**
-     * @var array<int, string>
-     */
-    protected $dontFlash = [
-        'current_password',
-        'password',
-        'password_confirmation',
-    ];
-
-    public function register(): void
+    public static function render(Throwable $e, Request $request): JsonResponse
     {
-        $this->renderable(function (Throwable $e, Request $request): ?JsonResponse {
-            if (! $request->is('api/*') && ! $request->expectsJson()) {
-                return null;
-            }
-
-            return $this->renderJson($e, $request);
-        });
-    }
-
-    protected function renderJson(Throwable $e, Request $request): JsonResponse
-    {
-        [$status, $detail] = $this->map($e);
+        [$status, $detail] = self::resolveStatus($e);
 
         if ($status >= 500) {
-            $this->container->make('log')->error($e->getMessage(), ['exception' => $e]);
+            Log::error($e->getMessage(), ['exception' => $e]);
         }
 
-        return new JsonResponse($this->body($detail, $request), $status);
+        return new JsonResponse(self::body($detail, $request), $status);
     }
 
     /**
      * @return array{0:int,1:string}
      */
-    protected function map(Throwable $e): array
+    private static function resolveStatus(Throwable $e): array
     {
         if ($e instanceof ValidationException) {
-            return [422, $this->firstValidationMessage($e)];
+            return [422, self::firstValidationMessage($e)];
         }
 
         if ($e instanceof AuthenticationException) {
@@ -101,10 +76,13 @@ class Handler extends ExceptionHandler
     /**
      * @return array<string, mixed>
      */
-    protected function body(string $detail, Request $request): array
+    private static function body(string $detail, Request $request): array
     {
         $body = ['detail' => $detail];
         $requestId = $request->attributes->get(RequestId::ATTRIBUTE);
+        if (! is_string($requestId) || $requestId === '') {
+            $requestId = $request->headers->get(RequestId::HEADER);
+        }
         if (is_string($requestId) && $requestId !== '') {
             $body['request_id'] = $requestId;
         }
@@ -112,7 +90,7 @@ class Handler extends ExceptionHandler
         return $body;
     }
 
-    protected function firstValidationMessage(ValidationException $e): string
+    private static function firstValidationMessage(ValidationException $e): string
     {
         foreach ($e->errors() as $messages) {
             if (is_array($messages) && isset($messages[0]) && is_string($messages[0])) {

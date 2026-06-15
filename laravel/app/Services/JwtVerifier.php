@@ -10,14 +10,14 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
-use Illuminate\Contracts\Cache\Repository as CacheRepository;
-use Psr\SimpleCache\CacheInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use RuntimeException;
 use UnexpectedValueException;
 
 final class JwtVerifier
 {
     public const PROVIDER_SHARED_SECRET = 'shared_secret';
+
     public const PROVIDER_JWKS = 'jwks';
 
     private const JWKS_TTL_SECONDS = 3600;
@@ -32,7 +32,7 @@ final class JwtVerifier
         private readonly ?string $jwksUrl = null,
         private readonly ?string $issuer = null,
         private readonly ?string $audience = null,
-        private readonly ?CacheInterface $jwksCache = null,
+        private readonly ?CacheItemPoolInterface $jwksCache = null,
     ) {
         if ($this->provider !== self::PROVIDER_SHARED_SECRET && $this->provider !== self::PROVIDER_JWKS) {
             throw new RuntimeException(sprintf(
@@ -54,17 +54,17 @@ final class JwtVerifier
         }
     }
 
-    public static function fromEnv(?CacheRepository $cache = null): self
+    public static function fromConfig(?CacheItemPoolInterface $jwksCache = null): self
     {
-        $provider = trim((string) env('JWT_PROVIDER', ''));
+        $jwksUrl = trim((string) config('jwt.jwks_url', ''));
+
+        $provider = trim((string) config('jwt.provider', ''));
         if ($provider === '') {
-            $provider = trim((string) env('JWT_JWKS_URL', '')) !== ''
-                ? self::PROVIDER_JWKS
-                : self::PROVIDER_SHARED_SECRET;
+            $provider = $jwksUrl !== '' ? self::PROVIDER_JWKS : self::PROVIDER_SHARED_SECRET;
         }
 
         $algorithms = [];
-        $rawAlgs = trim((string) env('JWT_ALGORITHMS', ''));
+        $rawAlgs = trim((string) config('jwt.algorithms', ''));
         if ($rawAlgs !== '') {
             foreach (explode(',', $rawAlgs) as $a) {
                 $a = trim($a);
@@ -77,22 +77,18 @@ final class JwtVerifier
             $algorithms = $provider === self::PROVIDER_SHARED_SECRET ? ['HS256'] : ['RS256'];
         }
 
-        $psrCache = null;
-        if ($cache !== null) {
-            $store = $cache->store();
-            if ($store instanceof CacheInterface) {
-                $psrCache = $store;
-            }
-        }
+        $secret = trim((string) config('jwt.secret', ''));
+        $issuer = trim((string) config('jwt.issuer', ''));
+        $audience = trim((string) config('jwt.audience', ''));
 
         return new self(
             provider: $provider,
             algorithms: $algorithms,
-            secret: (string) env('JWT_SECRET', '') !== '' ? (string) env('JWT_SECRET') : null,
-            jwksUrl: (string) env('JWT_JWKS_URL', '') !== '' ? (string) env('JWT_JWKS_URL') : null,
-            issuer: (string) env('JWT_ISSUER', '') !== '' ? (string) env('JWT_ISSUER') : null,
-            audience: (string) env('JWT_AUDIENCE', '') !== '' ? (string) env('JWT_AUDIENCE') : null,
-            jwksCache: $psrCache,
+            secret: $secret !== '' ? $secret : null,
+            jwksUrl: $jwksUrl !== '' ? $jwksUrl : null,
+            issuer: $issuer !== '' ? $issuer : null,
+            audience: $audience !== '' ? $audience : null,
+            jwksCache: $jwksCache,
         );
     }
 
@@ -156,11 +152,11 @@ final class JwtVerifier
         }
 
         if ($this->jwksCache !== null) {
-            $httpFactory = new HttpFactory();
+            $httpFactory = new HttpFactory;
 
             return new CachedKeySet(
                 jwksUri: (string) $this->jwksUrl,
-                httpClient: new Client(),
+                httpClient: new Client,
                 httpFactory: $httpFactory,
                 cache: $this->jwksCache,
                 expiresAfter: self::JWKS_TTL_SECONDS,

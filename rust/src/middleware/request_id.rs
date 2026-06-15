@@ -84,3 +84,82 @@ mod futures_compat {
 
     pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::StatusCode;
+    use axum::routing::get;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        Router::new()
+            .route(
+                "/echo",
+                get(|| async {
+                    let id = RequestId::current().unwrap_or_default();
+                    (StatusCode::OK, id)
+                }),
+            )
+            .layer(RequestIdLayer)
+    }
+
+    #[tokio::test]
+    async fn generates_request_id_when_absent() {
+        let resp = app()
+            .oneshot(Request::builder().uri("/echo").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let header = resp
+            .headers()
+            .get(&HEADER)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(!header.is_empty());
+        let body = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        assert_eq!(String::from_utf8(body.to_vec()).unwrap(), header);
+        assert!(Uuid::parse_str(&header).is_ok());
+    }
+
+    #[tokio::test]
+    async fn preserves_incoming_request_id() {
+        let resp = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/echo")
+                    .header(HEADER_NAME, "trace-abc-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.headers().get(&HEADER).unwrap(), "trace-abc-123");
+        let body = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        assert_eq!(String::from_utf8(body.to_vec()).unwrap(), "trace-abc-123");
+    }
+
+    #[tokio::test]
+    async fn empty_incoming_id_is_replaced() {
+        let resp = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/echo")
+                    .header(HEADER_NAME, "")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let header = resp.headers().get(&HEADER).unwrap().to_str().unwrap();
+        assert!(Uuid::parse_str(header).is_ok());
+    }
+
+    #[test]
+    fn current_is_none_outside_scope() {
+        assert!(RequestId::current().is_none());
+    }
+}

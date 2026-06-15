@@ -322,7 +322,7 @@ sec_laravel() {
   run_step "laravel install" composer install --no-interaction
   run_step "laravel format" ./vendor/bin/pint
   git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
-  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress
+  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
   run_step "laravel tests" ./vendor/bin/pest --no-coverage
 }
 

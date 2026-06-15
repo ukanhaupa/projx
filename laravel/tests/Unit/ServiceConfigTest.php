@@ -6,16 +6,20 @@ use App\Services\ServiceConfig;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Mockery\MockInterface;
 
 beforeEach(function (): void {
-    $this->cache = Mockery::mock(CacheRepository::class)->shouldIgnoreMissing();
-    $this->cache->shouldReceive('get')->byDefault()->andReturnNull();
-    $this->cache->shouldReceive('put')->byDefault();
-    $this->cache->shouldReceive('forget')->byDefault();
+    /** @var Tests\TestCase $this */
+    $cache = Mockery::mock(CacheRepository::class);
+    $cache->shouldIgnoreMissing();
+    $cache->shouldReceive('get')->byDefault()->andReturnNull();
+    $cache->shouldReceive('put')->byDefault();
+    $cache->shouldReceive('forget')->byDefault();
+    $this->cache = $cache;
     $this->key = base64_encode(str_repeat("\x00", 32));
 });
 
-function makeServiceConfig(string $key, $cache): ServiceConfig
+function makeServiceConfig(string $key, CacheRepository&MockInterface $cache): ServiceConfig
 {
     $db = Mockery::mock(ConnectionInterface::class);
     $db->shouldIgnoreMissing();
@@ -24,11 +28,13 @@ function makeServiceConfig(string $key, $cache): ServiceConfig
 }
 
 it('rejects a malformed encryption key', function (): void {
+    /** @var Tests\TestCase $this */
     expect(fn () => makeServiceConfig('not-base64-32-bytes', $this->cache))
         ->toThrow(RuntimeException::class);
 });
 
 it('decrypts the NIST GCM TC13 zero-vector to empty', function (): void {
+    /** @var Tests\TestCase $this */
     $iv = str_repeat("\x00", 12);
     $tag = hex2bin('530f8afbc74536b9a963b4f1c4cb738b');
     $ct = '';
@@ -39,6 +45,7 @@ it('decrypts the NIST GCM TC13 zero-vector to empty', function (): void {
 });
 
 it('round-trips encrypt then decrypt with random IV', function (): void {
+    /** @var Tests\TestCase $this */
     $svc = makeServiceConfig($this->key, $this->cache);
     $payload = 'hello-world!';
     $encrypted = $svc->encrypt($payload);
@@ -49,15 +56,17 @@ it('round-trips encrypt then decrypt with random IV', function (): void {
 });
 
 it('rejects ciphertext shorter than iv+tag', function (): void {
+    /** @var Tests\TestCase $this */
     $svc = makeServiceConfig($this->key, $this->cache);
     expect(fn () => $svc->decrypt(base64_encode('short')))
         ->toThrow(RuntimeException::class);
 });
 
 it('rejects a tampered tag', function (): void {
+    /** @var Tests\TestCase $this */
     $svc = makeServiceConfig($this->key, $this->cache);
     $payload = 'sensitive';
-    $wire = base64_decode($svc->encrypt($payload), true);
+    $wire = (string) base64_decode($svc->encrypt($payload), true);
     $tampered = $wire;
     $tampered[12] = chr(ord($tampered[12]) ^ 0x01);
     expect(fn () => $svc->decrypt(base64_encode($tampered)))
@@ -65,6 +74,7 @@ it('rejects a tampered tag', function (): void {
 });
 
 it('returns null from get() when row is missing', function (): void {
+    /** @var Tests\TestCase $this */
     $cache = Mockery::mock(CacheRepository::class);
     $cache->shouldReceive('get')->once()->andReturnNull();
 
@@ -80,6 +90,7 @@ it('returns null from get() when row is missing', function (): void {
 });
 
 it('returns cached value when present', function (): void {
+    /** @var Tests\TestCase $this */
     $cache = Mockery::mock(CacheRepository::class);
     $cache->shouldReceive('get')->with('service-configs:foo')->andReturn('cached');
 
@@ -89,6 +100,7 @@ it('returns cached value when present', function (): void {
 });
 
 it('reads + decrypts a row and caches it', function (): void {
+    /** @var Tests\TestCase $this */
     $cache = Mockery::mock(CacheRepository::class);
     $cache->shouldReceive('get')->andReturnNull();
     $cache->shouldReceive('put')->once()->with('service-configs:foo', 'plain', 600);
@@ -108,6 +120,7 @@ it('reads + decrypts a row and caches it', function (): void {
 });
 
 it('set() upserts and invalidates cache', function (): void {
+    /** @var Tests\TestCase $this */
     $cache = Mockery::mock(CacheRepository::class);
     $cache->shouldReceive('forget')->once()->with('service-configs:foo');
 
@@ -124,6 +137,7 @@ it('set() upserts and invalidates cache', function (): void {
 });
 
 it('delete() removes and invalidates', function (): void {
+    /** @var Tests\TestCase $this */
     $cache = Mockery::mock(CacheRepository::class);
     $cache->shouldReceive('forget')->once()->with('service-configs:foo');
 

@@ -208,6 +208,7 @@ final class AutoRoutesController extends Controller
     {
         $query = $config->newModel()->newQuery();
         if ($withTrashed && $this->modelUsesSoftDeletes($config)) {
+            /** @phpstan-ignore method.notFound (SoftDeletes macro on a runtime-resolved model) */
             $query->withTrashed();
         }
 

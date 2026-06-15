@@ -28,3 +28,26 @@ pub async fn log_request(req: Request<Body>, next: Next) -> Response {
 
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum::routing::get;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn passes_response_through_unchanged() {
+        let app = Router::new()
+            .route("/x", get(|| async { (StatusCode::IM_A_TEAPOT, "brewed") }))
+            .layer(axum::middleware::from_fn(log_request));
+        let resp = app
+            .oneshot(Request::builder().uri("/x").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::IM_A_TEAPOT);
+        let body = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        assert_eq!(&body[..], b"brewed");
+    }
+}

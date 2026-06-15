@@ -507,4 +507,312 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, AppError::NotFound(_)));
     }
+
+    fn sample(title: &str) -> Model {
+        let now = Utc::now();
+        Model {
+            id: Uuid::new_v4(),
+            title: title.into(),
+            body: String::new(),
+            published: false,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        }
+    }
+
+    fn count_row(n: i64) -> std::collections::BTreeMap<String, sea_orm::Value> {
+        let mut m = std::collections::BTreeMap::new();
+        m.insert("num_items".to_string(), sea_orm::Value::BigInt(Some(n)));
+        m
+    }
+
+    #[tokio::test]
+    async fn handler_get_by_id_returns_model() {
+        let m = sample("found");
+        let id = m.id;
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![m]])
+            .into_connection();
+        let cfg = config();
+        let v = PostHandler
+            .get_by_id(&db, &id.to_string(), &cfg)
+            .await
+            .unwrap();
+        assert_eq!(v["title"], "found");
+        assert_eq!(v["id"], id.to_string());
+    }
+
+    #[tokio::test]
+    async fn handler_get_by_id_rejects_bad_uuid() {
+        let db = mock_db();
+        let cfg = config();
+        let err = PostHandler
+            .get_by_id(&db, "not-a-uuid", &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_list_returns_data_and_pagination() {
+        let rows = vec![sample("a"), sample("b")];
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![count_row(2)]])
+            .append_query_results([rows])
+            .into_connection();
+        let cfg = config();
+        let params = ListParams {
+            page: 1,
+            page_size: 25,
+            ..Default::default()
+        };
+        let res = PostHandler.list(&db, &params, &cfg).await.unwrap();
+        assert_eq!(res.pagination.total_records, 2);
+        assert_eq!(res.data.as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn handler_list_applies_search_filter_order() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![count_row(1)]])
+            .append_query_results([vec![sample("hello world")]])
+            .into_connection();
+        let cfg = config();
+        let mut filters = std::collections::HashMap::new();
+        filters.insert("published".to_string(), "true".to_string());
+        let params = ListParams {
+            page: 1,
+            page_size: 25,
+            order_by: vec!["-created_at".into(), "title".into()],
+            search: Some("hello".into()),
+            include_deleted: false,
+            filters,
+        };
+        let res = PostHandler.list(&db, &params, &cfg).await.unwrap();
+        assert_eq!(res.pagination.total_records, 1);
+        let stmts = db.into_transaction_log();
+        let sql = format!("{:?}", stmts);
+        assert!(sql.contains("LIKE"));
+        assert!(sql.contains("ORDER BY"));
+        assert!(sql.contains("deleted_at"));
+    }
+
+    #[tokio::test]
+    async fn handler_list_include_deleted_skips_soft_delete_filter() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![count_row(0)]])
+            .append_query_results([Vec::<Model>::new()])
+            .into_connection();
+        let cfg = config();
+        let params = ListParams {
+            page: 1,
+            page_size: 25,
+            include_deleted: true,
+            ..Default::default()
+        };
+        let res = PostHandler.list(&db, &params, &cfg).await.unwrap();
+        assert_eq!(res.pagination.total_records, 0);
+    }
+
+    #[tokio::test]
+    async fn handler_update_applies_patch() {
+        let existing = sample("old");
+        let id = existing.id;
+        let mut updated = existing.clone();
+        updated.title = "new".into();
+        updated.published = true;
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![existing]])
+            .append_query_results([vec![updated]])
+            .into_connection();
+        let cfg = config();
+        let (before, after) = PostHandler
+            .update(
+                &db,
+                &id.to_string(),
+                json!({"title": "new", "published": true, "body": "x"}),
+                &cfg,
+            )
+            .await
+            .unwrap();
+        assert_eq!(before["title"], "old");
+        assert_eq!(after["title"], "new");
+        assert_eq!(after["published"], true);
+    }
+
+    #[tokio::test]
+    async fn handler_update_rejects_empty_title() {
+        let existing = sample("old");
+        let id = existing.id;
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![existing]])
+            .into_connection();
+        let cfg = config();
+        let err = PostHandler
+            .update(&db, &id.to_string(), json!({"title": ""}), &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_update_rejects_overlong_title() {
+        let existing = sample("old");
+        let id = existing.id;
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![existing]])
+            .into_connection();
+        let cfg = config();
+        let err = PostHandler
+            .update(
+                &db,
+                &id.to_string(),
+                json!({"title": "x".repeat(201)}),
+                &cfg,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_update_404_when_missing() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<Model>::new()])
+            .into_connection();
+        let cfg = config();
+        let err = PostHandler
+            .update(
+                &db,
+                &Uuid::new_v4().to_string(),
+                json!({"title": "x"}),
+                &cfg,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_soft_delete_marks_row() {
+        let existing = sample("doomed");
+        let id = existing.id;
+        let mut deleted = existing.clone();
+        deleted.deleted_at = Some(Utc::now());
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![existing]])
+            .append_query_results([vec![deleted]])
+            .into_connection();
+        let cfg = config();
+        let n = PostHandler
+            .soft_delete(&db, &id.to_string(), &cfg)
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn handler_soft_delete_returns_zero_when_missing() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<Model>::new()])
+            .into_connection();
+        let cfg = config();
+        let n = PostHandler
+            .soft_delete(&db, &Uuid::new_v4().to_string(), &cfg)
+            .await
+            .unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[tokio::test]
+    async fn handler_bulk_create_inserts_all() {
+        let a = sample("a");
+        let b = sample("b");
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![a]])
+            .append_query_results([vec![b]])
+            .into_connection();
+        let cfg = config();
+        let out = PostHandler
+            .bulk_create(
+                &db,
+                vec![json!({"title": "a"}), json!({"title": "b"})],
+                &cfg,
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn handler_bulk_create_rolls_back_on_invalid() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let cfg = config();
+        let err = PostHandler
+            .bulk_create(&db, vec![json!({"body": "no title"})], &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_bulk_delete_soft_updates_many() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 3,
+            }])
+            .into_connection();
+        let cfg = config();
+        let ids: Vec<String> = (0..3).map(|_| Uuid::new_v4().to_string()).collect();
+        let n = PostHandler.bulk_delete(&db, &ids, &cfg).await.unwrap();
+        assert_eq!(n, 3);
+        let sql = format!("{:?}", db.into_transaction_log());
+        assert!(sql.contains("UPDATE"));
+        assert!(sql.contains("deleted_at"));
+    }
+
+    #[tokio::test]
+    async fn handler_bulk_delete_hard_when_not_soft() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 2,
+            }])
+            .into_connection();
+        let mut cfg = config();
+        cfg.soft_delete = false;
+        let ids: Vec<String> = (0..2).map(|_| Uuid::new_v4().to_string()).collect();
+        let n = PostHandler.bulk_delete(&db, &ids, &cfg).await.unwrap();
+        assert_eq!(n, 2);
+        let sql = format!("{:?}", db.into_transaction_log());
+        assert!(sql.contains("DELETE"));
+    }
+
+    #[tokio::test]
+    async fn handler_bulk_delete_rejects_bad_uuid() {
+        let db = mock_db();
+        let cfg = config();
+        let err = PostHandler
+            .bulk_delete(&db, &["nope".to_string()], &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn handler_create_maps_db_conflict() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_errors([sea_orm::DbErr::Custom(
+                "duplicate key value violates unique constraint code: \"23505\"".into(),
+            )])
+            .into_connection();
+        let cfg = config();
+        let err = PostHandler
+            .create(&db, json!({"title": "dup"}), &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Conflict(_)));
+    }
 }

@@ -13,9 +13,7 @@ use Throwable;
 
 final class Authenticate
 {
-    public function __construct(private readonly JwtVerifier $verifier)
-    {
-    }
+    public function __construct(private readonly JwtVerifier $verifier) {}
 
     public function handle(Request $request, Closure $next): Response
     {

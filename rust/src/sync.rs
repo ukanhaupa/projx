@@ -253,4 +253,76 @@ mod tests {
         assert!(v.get("primary_key").is_none());
         assert!(v.get("unique").is_none());
     }
+
+    #[test]
+    fn build_marks_id_and_created_at_non_nullable() {
+        let c = cfg("post", "/posts", &["id", "created_at", "title"]);
+        let r = build(std::iter::once(&c));
+        let fields = &r.entities["post"].fields;
+        let by = |n: &str| fields.iter().find(|f| f.name == n).unwrap();
+        assert!(!by("id").nullable);
+        assert!(!by("created_at").nullable);
+        assert!(by("title").nullable);
+    }
+
+    #[test]
+    fn build_handles_multiple_entities() {
+        let a = cfg("post", "/posts", &["id"]);
+        let b = cfg("tag", "/tags", &["id"]);
+        let r = build([&a, &b]);
+        assert_eq!(r.entities.len(), 2);
+        assert_eq!(r.entities["tag"].api_path, "/api/v1/tags");
+    }
+
+    mod http {
+        use super::super::*;
+        use crate::entities;
+        use crate::entities::registry::TEST_REGISTRY_LOCK as REGISTRY_LOCK;
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        #[tokio::test]
+        async fn schemas_endpoint_returns_registered_entities() {
+            let _g = REGISTRY_LOCK.lock().await;
+            entities::reset();
+            entities::register(crate::posts::config());
+            let app = routes();
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/schemas")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let bytes = to_bytes(resp.into_body(), 64 * 1024).await.unwrap();
+            let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(v["entities"]["post"]["api_path"], "/api/v1/posts");
+            assert!(v["entities"]["post"]["fields"].is_array());
+            entities::reset();
+        }
+
+        #[tokio::test]
+        async fn schemas_endpoint_empty_registry() {
+            let _g = REGISTRY_LOCK.lock().await;
+            entities::reset();
+            let app = routes();
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/schemas")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let bytes = to_bytes(resp.into_body(), 1024).await.unwrap();
+            let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(v["entities"].as_object().unwrap().len(), 0);
+        }
+    }
 }

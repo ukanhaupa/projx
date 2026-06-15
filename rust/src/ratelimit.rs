@@ -225,4 +225,99 @@ mod tests {
         let l = limiter_with(42, 1.0);
         assert_eq!(l.capacity(), 42);
     }
+
+    #[test]
+    #[should_panic(expected = "capacity must be > 0")]
+    fn new_panics_on_zero_capacity() {
+        limiter_with(0, 1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "refill_per_sec must be > 0")]
+    fn new_panics_on_zero_refill() {
+        limiter_with(1, 0.0);
+    }
+
+    #[tokio::test]
+    async fn allow_reports_remaining_tokens() {
+        let l = limiter_with(5, 0.001);
+        let (ok, remaining, retry) = l.allow("u").await;
+        assert!(ok);
+        assert_eq!(remaining, 4.0);
+        assert_eq!(retry, Duration::ZERO);
+    }
+
+    mod middleware {
+        use super::super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::Arc;
+        use tower::ServiceExt;
+
+        fn app(limiter: RateLimiter) -> Router {
+            Router::new()
+                .route("/ping", get(|| async { "pong" }))
+                .layer(axum::middleware::from_fn_with_state(limiter, ratelimit_mw))
+        }
+
+        fn fixed_key_limiter(capacity: u32, refill: f64) -> RateLimiter {
+            RateLimiter::new(RateLimitOptions {
+                key_fn: Arc::new(|_| "fixed".into()),
+                capacity,
+                refill_per_sec: refill,
+            })
+        }
+
+        #[tokio::test]
+        async fn allowed_request_sets_ratelimit_headers() {
+            let app = app(fixed_key_limiter(10, 1.0));
+            let resp = app
+                .oneshot(Request::builder().uri("/ping").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            assert_eq!(resp.headers().get("x-ratelimit-limit").unwrap(), "10");
+            assert_eq!(resp.headers().get("x-ratelimit-remaining").unwrap(), "9");
+        }
+
+        #[tokio::test]
+        async fn exhausted_bucket_returns_429_with_retry_after() {
+            let limiter = fixed_key_limiter(1, 0.001);
+            let app = app(limiter);
+            let first = app
+                .clone()
+                .oneshot(Request::builder().uri("/ping").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(first.status(), StatusCode::OK);
+            let second = app
+                .oneshot(Request::builder().uri("/ping").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+            assert_eq!(second.headers().get("x-ratelimit-remaining").unwrap(), "0");
+            assert!(second.headers().get("retry-after").is_some());
+        }
+
+        #[tokio::test]
+        async fn empty_key_bypasses_limit() {
+            let limiter = RateLimiter::new(RateLimitOptions {
+                key_fn: Arc::new(|_| String::new()),
+                capacity: 1,
+                refill_per_sec: 0.001,
+            });
+            let app = app(limiter);
+            for _ in 0..3 {
+                let resp = app
+                    .clone()
+                    .oneshot(Request::builder().uri("/ping").body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                assert!(resp.headers().get("x-ratelimit-limit").is_none());
+            }
+        }
+    }
 }
