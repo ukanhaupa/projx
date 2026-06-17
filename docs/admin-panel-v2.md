@@ -276,7 +276,7 @@ The tenant's own Prisma/SQLAlchemy/whatever migration runner is unaware of these
 All routes live on the admin panel's own port (8080 internal, behind `admin.<DOMAIN>` via nginx).
 
 ```
-# Unauthenticated (rate-limited to 5r/m per IP at nginx level)
+# Unauthenticated (rate-limited to 10r/m per IP at nginx level)
 GET  /                                       # → 302 to /login or /dashboard
 GET  /login                                  # login form
 POST /login                                  # password verify, sets `mfa_pending` cookie
@@ -713,7 +713,7 @@ Listed so the v1 scope stays honest and the temptation to scope-creep is visible
 2. **Per-row impersonation start.** From a user row in the explorer, should there be an "Impersonate this user" button that auto-fills the form? Adds a small frontend dependency between explorer and impersonation modules but is the right UX. Lean: yes for v1.
 3. **CSRF strategy.** HTMX needs explicit CSRF on form submissions. Plan: double-submit cookie pattern, validated by middleware. Standard, well-tested. No question really, just flagging it.
 4. **SMTP for password reset.** If no SMTP configured, password reset is admin-to-admin only (one admin resets another's password and shares the temp credential out-of-band). v1 default: no SMTP required. SMTP becomes a feature overlay (`--admin-smtp=mailtrap` or similar) later.
-5. **Rate limiting strategy.** Login endpoint: 5r/m per IP at nginx, plus per-account exponential backoff in code. CRUD endpoints: 60r/s per admin user. Documented in deploy section but not in code yet. Confirm targets before implementing.
+5. **Rate limiting strategy.** Login endpoint: 10r/m per IP at nginx, plus per-account exponential backoff in code. CRUD endpoints: 60r/s per admin user. Documented in deploy section but not in code yet. Confirm targets before implementing.
 
 Open questions go in a follow-up doc once we start implementing.
 
