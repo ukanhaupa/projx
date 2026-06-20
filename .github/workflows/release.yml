@@ -1,4 +1,4 @@
-name: Release & Publish
+name: Release (draft)
 
 on:
   push:
@@ -18,12 +18,9 @@ jobs:
     secrets: inherit
 
   release:
-    name: Release & Publish to npm
+    name: Create draft release
     needs: ci
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cli
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -47,39 +44,16 @@ jobs:
         run: |
           if echo "${{ github.ref_name }}" | grep -qE '-(alpha|beta|rc)'; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=next" >> "$GITHUB_OUTPUT"
           else
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          draft: true
           prerelease: ${{ steps.prerelease.outputs.is_prerelease == 'true' }}
           body: |
             ## Changes
 
             ${{ steps.changelog.outputs.changes }}
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-          cache: pnpm
-          cache-dependency-path: cli/pnpm-lock.yaml
-
-      - name: Copy root README for npm
-        run: cp ../README.md .
-
-      - name: Set version from tag
-        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm publish --access public --tag ${{ steps.prerelease.outputs.npm_tag }} --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

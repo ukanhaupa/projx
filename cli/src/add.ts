@@ -7,7 +7,9 @@ import {
   type ComponentInstance,
   type ComponentPaths,
   type Feature,
+  type OrmProvider,
   type PackageManager,
+  BACKEND_DEFAULT_ORM,
   INSTANCE_AWARE_SHARED,
   cleanupRepo,
   detectProjectName,
@@ -16,6 +18,7 @@ import {
   downloadRepo,
   exec,
   hasCommand,
+  ormBackendFamily,
   pmCommands,
   readComponentMarker,
   readProjxConfig,
@@ -27,6 +30,33 @@ import {
   type GeneratorVars,
 } from './baseline.js';
 import { applyFeatures } from './features.js';
+
+function componentOrmFamily(
+  c: Component,
+): ReturnType<typeof ormBackendFamily> | null {
+  const fallback = BACKEND_DEFAULT_ORM[c];
+  return fallback ? ormBackendFamily(fallback) : null;
+}
+
+function eligibleOrmTargets(
+  orm: OrmProvider,
+  components: Component[],
+): Component[] {
+  const family = ormBackendFamily(orm);
+  return components.filter((c) => componentOrmFamily(c) === family);
+}
+
+function assertOrmApplies(orm: OrmProvider, components: Component[]): void {
+  if (eligibleOrmTargets(orm, components).length === 0) {
+    const targets = (Object.keys(BACKEND_DEFAULT_ORM) as Component[]).filter(
+      (c) => componentOrmFamily(c) === ormBackendFamily(orm),
+    );
+    throw new Error(
+      `--orm ${orm} does not apply to the component(s) being added (${components.join(', ')}). ` +
+        `${orm} targets: ${targets.join(', ')}.`,
+    );
+  }
+}
 
 function reportPinnedShared(
   cwd: string,
@@ -51,6 +81,7 @@ export async function add(
   skipInstall = false,
   customName?: string,
   features?: Partial<Record<Feature, string>>,
+  orm?: OrmProvider,
 ): Promise<void> {
   p.intro('projx add');
   const isLocal = !!localRepo;
@@ -75,6 +106,7 @@ export async function add(
     if (existsSync(targetDir)) {
       throw new Error(`Directory '${customName}' already exists.`);
     }
+    if (orm) assertOrmApplies(orm, [newComponents[0]]);
     return await addInstance(
       cwd,
       newComponents[0],
@@ -84,6 +116,7 @@ export async function add(
       localRepo,
       skipInstall,
       isLocal,
+      orm,
     );
   }
 
@@ -92,11 +125,18 @@ export async function add(
     p.log.warn(`Already present: ${alreadyExists.join(', ')}. Skipping those.`);
   }
 
+  if (orm) assertOrmApplies(orm, newComponents);
+
   const toAdd = newComponents.filter((c) => !existing.includes(c));
   const hasFeatures = !!features && Object.keys(features).length > 0;
   if (toAdd.length === 0 && !hasFeatures) {
     p.log.info('Nothing new to add.');
     process.exit(0);
+  }
+
+  const ormOverride: Partial<Record<Component, OrmProvider>> = {};
+  if (orm) {
+    for (const c of eligibleOrmTargets(orm, toAdd)) ormOverride[c] = orm;
   }
 
   if (toAdd.length > 0) p.log.info(`Adding: ${toAdd.join(', ')}`);
@@ -123,7 +163,11 @@ export async function add(
       await discoverComponentsFromMarkers(cwd);
     const instances: ComponentInstance[] = [
       ...existingInstances,
-      ...toAdd.map((c) => ({ type: c, path: c })),
+      ...toAdd.map((c) => ({
+        type: c,
+        path: c,
+        ...(ormOverride[c] ? { orm: ormOverride[c] } : {}),
+      })),
     ];
 
     const pm: PackageManager =
@@ -162,7 +206,7 @@ export async function add(
         paths,
         vars,
         version,
-        { componentSkips, rootSkip, realCwd: cwd },
+        { componentSkips, rootSkip, realCwd: cwd, instanceOrm: ormOverride },
       );
       spinner.stop('Components added.');
 
@@ -224,6 +268,7 @@ async function addInstance(
   localRepo: string | undefined,
   skipInstall: boolean,
   isLocal: boolean,
+  orm?: OrmProvider,
 ): Promise<void> {
   p.log.info(`Adding ${type} instance at ${customName}/`);
 
@@ -243,7 +288,11 @@ async function addInstance(
 
     const { instances: existingInstances } =
       await discoverComponentsFromMarkers(cwd);
-    const newInstance: ComponentInstance = { type, path: customName };
+    const newInstance: ComponentInstance = {
+      type,
+      path: customName,
+      ...(orm ? { orm } : {}),
+    };
     const instances: ComponentInstance[] = [...existingInstances, newInstance];
 
     const pm: PackageManager =
