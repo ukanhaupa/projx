@@ -2,6 +2,17 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-06-20
+
+### Added
+
+- **Per-instance ORM** — heterogeneous ORMs within one project ([#58](https://github.com/ukanhaupa/projx/issues/58)). Each backend instance can now run its own ORM instead of being locked to a single project-wide choice. `add <type> --name <dir> --orm <provider>` (and `add <type> --orm <provider>`) applies the ORM addon to **only** the newly added instance and records it in that instance's `.projx-component` marker; every other instance keeps its ORM. Resolution is family-aware (`resolveInstanceOrm`): instance marker → project-wide `.projx` orm when it is the same backend family → family default, so a Node global like `drizzle` never leaks into a Go/Rust/Laravel instance. The per-instance ORM flows through every generator (`setup.sh`, `ci.yml`, the per-instance Dockerfile migrate command) and `doctor`'s Go health check. Markers without an `orm` field fall back to the project-wide value (full back-compat); `update` preserves each instance's ORM. Verified across all four backend families — Node (prisma/drizzle/sequelize/typeorm), Go (gorm/sqlc/ent), Rust (seaorm), Laravel (eloquent) — including a single repo running drizzle + sequelize + gorm + sqlc side by side.
+
+### Security
+
+- **`fastify` + `express`** — pin `@opentelemetry/core` `>=2.8.0` via `pnpm.overrides` (pulled transitively through `@sentry/node`), clearing GHSA-8988-4f7v-96qf (moderate: unbounded memory allocation in W3C Baggage propagation) so each backend's `pnpm audit --prod` gate stays green. Mirrors the existing brace-expansion/qs override pattern.
+- **`fastapi`** — bump `cryptography` 47→48.0.1 and `starlette` 1.0.1→1.3.1 (CVE-2026-48817 / 48818 / 54282 / 54283), and floor `msgpack` `>=1.2.1` via a uv constraint (transitive via `pip-audit` → `cachecontrol`; GHSA-6v7p-g79w-8964), clearing `pip-audit`. No `fastapi` bump required (it needs only `starlette>=0.46`); the 346-test suite stays green with the crypto module at 100% coverage.
+
 ## [1.9.0] - 2026-06-02
 
 ### Added

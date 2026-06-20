@@ -73,6 +73,8 @@ Addons are NOT bundled in the published npm package — `cli/package.json#files`
 
 **Adding a new ORM** (e.g., Kysely): create `addons/orms/kysely/` matching the layout above. Add `kysely` to `ORM_PROVIDERS` in [cli/src/utils.ts](cli/src/utils.ts) and to the help string in [cli/src/index.ts](cli/src/index.ts). Add an `append<Orm>Entity` function in [cli/src/gen.ts](cli/src/gen.ts) following the existing pattern. Update [setup.sh.ejs](cli/src/templates/setup.sh.ejs) + [ci.yml.ejs](cli/src/templates/ci.yml.ejs) if the migrate command differs from `tsx scripts/db-sync.ts`. No `baseline.ts` core changes needed.
 
+**Per-instance ORM** (heterogeneous ORMs in one project): the ORM is resolved **per backend instance**, not project-wide. Each instance's ORM is recorded in its `.projx-component` marker (`orm` field) and falls back to the project-wide `.projx` `orm` when absent (back-compat). `resolveInstanceOrm` in [cli/src/utils.ts](cli/src/utils.ts) does the resolution — instance marker → project global when it is the **same backend family** → family default (`BACKEND_DEFAULT_ORM`), so a Node global like `drizzle` never leaks into a Go/Rust/Laravel instance. `add <type> --name <dir> --orm <x>` (and `add <type> --orm <x>`) applies the addon to **only** the new instance and records its ORM. The per-instance value is read by `applyOrmProviderToInstance` in [cli/src/baseline.ts](cli/src/baseline.ts), the `*Instances` enrichment in [cli/src/generators/index.ts](cli/src/generators/index.ts) (so `setup.sh`, `ci.yml`, and the per-instance Dockerfile migrate command branch on `inst.orm`), and `doctor`'s Go check. `update` preserves each instance's ORM.
+
 ## Commands
 
 The CLI has these subcommands (see [cli/src/index.ts](cli/src/index.ts) `parseArgs`):
@@ -207,7 +209,7 @@ When adapting code from sister projects (docusift, ops-pilot, memoria), strip bu
 
 Versions live in [cli/package.json](cli/package.json). `prepublishOnly` builds. CHANGELOG entry + version bump on the same commit.
 
-**Publishing is tag-triggered, not manual.** Pushing a `v*` tag fires [.github/workflows/release.yml](.github/workflows/release.yml), which lint/typecheck/build/tests then runs `pnpm publish` to npm using `secrets.NPM_TOKEN` — no local `npm publish` needed. It also cuts a GitHub Release with an auto-generated changelog. Tags matching `-(alpha|beta|rc)` publish under the `next` dist-tag; all others under `latest`. The version published is taken from the tag (`npm version ${TAG#v}`), so the tag and `cli/package.json` must agree. Net: bump version + CHANGELOG on a commit, then tag `vX.Y.Z` and push the tag — the rest is automatic.
+**Publishing is gated behind a draft release — two steps, not one.** Pushing a `v*` tag fires [.github/workflows/release.yml](.github/workflows/release.yml), which lint/typecheck/build/tests and then cuts a **draft** GitHub Release with an auto-generated changelog. **Nothing reaches npm yet.** Publishing that draft (GitHub UI or `gh release edit <tag> --draft=false`) fires [.github/workflows/npm-publish.yml](.github/workflows/npm-publish.yml), which checks out the tag and runs `pnpm publish` to npm using `secrets.NPM_TOKEN` — no local `npm publish` needed. Tags matching `-(alpha|beta|rc)` publish under the `next` dist-tag; all others under `latest`. The version published is taken from the tag (`npm version ${TAG#v}`), so the tag and `cli/package.json` must agree. Net: bump version + CHANGELOG on a commit, tag `vX.Y.Z` and push it to stage a draft, review it, then publish the release to ship to npm.
 
 ## Common gotchas
 

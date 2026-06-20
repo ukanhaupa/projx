@@ -16,11 +16,13 @@ import {
   type Component,
   type ComponentInstance,
   type ComponentPaths,
+  type OrmProvider,
   BACKEND_COMPONENTS,
   DEFAULT_COMPONENT_SKIP_PATTERNS,
   GO_ORM_PROVIDERS,
   NODE_ORM_PROVIDERS,
   copyComponent,
+  resolveInstanceOrm,
   copyStaticFiles,
   readComponentMarker,
   readProjxConfig,
@@ -431,6 +433,7 @@ export interface WriteTemplateOptions {
   realCwd?: string;
   extraInstances?: { type: Component; path: string }[];
   instancesToScaffold?: ComponentInstance[];
+  instanceOrm?: Partial<Record<Component, OrmProvider>>;
 }
 
 export async function writeTemplateToDir(
@@ -449,6 +452,7 @@ export async function writeTemplateToDir(
     realCwd = dest,
     extraInstances = [],
     instancesToScaffold,
+    instanceOrm,
   } = options;
   const name = vars.projectName;
   const nameSnake = toSnake(name);
@@ -474,6 +478,7 @@ export async function writeTemplateToDir(
       baseSkip: componentSkips?.[inst.type] ?? [],
       projectName: name,
       nameSnake,
+      instanceOrmOverride: instanceOrm?.[inst.type],
     });
   }
 
@@ -571,6 +576,7 @@ interface WriteOneOpts {
   baseSkip: string[];
   projectName: string;
   nameSnake: string;
+  instanceOrmOverride?: OrmProvider;
 }
 
 async function writeOneInstance(
@@ -587,6 +593,7 @@ async function writeOneInstance(
     baseSkip,
     projectName,
     nameSnake,
+    instanceOrmOverride,
   } = opts;
   const { type, path: targetDir } = inst;
 
@@ -617,17 +624,24 @@ async function writeOneInstance(
   }
   await rm(tmpDir, { recursive: true, force: true });
 
+  const explicitOrm: OrmProvider | undefined =
+    inst.orm ?? instanceOrmOverride ?? realMarker?.orm;
+  const globalOrm =
+    typeof vars.orm === 'string' ? (vars.orm as OrmProvider) : undefined;
+  const resolvedOrm = resolveInstanceOrm(type, explicitOrm, globalOrm);
+
   const instancePaths: ComponentPaths = {
     ...componentPaths,
     [type]: targetDir,
   };
   await renderEjsInDir(outDir, { ...vars, paths: instancePaths });
-  await applyOrmProviderToInstance(repoDir, outDir, type, vars);
+  await applyOrmProviderToInstance(repoDir, outDir, type, resolvedOrm, vars);
 
   await upsertComponentMarker(
     join(dest, targetDir),
     type,
     skipPatterns.length > 0 ? skipPatterns : undefined,
+    explicitOrm,
   );
 
   await substituteNamesForInstance(
@@ -643,9 +657,9 @@ async function applyOrmProviderToInstance(
   repoDir: string,
   dir: string,
   component: Component,
+  orm: OrmProvider | undefined,
   vars: GeneratorVars,
 ): Promise<void> {
-  const orm = typeof vars.orm === 'string' ? vars.orm : undefined;
   if (!orm) return;
   if (component === 'fastify' || component === 'express') {
     if (orm === 'prisma') return;
