@@ -140,6 +140,28 @@ export function ormBackendFamily(
   return 'node';
 }
 
+export const BACKEND_DEFAULT_ORM: Partial<Record<Component, OrmProvider>> = {
+  fastify: 'prisma',
+  express: 'prisma',
+  go: 'gorm',
+  rust: 'seaorm',
+  laravel: 'eloquent',
+};
+
+export function resolveInstanceOrm(
+  component: Component,
+  instanceOrm: OrmProvider | undefined,
+  globalOrm: OrmProvider | undefined,
+): OrmProvider | undefined {
+  const fallback = BACKEND_DEFAULT_ORM[component];
+  if (!fallback) return undefined;
+  if (instanceOrm) return instanceOrm;
+  if (globalOrm && ormBackendFamily(globalOrm) === ormBackendFamily(fallback)) {
+    return globalOrm;
+  }
+  return fallback;
+}
+
 export interface PmCommands {
   name: PackageManager;
   install: string;
@@ -505,12 +527,14 @@ export type ComponentPaths = Record<Component, string>;
 export interface ComponentInstance {
   type: Component;
   path: string;
+  orm?: OrmProvider;
 }
 
 export interface ComponentMarkerData {
   component: Component;
   skip: string[];
   features?: string[];
+  orm?: OrmProvider;
 }
 
 function parseMarker(raw: string): ComponentMarkerData | null {
@@ -531,6 +555,11 @@ function parseMarker(raw: string): ComponentMarkerData | null {
       }
     }
     if (!component) return null;
+    const orm =
+      typeof data.orm === 'string' &&
+      (ORM_PROVIDERS as readonly string[]).includes(data.orm)
+        ? (data.orm as OrmProvider)
+        : undefined;
     return {
       component,
       skip: Array.isArray(data.skip) ? data.skip : [],
@@ -539,6 +568,7 @@ function parseMarker(raw: string): ComponentMarkerData | null {
             (f: unknown): f is string => typeof f === 'string',
           )
         : undefined,
+      orm,
     };
   } catch {
     return null;
@@ -560,23 +590,36 @@ export async function writeComponentMarker(
   const markerPath = join(dir, COMPONENT_MARKER);
   const existing = await readFileOrNull(markerPath);
   let preservedFeatures: string[] | undefined;
+  let preservedOrm: OrmProvider | undefined;
   if (existing) {
     try {
-      const prev = JSON.parse(existing) as { features?: unknown };
+      const prev = JSON.parse(existing) as {
+        features?: unknown;
+        orm?: unknown;
+      };
       if (Array.isArray(prev.features)) {
         preservedFeatures = prev.features.filter(
           (f): f is string => typeof f === 'string',
         );
       }
+      if (
+        typeof prev.orm === 'string' &&
+        (ORM_PROVIDERS as readonly string[]).includes(prev.orm)
+      ) {
+        preservedOrm = prev.orm as OrmProvider;
+      }
     } catch {
       preservedFeatures = undefined;
+      preservedOrm = undefined;
     }
   }
   const features = data.features ?? preservedFeatures;
+  const orm = data.orm ?? preservedOrm;
   const out: ComponentMarkerData = {
     component: data.component,
     skip: Array.isArray(data.skip) ? data.skip : [],
     ...(features && features.length > 0 ? { features } : {}),
+    ...(orm ? { orm } : {}),
   };
   await writeFile(markerPath, JSON.stringify(out, null, 2) + '\n');
 }
@@ -585,11 +628,13 @@ export async function upsertComponentMarker(
   dir: string,
   component: Component,
   skip?: string[],
+  orm?: OrmProvider,
 ): Promise<void> {
   const existing = await readComponentMarker(dir);
   await writeComponentMarker(dir, {
     component,
     skip: skip ?? existing?.skip ?? [],
+    orm: orm ?? existing?.orm,
   });
 }
 
@@ -685,7 +730,11 @@ export async function discoverComponentsFromMarkers(cwd: string): Promise<{
 
     const marker = await readComponentMarker(join(cwd, entry.name));
     if (!marker) continue;
-    instances.push({ type: marker.component, path: entry.name });
+    instances.push({
+      type: marker.component,
+      path: entry.name,
+      ...(marker.orm ? { orm: marker.orm } : {}),
+    });
     if (!components.includes(marker.component)) {
       components.push(marker.component);
       paths[marker.component] = entry.name;

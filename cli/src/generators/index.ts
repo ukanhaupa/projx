@@ -2,10 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   render,
+  resolveInstanceOrm,
   sharedTemplateDir,
   type Component,
   type ComponentInstance,
   type ComponentPaths,
+  type OrmProvider,
 } from '../utils.js';
 
 interface GeneratorVars {
@@ -43,10 +45,12 @@ function withInstances(vars: GeneratorVars): GeneratorVars {
           type,
           path: vars.paths[type] ?? type,
         }));
+  const globalOrm = vars.orm as OrmProvider | undefined;
   const enriched = base.map((inst) => ({
     ...inst,
     upper: shellSafeUpper(inst.path),
     display: inst.path === inst.type ? CANONICAL_DISPLAY[inst.type] : inst.path,
+    orm: resolveInstanceOrm(inst.type, inst.orm, globalOrm),
   }));
   const byType = (type: Component) =>
     enriched

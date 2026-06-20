@@ -234,9 +234,9 @@ jobs:
           cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
-<% if (orm === 'drizzle') { %>
+<% if (inst.orm === 'drizzle') { %>
       - run: <%= pm.exec %> drizzle-kit push --force
-<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+<% } else if (inst.orm === 'sequelize' || inst.orm === 'typeorm') { %>
       - run: <%= pm.exec %> tsx scripts/db-sync.ts
 <% } else { %>
       - run: <%= pm.prismaExec %> generate
@@ -294,9 +294,9 @@ jobs:
           cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/<%= pm.lockfile %>
 <% } %>
       - run: <%= pm.ci %>
-<% if (orm === 'drizzle') { %>
+<% if (inst.orm === 'drizzle') { %>
       - run: <%= pm.exec %> drizzle-kit push --force
-<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+<% } else if (inst.orm === 'sequelize' || inst.orm === 'typeorm') { %>
       - run: <%= pm.exec %> tsx scripts/db-sync.ts
 <% } else { %>
       - run: <%= pm.prismaExec %> generate
@@ -343,12 +343,12 @@ jobs:
           go-version-file: ${{ env.WS }}/<%= inst.path %>/go.mod
           cache-dependency-path: ${{ env.WS }}/<%= inst.path %>/go.sum
       - run: go mod download
-<% if (orm === 'sqlc') { %>
+<% if (inst.orm === 'sqlc') { %>
       - name: Install sqlc
         run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
       - name: sqlc generate --check (drift gate)
         run: "$(go env GOPATH)/bin/sqlc generate --check"
-<% } else if (orm === 'ent') { %>
+<% } else if (inst.orm === 'ent') { %>
       - name: ent generate (drift gate)
         run: |
           go generate ./ent/...

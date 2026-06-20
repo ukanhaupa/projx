@@ -20,7 +20,7 @@ echo "<%= inst.display %> dependencies installed."
 (
   cd <%= inst.path %>
   <%= pm.install %>
-<% if (orm === 'drizzle') { %>
+<% if (inst.orm === 'drizzle') { %>
   if [ -f drizzle.config.ts ]; then
     if [ -n "$DATABASE_URL" ]; then
       <%= pm.exec %> drizzle-kit push --force
@@ -28,7 +28,7 @@ echo "<%= inst.display %> dependencies installed."
       echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
     fi
   fi
-<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+<% } else if (inst.orm === 'sequelize' || inst.orm === 'typeorm') { %>
   if [ -f scripts/db-sync.ts ]; then
     if [ -n "$DATABASE_URL" ]; then
       <%= pm.exec %> tsx scripts/db-sync.ts
@@ -57,7 +57,7 @@ echo "<%= inst.display %> dependencies installed."
 (
   cd <%= inst.path %>
   <%= pm.install %>
-<% if (orm === 'drizzle') { %>
+<% if (inst.orm === 'drizzle') { %>
   if [ -f drizzle.config.ts ]; then
     if [ -n "$DATABASE_URL" ]; then
       <%= pm.exec %> drizzle-kit push --force
@@ -65,7 +65,7 @@ echo "<%= inst.display %> dependencies installed."
       echo "<%= inst.display %>: skipping Drizzle schema push (DATABASE_URL not set)."
     fi
   fi
-<% } else if (orm === 'sequelize' || orm === 'typeorm') { %>
+<% } else if (inst.orm === 'sequelize' || inst.orm === 'typeorm') { %>
   if [ -f scripts/db-sync.ts ]; then
     if [ -n "$DATABASE_URL" ]; then
       <%= pm.exec %> tsx scripts/db-sync.ts
@@ -95,7 +95,7 @@ if command -v go &>/dev/null; then
   (
     cd <%= inst.path %>
     go mod download
-<% if (orm === 'sqlc') { %>
+<% if (inst.orm === 'sqlc') { %>
     if [ -f scripts/db-sync.sh ]; then
       if [ -n "$DATABASE_URL" ]; then
         bash scripts/db-sync.sh
@@ -103,7 +103,7 @@ if command -v go &>/dev/null; then
         echo "<%= inst.display %>: skipping sqlc db-sync (DATABASE_URL not set)."
       fi
     fi
-<% } else if (orm === 'ent') { %>
+<% } else if (inst.orm === 'ent') { %>
     if [ -d ent/schema ]; then
       go generate ./ent/...
       go mod tidy

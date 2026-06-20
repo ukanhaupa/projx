@@ -273,6 +273,20 @@ describe('main dispatch', () => {
       true,
       undefined,
       undefined,
+      undefined,
+    );
+  });
+
+  it('threads --orm through to add', async () => {
+    await runMain(['add', 'fastify', '--name', 'worker', '--orm', 'drizzle']);
+    expect(add).toHaveBeenCalledWith(
+      expect.any(String),
+      ['fastify'],
+      undefined,
+      false,
+      'worker',
+      undefined,
+      'drizzle',
     );
   });
 
@@ -283,6 +297,7 @@ describe('main dispatch', () => {
       ['vitejs'],
       undefined,
       true,
+      undefined,
       undefined,
       undefined,
     );

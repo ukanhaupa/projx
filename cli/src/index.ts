@@ -330,6 +330,7 @@ function printHelp(): void {
     projx init                    Adopt existing project into projx
     projx add <components...>     Add components to existing project
     projx add <type> --name <dir> Add another instance of <type> at <dir>
+    projx add <type> --orm <x>    Add a backend on its own ORM (heterogeneous)
     projx update                  Update scaffolding to latest
     projx diff                    Preview what update would change
     projx pin <patterns...>       Skip files on future updates
@@ -364,6 +365,7 @@ function printHelp(): void {
     npx create-projx my-app -y
     npx create-projx add vitejs mobile
     npx create-projx add fastify --name email-ingestor
+    npx create-projx add fastify --name reporting --orm drizzle
     npx create-projx@latest update
     npx create-projx diff
     npx create-projx pin backend/pyproject.toml
@@ -419,6 +421,9 @@ async function main(): Promise<void> {
       );
       process.exit(2);
     }
+    if (options.orm) {
+      validateOrmAgainstComponents(options.orm, components);
+    }
     await add(
       process.cwd(),
       components,
@@ -426,6 +431,7 @@ async function main(): Promise<void> {
       options.install === false,
       customName,
       options.features,
+      options.orm,
     );
     return;
   }

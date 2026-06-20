@@ -7,9 +7,11 @@ import {
   COMPONENT_MARKER,
   type Component,
   type ComponentPaths,
+  type OrmProvider,
   discoverComponentsFromMarkers,
   readComponentMarker,
   readProjxConfig,
+  resolveInstanceOrm,
 } from './utils.js';
 import { BASELINE_REF, matchesSkip, saveBaselineRef } from './baseline.js';
 
@@ -851,15 +853,23 @@ export async function doctor(cwd: string, fix = false): Promise<void> {
     process.exit(1);
   }
 
-  const { components, paths: componentPaths } =
-    await discoverComponentsFromMarkers(cwd);
+  const {
+    components,
+    paths: componentPaths,
+    instances,
+  } = await discoverComponentsFromMarkers(cwd);
   allResults.push(...(await checkComponents(cwd, components, componentPaths)));
 
   allResults.push(...checkGit(cwd, fix));
 
-  if (components.includes('go')) {
-    const orm = typeof rootConfig.orm === 'string' ? rootConfig.orm : 'gorm';
-    allResults.push(...checkGoComponent(cwd, componentPaths.go, orm));
+  const globalOrm =
+    typeof rootConfig.orm === 'string'
+      ? (rootConfig.orm as OrmProvider)
+      : undefined;
+  for (const inst of instances) {
+    if (inst.type !== 'go') continue;
+    const orm = resolveInstanceOrm('go', inst.orm, globalOrm) ?? 'gorm';
+    allResults.push(...checkGoComponent(cwd, inst.path, orm));
   }
 
   if (components.includes('rust')) {
