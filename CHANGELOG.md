@@ -2,6 +2,27 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-06-22
+
+### Added
+
+- **Audit logging across the full template matrix** — every backend now records create/update/delete to an `audit_logs` table with before/after snapshots and actor/`request_id` correlation: **express** (Prisma), **go** (GORM), **rust** (SeaORM), **laravel** (Eloquent), and the **drizzle / sequelize / typeorm** Node addons — bringing them up to the coverage `fastify` and `fastapi` already shipped. Writes go through a central path so bulk operations are captured (native ORM hooks bypass bulk ops), and the audit table never audits itself. `go` `sqlc`/`ent` remain audit-free for now (the prior GORM-only implementation was removed from them rather than left half-wired).
+- **admin-panel Service Config editor** — the auth-gated admin panel can now view and edit encrypted `service_configs` rows (AES-256-GCM, decrypt-on-read) alongside the table browser, with the TOTP step merged into the login screen.
+
+### Fixed
+
+- **Audit interceptor silently dropped bulk writes** ([#74](https://github.com/ukanhaupa/projx/issues/74)) — operations were matched against a hardcoded `create`/`update`/`delete` allowlist, so `upsert`, `createMany`, `updateMany`, `deleteMany`, and `*AndReturn` left no audit trail at all. Classification is now dynamic by operation-name prefix and captures the entire write surface, with dedicated regression suites on **fastify** (all four ORMs) and **fastapi**.
+- **`gen entity --fields=… / --name=…` (equals form) was a silent no-op** — `parseArgs` handled only the space-separated form, so `--fields=a:string` generated an empty module and `--name=svc` was ignored. Both forms now parse identically.
+- **`--local` scaffolds copied coverage artifacts** — `copyComponent` excluded an exact `coverage` directory but copied dynamically-named `coverage-ci-<pid>` output (and `.next-e2e`), leaking build junk into new projects and racing with concurrent test runs. The copy filter now prefix-excludes `coverage-`.
+
+### Changed
+
+- **Self-discovering scaffold fuzzer** (`scripts/scaffold-fuzz.py`) — the `scaffold_fuzz` gate now derives its full test matrix (components, ORMs, families, features, addons, audit markers) from the CLI constants and manifests at runtime instead of hardcoded lists, and exercises create / add / update / init / gen / multi-command sequences plus doctor / pin / diff / multi-instance / per-instance-ORM scenarios and command negatives. New templates, ORMs, features, and addons are picked up and tested automatically.
+
+### Security
+
+- **`go`** — bump the `go.mod` toolchain directive to `go1.26.4`, clearing the standard-library CVEs flagged by `govulncheck`.
+
 ## [1.9.1] - 2026-06-20
 
 ### Added
