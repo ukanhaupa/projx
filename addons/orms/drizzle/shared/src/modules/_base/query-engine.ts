@@ -1,5 +1,5 @@
-import { type SQL, and, asc, desc, eq, ilike, or } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { type SQL, and, asc, desc, eq, ilike, or } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
 
 export interface ParsedQuery {
   page: number;
@@ -12,14 +12,14 @@ export interface ParsedQuery {
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
-const RESERVED = new Set(["page", "page_size", "order_by", "search"]);
+const RESERVED = new Set(['page', 'page_size', 'order_by', 'search']);
 
 export function parseRawQuery(rawQs: string): ParsedQuery {
   const params = new URLSearchParams(rawQs);
-  const page = Math.max(1, Number(params.get("page")) || 1);
+  const page = Math.max(1, Number(params.get('page')) || 1);
   const page_size = Math.min(
     MAX_PAGE_SIZE,
-    Math.max(1, Number(params.get("page_size")) || DEFAULT_PAGE_SIZE),
+    Math.max(1, Number(params.get('page_size')) || DEFAULT_PAGE_SIZE),
   );
   const filters: Record<string, string> = {};
   for (const [key, value] of params.entries()) {
@@ -29,8 +29,8 @@ export function parseRawQuery(rawQs: string): ParsedQuery {
   return {
     page,
     page_size,
-    order_by: params.get("order_by") ?? undefined,
-    search: params.get("search") ?? undefined,
+    order_by: params.get('order_by') ?? undefined,
+    search: params.get('search') ?? undefined,
     filters,
   };
 }
@@ -80,10 +80,10 @@ export function buildOrderBy(
 ): SQL[] {
   if (!orderBy) return [];
   const out: SQL[] = [];
-  for (const raw of orderBy.split(",")) {
+  for (const raw of orderBy.split(',')) {
     const term = raw.trim();
     if (!term) continue;
-    const descOrder = term.startsWith("-");
+    const descOrder = term.startsWith('-');
     const fieldName = descOrder ? term.slice(1) : term;
     const col = column(table, fieldName);
     if (!col) continue;

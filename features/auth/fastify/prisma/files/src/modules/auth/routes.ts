@@ -1,15 +1,15 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { User } from "@prisma/client";
-import fp from "fastify-plugin";
-import { Type } from "@sinclair/typebox";
-import { randomUUID } from "node:crypto";
-import { hashPassword, verifyPassword, hashToken } from "./password.js";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { User } from '@prisma/client';
+import fp from 'fastify-plugin';
+import { Type } from '@sinclair/typebox';
+import { randomUUID } from 'node:crypto';
+import { hashPassword, verifyPassword, hashToken } from './password.js';
 import {
   buildResetLink,
   buildVerificationLink,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from "./mailer.js";
+} from './mailer.js';
 import {
   buildOtpauthUrl,
   decryptRecoveryCodes,
@@ -24,26 +24,26 @@ import {
   MFA_LOCKOUT_MS,
   MFA_MAX_ATTEMPTS,
   verifyTotp,
-} from "./mfa.js";
-import { sendInitialVerificationEmail } from "./verification-jobs.js";
+} from './mfa.js';
+import { sendInitialVerificationEmail } from './verification-jobs.js';
 import {
   hashRefreshToken,
   issueAuthSession,
   permissionsForRole,
   REFRESH_TTL_SECONDS,
   signTokens,
-} from "./session.js";
+} from './session.js';
 
 const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
-const MFA_CHALLENGE_TTL = "5m";
-const PUBLIC_RATE_LIMIT = { max: 5, timeWindow: "1 minute" } as const;
+const MFA_CHALLENGE_TTL = '5m';
+const PUBLIC_RATE_LIMIT = { max: 5, timeWindow: '1 minute' } as const;
 
 interface MfaChallengePayload {
   sub: string;
-  stage: "mfa_pending";
+  stage: 'mfa_pending';
 }
 
 interface RefreshTokenPayload {
@@ -68,7 +68,7 @@ function err(
 
 function signMfaChallenge(fastify: FastifyInstance, user: User): string {
   return fastify.jwt.sign(
-    { sub: user.id, stage: "mfa_pending" },
+    { sub: user.id, stage: 'mfa_pending' },
     { expiresIn: MFA_CHALLENGE_TTL },
   );
 }
@@ -99,16 +99,16 @@ async function resetMfaCounters(
 
 export default fp(async (fastify) => {
   fastify.post(
-    "/auth/signup",
+    '/auth/signup',
     {
       config: {
         public: true,
         rateLimit: PUBLIC_RATE_LIMIT,
       },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
-          email: Type.String({ format: "email" }),
+          email: Type.String({ format: 'email' }),
           name: Type.String({ minLength: 1 }),
           password: Type.String({ minLength: 8 }),
         }),
@@ -129,7 +129,7 @@ export default fp(async (fastify) => {
           reply,
           request,
           409,
-          "An account with this email already exists.",
+          'An account with this email already exists.',
         );
       }
       const passwordHash = await hashPassword(body.password);
@@ -139,7 +139,7 @@ export default fp(async (fastify) => {
           email: body.email.toLowerCase(),
           name: body.name,
           password_hash: passwordHash,
-          role: isFirstUser ? "admin" : "user",
+          role: isFirstUser ? 'admin' : 'user',
         },
       });
 
@@ -162,7 +162,7 @@ export default fp(async (fastify) => {
           token_hash: hashRefreshToken(tokens.refresh_token),
           expires_at: expiresAt,
           ip_address: request.ip,
-          user_agent: request.headers["user-agent"] ?? null,
+          user_agent: request.headers['user-agent'] ?? null,
         },
       });
 
@@ -171,7 +171,7 @@ export default fp(async (fastify) => {
       } catch (e) {
         fastify.log.error(
           { err: e, userId: user.id },
-          "Failed to send initial verification email",
+          'Failed to send initial verification email',
         );
       }
 
@@ -193,16 +193,16 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/login",
+    '/auth/login',
     {
       config: {
         public: true,
         rateLimit: PUBLIC_RATE_LIMIT,
       },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
-          email: Type.String({ format: "email" }),
+          email: Type.String({ format: 'email' }),
           password: Type.String(),
         }),
       },
@@ -226,12 +226,12 @@ export default fp(async (fastify) => {
           reply,
           request,
           429,
-          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
       if (!user || !user.password_hash) {
-        return err(reply, request, 401, "Invalid credentials");
+        return err(reply, request, 401, 'Invalid credentials');
       }
 
       const validPassword = await verifyPassword(password, user.password_hash);
@@ -247,7 +247,7 @@ export default fp(async (fastify) => {
           where: { id: user.id },
           data: lockData,
         });
-        return err(reply, request, 401, "Invalid credentials");
+        return err(reply, request, 401, 'Invalid credentials');
       }
 
       const freshUser = await fastify.prisma.user.update({
@@ -268,7 +268,7 @@ export default fp(async (fastify) => {
             reply,
             request,
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
           );
         }
         const challenge_token = signMfaChallenge(fastify, freshUser);
@@ -285,14 +285,14 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/mfa/verify-challenge",
+    '/auth/mfa/verify-challenge',
     {
       config: {
         public: true,
         rateLimit: PUBLIC_RATE_LIMIT,
       },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           challenge_token: Type.String(),
           code: Type.String({ minLength: 6, maxLength: 32 }),
@@ -311,17 +311,17 @@ export default fp(async (fastify) => {
       try {
         decoded = fastify.jwt.verify<MfaChallengePayload>(body.challenge_token);
       } catch {
-        return err(reply, request, 401, "Challenge token invalid or expired");
+        return err(reply, request, 401, 'Challenge token invalid or expired');
       }
-      if (decoded.stage !== "mfa_pending" || !decoded.sub) {
-        return err(reply, request, 401, "Challenge token invalid");
+      if (decoded.stage !== 'mfa_pending' || !decoded.sub) {
+        return err(reply, request, 401, 'Challenge token invalid');
       }
 
       const user = await fastify.prisma.user.findUnique({
         where: { id: decoded.sub },
       });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(reply, request, 401, "MFA not configured");
+        return err(reply, request, 401, 'MFA not configured');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
         const mins = Math.ceil(
@@ -331,7 +331,7 @@ export default fp(async (fastify) => {
           reply,
           request,
           429,
-          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
@@ -348,7 +348,7 @@ export default fp(async (fastify) => {
 
       if (!success) {
         await recordMfaFailure(fastify, user);
-        return err(reply, request, 401, "Invalid MFA code");
+        return err(reply, request, 401, 'Invalid MFA code');
       }
 
       if (consumedRecoveryIndex >= 0) {
@@ -372,20 +372,20 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/mfa/enroll",
-    { preHandler: fastify.authenticate, schema: { tags: ["auth"] } },
+    '/auth/mfa/enroll',
+    { preHandler: fastify.authenticate, schema: { tags: ['auth'] } },
     async (request, reply) => {
       const userId = request.authUser!.sub as string;
       const user = await fastify.prisma.user.findUnique({
         where: { id: userId },
       });
-      if (!user) return err(reply, request, 404, "User not found");
+      if (!user) return err(reply, request, 404, 'User not found');
       if (user.mfa_enabled) {
         return err(
           reply,
           request,
           409,
-          "MFA is already enabled. Disable it first to re-enroll.",
+          'MFA is already enabled. Disable it first to re-enroll.',
         );
       }
 
@@ -406,11 +406,11 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/mfa/enroll/verify",
+    '/auth/mfa/enroll/verify',
     {
       preHandler: fastify.authenticate,
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           code: Type.String({ minLength: 6, maxLength: 10 }),
         }),
@@ -427,11 +427,11 @@ export default fp(async (fastify) => {
           reply,
           request,
           400,
-          "No pending MFA enrollment. Start enrollment first.",
+          'No pending MFA enrollment. Start enrollment first.',
         );
       }
       if (user.mfa_enabled) {
-        return err(reply, request, 409, "MFA is already enabled.");
+        return err(reply, request, 409, 'MFA is already enabled.');
       }
 
       const valid = verifyTotp(code, decryptSecret(user.mfa_secret_enc));
@@ -440,7 +440,7 @@ export default fp(async (fastify) => {
           reply,
           request,
           400,
-          "Invalid code. Scan the QR and try again.",
+          'Invalid code. Scan the QR and try again.',
         );
       }
 
@@ -463,11 +463,11 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/mfa/disable",
+    '/auth/mfa/disable',
     {
       preHandler: fastify.authenticate,
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           password: Type.String(),
           code: Type.String({ minLength: 6, maxLength: 32 }),
@@ -486,16 +486,16 @@ export default fp(async (fastify) => {
         where: { id: userId },
       });
       if (!user || !user.password_hash)
-        return err(reply, request, 404, "User not found");
+        return err(reply, request, 404, 'User not found');
       if (!user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(reply, request, 400, "MFA is not enabled.");
+        return err(reply, request, 400, 'MFA is not enabled.');
       }
 
       const passwordOk = await verifyPassword(
         body.password,
         user.password_hash,
       );
-      if (!passwordOk) return err(reply, request, 400, "Invalid password");
+      if (!passwordOk) return err(reply, request, 400, 'Invalid password');
 
       let mfaOk: boolean;
       if (body.use_recovery) {
@@ -506,7 +506,7 @@ export default fp(async (fastify) => {
       }
       if (!mfaOk) {
         await recordMfaFailure(fastify, user);
-        return err(reply, request, 400, "Invalid MFA code");
+        return err(reply, request, 400, 'Invalid MFA code');
       }
 
       await fastify.prisma.user.update({
@@ -526,11 +526,11 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/mfa/recovery-codes/regenerate",
+    '/auth/mfa/recovery-codes/regenerate',
     {
       preHandler: fastify.authenticate,
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           code: Type.String({ minLength: 6, maxLength: 10 }),
         }),
@@ -543,15 +543,15 @@ export default fp(async (fastify) => {
         where: { id: userId },
       });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(reply, request, 400, "MFA is not enabled.");
+        return err(reply, request, 400, 'MFA is not enabled.');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
-        return err(reply, request, 429, "MFA temporarily locked.");
+        return err(reply, request, 429, 'MFA temporarily locked.');
       }
 
       if (!verifyTotp(code, decryptSecret(user.mfa_secret_enc))) {
         await recordMfaFailure(fastify, user);
-        return err(reply, request, 400, "Invalid MFA code");
+        return err(reply, request, 400, 'Invalid MFA code');
       }
 
       const plaintextCodes = generateRecoveryCodes();
@@ -570,11 +570,11 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/refresh",
+    '/auth/refresh',
     {
       config: { public: true },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           refresh_token: Type.String(),
         }),
@@ -583,8 +583,8 @@ export default fp(async (fastify) => {
     async (request, reply) => {
       const { refresh_token } = request.body as { refresh_token: string };
       const decoded = fastify.jwt.verify<RefreshTokenPayload>(refresh_token);
-      if (decoded.token_type !== "refresh") {
-        return err(reply, request, 401, "Unauthorized");
+      if (decoded.token_type !== 'refresh') {
+        return err(reply, request, 401, 'Unauthorized');
       }
 
       if (
@@ -594,7 +594,7 @@ export default fp(async (fastify) => {
         !decoded.role ||
         !decoded.jti
       ) {
-        return err(reply, request, 401, "Unauthorized");
+        return err(reply, request, 401, 'Unauthorized');
       }
 
       const presentedHash = hashRefreshToken(refresh_token);
@@ -607,7 +607,7 @@ export default fp(async (fastify) => {
         tokenRow.session_id !== decoded.sid ||
         tokenRow.user_id !== decoded.sub
       ) {
-        return err(reply, request, 401, "Unauthorized");
+        return err(reply, request, 401, 'Unauthorized');
       }
 
       const handleReplay = async () => {
@@ -628,9 +628,9 @@ export default fp(async (fastify) => {
             user_id: tokenRow.user_id,
             token_id: tokenRow.id,
           },
-          "refresh_token_replay_detected",
+          'refresh_token_replay_detected',
         );
-        return err(reply, request, 401, "token_replay_detected");
+        return err(reply, request, 401, 'token_replay_detected');
       };
 
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
@@ -638,7 +638,7 @@ export default fp(async (fastify) => {
       }
 
       if (tokenRow.expires_at.getTime() < Date.now()) {
-        return err(reply, request, 401, "Unauthorized");
+        return err(reply, request, 401, 'Unauthorized');
       }
 
       const freshUser = await fastify.prisma.user.findUnique({
@@ -646,7 +646,7 @@ export default fp(async (fastify) => {
         select: { id: true, name: true, email: true, role: true },
       });
       if (!freshUser) {
-        return err(reply, request, 401, "Unauthorized");
+        return err(reply, request, 401, 'Unauthorized');
       }
 
       const payload = {
@@ -674,7 +674,7 @@ export default fp(async (fastify) => {
             token_hash: hashRefreshToken(tokens.refresh_token),
             expires_at: newExpiresAt,
             ip_address: request.ip,
-            user_agent: request.headers["user-agent"] ?? null,
+            user_agent: request.headers['user-agent'] ?? null,
           },
         });
 
@@ -695,14 +695,14 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/logout",
+    '/auth/logout',
     {
       preHandler: fastify.authenticate,
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Optional(
           Type.Object({
-            session_id: Type.Optional(Type.String({ format: "uuid" })),
+            session_id: Type.Optional(Type.String({ format: 'uuid' })),
           }),
         ),
       },
@@ -712,11 +712,11 @@ export default fp(async (fastify) => {
       const body = (request.body ?? {}) as { session_id?: string };
       const sessionId =
         body.session_id ??
-        (typeof request.authUser?.sid === "string"
+        (typeof request.authUser?.sid === 'string'
           ? request.authUser.sid
           : undefined);
       if (!userId || !sessionId) {
-        return err(reply, request, 400, "session_id is required");
+        return err(reply, request, 400, 'session_id is required');
       }
 
       await fastify.prisma.refreshToken.updateMany({
@@ -724,16 +724,16 @@ export default fp(async (fastify) => {
         data: { revoked_at: new Date() },
       });
 
-      return { status: "ok" };
+      return { status: 'ok' };
     },
   );
 
   fastify.post(
-    "/auth/change-password",
+    '/auth/change-password',
     {
       preHandler: fastify.authenticate,
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           current_password: Type.String(),
           new_password: Type.String({ minLength: 8 }),
@@ -750,12 +750,12 @@ export default fp(async (fastify) => {
         where: { id: userId },
       });
       if (!user || !user.password_hash) {
-        return err(reply, request, 404, "User not found");
+        return err(reply, request, 404, 'User not found');
       }
 
       const ok = await verifyPassword(current_password, user.password_hash);
       if (!ok) {
-        return err(reply, request, 400, "Invalid password");
+        return err(reply, request, 400, 'Invalid password');
       }
 
       const password_hash = await hashPassword(new_password);
@@ -765,7 +765,7 @@ export default fp(async (fastify) => {
       });
 
       const currentSessionId =
-        typeof request.authUser?.sid === "string"
+        typeof request.authUser?.sid === 'string'
           ? request.authUser.sid
           : undefined;
       await fastify.prisma.refreshToken.updateMany({
@@ -779,23 +779,23 @@ export default fp(async (fastify) => {
         data: { revoked_at: new Date() },
       });
 
-      return { status: "ok" };
+      return { status: 'ok' };
     },
   );
 
   fastify.get(
-    "/auth/sessions",
+    '/auth/sessions',
     {
       preHandler: fastify.authenticate,
-      schema: { tags: ["auth"] },
+      schema: { tags: ['auth'] },
     },
     async (request, reply) => {
       const userId = request.authUser?.sub;
-      if (!userId) return err(reply, request, 401, "Unauthorized");
+      if (!userId) return err(reply, request, 401, 'Unauthorized');
       const tokens = await fastify.prisma.refreshToken.findMany({
         where: { user_id: userId, revoked_at: null },
-        orderBy: { created_at: "desc" },
-        distinct: ["session_id"],
+        orderBy: { created_at: 'desc' },
+        distinct: ['session_id'],
       });
       return {
         data: tokens.map((token) => ({
@@ -811,15 +811,15 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/forgot-password",
+    '/auth/forgot-password',
     {
       config: {
         public: true,
         rateLimit: PUBLIC_RATE_LIMIT,
       },
       schema: {
-        tags: ["auth"],
-        body: Type.Object({ email: Type.String({ format: "email" }) }),
+        tags: ['auth'],
+        body: Type.Object({ email: Type.String({ format: 'email' }) }),
       },
     },
     async (request) => {
@@ -831,7 +831,7 @@ export default fp(async (fastify) => {
       if (!user) {
         return {
           message:
-            "If the account exists, a password reset link has been generated.",
+            'If the account exists, a password reset link has been generated.',
         };
       }
 
@@ -842,7 +842,7 @@ export default fp(async (fastify) => {
         data: {
           user_id: user.id,
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           expires_at: new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000),
         },
       });
@@ -851,19 +851,19 @@ export default fp(async (fastify) => {
       try {
         const sent = await sendPasswordResetEmail(user.email, resetLink);
         if (!sent) {
-          fastify.log.warn("SMTP is not configured; reset email was not sent.");
+          fastify.log.warn('SMTP is not configured; reset email was not sent.');
         }
       } catch (e) {
         fastify.log.error(
           { err: e },
-          "Failed to send password reset email via SMTP",
+          'Failed to send password reset email via SMTP',
         );
       }
 
       return {
         message:
-          "If the account exists, a password reset link has been generated.",
-        ...(process.env.NODE_ENV !== "production"
+          'If the account exists, a password reset link has been generated.',
+        ...(process.env.NODE_ENV !== 'production'
           ? { reset_token: rawToken }
           : {}),
       };
@@ -871,11 +871,11 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/reset-password",
+    '/auth/reset-password',
     {
       config: { public: true },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({
           token: Type.String(),
           new_password: Type.String({ minLength: 8 }),
@@ -892,14 +892,14 @@ export default fp(async (fastify) => {
       const reset = await fastify.prisma.verificationToken.findFirst({
         where: {
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           consumed_at: null,
           expires_at: { gt: new Date() },
         },
       });
 
       if (!reset) {
-        return err(reply, request, 400, "Invalid or expired reset token");
+        return err(reply, request, 400, 'Invalid or expired reset token');
       }
 
       const password_hash = await hashPassword(new_password);
@@ -919,16 +919,16 @@ export default fp(async (fastify) => {
         }),
       ]);
 
-      return { status: "ok" };
+      return { status: 'ok' };
     },
   );
 
   fastify.post(
-    "/auth/verify-email",
+    '/auth/verify-email',
     {
       config: { public: true },
       schema: {
-        tags: ["auth"],
+        tags: ['auth'],
         body: Type.Object({ token: Type.String({ minLength: 1 }) }),
       },
     },
@@ -939,7 +939,7 @@ export default fp(async (fastify) => {
       const record = await fastify.prisma.verificationToken.findFirst({
         where: {
           token_hash: tokenHash,
-          kind: "email_verify",
+          kind: 'email_verify',
           consumed_at: null,
           expires_at: { gt: new Date() },
         },
@@ -950,7 +950,7 @@ export default fp(async (fastify) => {
           reply,
           request,
           400,
-          "Invalid or expired verification token",
+          'Invalid or expired verification token',
         );
       }
 
@@ -970,22 +970,22 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
-    "/auth/resend-verification",
+    '/auth/resend-verification',
     {
       config: {
         public: true,
         rateLimit: {
           max: 5,
-          timeWindow: "1 hour",
+          timeWindow: '1 hour',
           keyGenerator: (req) => {
             const body = (req.body ?? {}) as { email?: string };
-            return (body.email ?? "").toLowerCase() || req.ip;
+            return (body.email ?? '').toLowerCase() || req.ip;
           },
         },
       },
       schema: {
-        tags: ["auth"],
-        body: Type.Object({ email: Type.String({ format: "email" }) }),
+        tags: ['auth'],
+        body: Type.Object({ email: Type.String({ format: 'email' }) }),
       },
     },
     async (request, reply) => {
@@ -1000,7 +1000,7 @@ export default fp(async (fastify) => {
           data: {
             user_id: user.id,
             token_hash: hashToken(rawToken),
-            kind: "email_verify",
+            kind: 'email_verify',
             expires_at: new Date(
               Date.now() + VERIFICATION_TOKEN_TTL_SECONDS * 1000,
             ),
@@ -1012,13 +1012,13 @@ export default fp(async (fastify) => {
           const sent = await sendVerificationEmail(user.email, link);
           if (!sent) {
             fastify.log.warn(
-              "SMTP is not configured; verification email was not sent.",
+              'SMTP is not configured; verification email was not sent.',
             );
           }
         } catch (e) {
           fastify.log.error(
             { err: e },
-            "Failed to send verification email via SMTP",
+            'Failed to send verification email via SMTP',
           );
         }
       }
@@ -1028,19 +1028,19 @@ export default fp(async (fastify) => {
   );
 
   fastify.get(
-    "/auth/me",
+    '/auth/me',
     {
       preHandler: fastify.authenticate,
-      schema: { tags: ["auth"] },
+      schema: { tags: ['auth'] },
     },
     async (request, reply) => {
       const userId = request.authUser?.sub;
-      if (!userId) return err(reply, request, 401, "Unauthorized");
+      if (!userId) return err(reply, request, 401, 'Unauthorized');
       const user = await fastify.prisma.user.findUnique({
         where: { id: userId },
       });
       if (!user || user.deleted_at)
-        return err(reply, request, 404, "User not found");
+        return err(reply, request, 404, 'User not found');
       return {
         id: user.id,
         email: user.email,

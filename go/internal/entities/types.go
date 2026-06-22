@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"gorm.io/gorm/schema"
+
+	"projx.local/go/internal/audit"
 )
 
 type Hooks struct {
@@ -26,4 +28,6 @@ type EntityConfig struct {
 
 	schema           *schema.Schema
 	immutableColumns map[string]struct{}
+	auditor          *audit.Auditor
+	tableName        string
 }

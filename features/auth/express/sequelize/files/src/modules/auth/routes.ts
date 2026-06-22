@@ -3,21 +3,21 @@ import express, {
   type Request,
   type Response,
   type Router,
-} from "express";
-import { randomUUID } from "node:crypto";
-import { Op, type Sequelize } from "sequelize";
-import { z } from "zod";
-import { requireAuth } from "../../middlewares/authenticate.js";
-import { User } from "../../models/user.js";
-import { RefreshToken } from "../../models/refresh-token.js";
-import { VerificationToken } from "../../models/verification-token.js";
-import { hashPassword, verifyPassword, hashToken } from "./password.js";
+} from 'express';
+import { randomUUID } from 'node:crypto';
+import { Op, type Sequelize } from 'sequelize';
+import { z } from 'zod';
+import { requireAuth } from '../../middlewares/authenticate.js';
+import { User } from '../../models/user.js';
+import { RefreshToken } from '../../models/refresh-token.js';
+import { VerificationToken } from '../../models/verification-token.js';
+import { hashPassword, verifyPassword, hashToken } from './password.js';
 import {
   buildResetLink,
   buildVerificationLink,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from "./mailer.js";
+} from './mailer.js';
 import {
   buildOtpauthUrl,
   decryptRecoveryCodes,
@@ -32,8 +32,8 @@ import {
   MFA_LOCKOUT_MS,
   MFA_MAX_ATTEMPTS,
   verifyTotp,
-} from "./mfa.js";
-import { sendInitialVerificationEmail } from "./verification-jobs.js";
+} from './mfa.js';
+import { sendInitialVerificationEmail } from './verification-jobs.js';
 import {
   ACCESS_TTL_SECONDS,
   hashRefreshToken,
@@ -43,7 +43,7 @@ import {
   signJwt,
   signTokens,
   verifyJwt,
-} from "./session.js";
+} from './session.js';
 
 const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
@@ -53,7 +53,7 @@ const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
 
 interface MfaChallengePayload {
   sub: string;
-  stage: "mfa_pending";
+  stage: 'mfa_pending';
 }
 
 interface RefreshTokenPayload {
@@ -79,23 +79,23 @@ function err(
 
 function signMfaChallenge(user: User): string {
   return signJwt(
-    { sub: user.id, stage: "mfa_pending" },
+    { sub: user.id, stage: 'mfa_pending' },
     MFA_CHALLENGE_TTL_SECONDS,
   );
 }
 
 async function recordMfaFailure(user: User): Promise<void> {
   const nextCount = user.mfa_failed_count + 1;
-  user.set("mfa_failed_count", nextCount);
+  user.set('mfa_failed_count', nextCount);
   if (nextCount >= MFA_MAX_ATTEMPTS) {
-    user.set("mfa_locked_until", new Date(Date.now() + MFA_LOCKOUT_MS));
+    user.set('mfa_locked_until', new Date(Date.now() + MFA_LOCKOUT_MS));
   }
   await user.save();
 }
 
 async function resetMfaCounters(user: User): Promise<void> {
-  user.set("mfa_failed_count", 0);
-  user.set("mfa_locked_until", null);
+  user.set('mfa_failed_count', 0);
+  user.set('mfa_locked_until', null);
   await user.save();
 }
 
@@ -180,16 +180,16 @@ export function authRouter(sequelize: Sequelize): Router {
   const router = express.Router();
 
   router.post(
-    "/signup",
+    '/signup',
     asyncHandler(async (req, res) => {
       const body = validate(SignupSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
 
       const existing = await User.findOne({
         where: { email: body.email.toLowerCase() },
       });
       if (existing) {
-        return err(res, 409, "An account with this email already exists.");
+        return err(res, 409, 'An account with this email already exists.');
       }
       const passwordHash = await hashPassword(body.password);
       const isFirstUser = (await User.count()) === 0;
@@ -197,7 +197,7 @@ export function authRouter(sequelize: Sequelize): Router {
         email: body.email.toLowerCase(),
         name: body.name,
         password_hash: passwordHash,
-        role: isFirstUser ? "admin" : "user",
+        role: isFirstUser ? 'admin' : 'user',
       });
 
       const sessionId = randomUUID();
@@ -218,7 +218,7 @@ export function authRouter(sequelize: Sequelize): Router {
         token_hash: hashRefreshToken(tokens.refresh_token),
         expires_at: expiresAt,
         ip_address: req.ip ?? null,
-        user_agent: req.headers["user-agent"] ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
       });
 
       try {
@@ -226,7 +226,7 @@ export function authRouter(sequelize: Sequelize): Router {
       } catch (e) {
         req.log?.error?.(
           { err: e, userId: user.id },
-          "Failed to send initial verification email",
+          'Failed to send initial verification email',
         );
       }
 
@@ -248,10 +248,10 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/login",
+    '/login',
     asyncHandler(async (req, res) => {
       const body = validate(LoginSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const normalizedEmail = body.email.toLowerCase();
 
       const user = await User.findOne({ where: { email: normalizedEmail } });
@@ -263,12 +263,12 @@ export function authRouter(sequelize: Sequelize): Router {
         return err(
           res,
           429,
-          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
       if (!user || !user.password_hash) {
-        return err(res, 401, "Invalid credentials");
+        return err(res, 401, 'Invalid credentials');
       }
 
       const validPassword = await verifyPassword(
@@ -277,17 +277,17 @@ export function authRouter(sequelize: Sequelize): Router {
       );
       if (!validPassword) {
         const nextCount = user.failed_login_count + 1;
-        user.set("failed_login_count", nextCount);
+        user.set('failed_login_count', nextCount);
         if (nextCount >= LOGIN_MAX_ATTEMPTS) {
-          user.set("locked_until", new Date(Date.now() + LOGIN_LOCKOUT_MS));
+          user.set('locked_until', new Date(Date.now() + LOGIN_LOCKOUT_MS));
         }
         await user.save();
-        return err(res, 401, "Invalid credentials");
+        return err(res, 401, 'Invalid credentials');
       }
 
-      user.set("last_login", new Date());
-      user.set("failed_login_count", 0);
-      user.set("locked_until", null);
+      user.set('last_login', new Date());
+      user.set('failed_login_count', 0);
+      user.set('locked_until', null);
       await user.save();
 
       if (user.mfa_enabled) {
@@ -298,7 +298,7 @@ export function authRouter(sequelize: Sequelize): Router {
           return err(
             res,
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
           );
         }
         const challenge_token = signMfaChallenge(user);
@@ -315,24 +315,24 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/mfa/verify-challenge",
+    '/mfa/verify-challenge',
     asyncHandler(async (req, res) => {
       const body = validate(MfaVerifyChallengeSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
 
       let decoded: MfaChallengePayload;
       try {
         decoded = verifyJwt<MfaChallengePayload>(body.challenge_token);
       } catch {
-        return err(res, 401, "Challenge token invalid or expired");
+        return err(res, 401, 'Challenge token invalid or expired');
       }
-      if (decoded.stage !== "mfa_pending" || !decoded.sub) {
-        return err(res, 401, "Challenge token invalid");
+      if (decoded.stage !== 'mfa_pending' || !decoded.sub) {
+        return err(res, 401, 'Challenge token invalid');
       }
 
       const user = await User.findOne({ where: { id: decoded.sub } });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 401, "MFA not configured");
+        return err(res, 401, 'MFA not configured');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
         const mins = Math.ceil(
@@ -341,7 +341,7 @@ export function authRouter(sequelize: Sequelize): Router {
         return err(
           res,
           429,
-          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
@@ -358,15 +358,15 @@ export function authRouter(sequelize: Sequelize): Router {
 
       if (!success) {
         await recordMfaFailure(user);
-        return err(res, 401, "Invalid MFA code");
+        return err(res, 401, 'Invalid MFA code');
       }
 
       if (consumedRecoveryIndex >= 0) {
         const hashes = decryptRecoveryCodes(user.mfa_recovery_codes_enc);
         hashes.splice(consumedRecoveryIndex, 1);
-        user.set("mfa_recovery_codes_enc", encryptRecoveryCodes(hashes));
-        user.set("mfa_failed_count", 0);
-        user.set("mfa_locked_until", null);
+        user.set('mfa_recovery_codes_enc', encryptRecoveryCodes(hashes));
+        user.set('mfa_failed_count', 0);
+        user.set('mfa_locked_until', null);
         await user.save();
       } else {
         await resetMfaCounters(user);
@@ -378,23 +378,23 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/mfa/enroll",
+    '/mfa/enroll',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser!.sub;
       const user = await User.findOne({ where: { id: userId } });
-      if (!user) return err(res, 404, "User not found");
+      if (!user) return err(res, 404, 'User not found');
       if (user.mfa_enabled) {
         return err(
           res,
           409,
-          "MFA is already enabled. Disable it first to re-enroll.",
+          'MFA is already enabled. Disable it first to re-enroll.',
         );
       }
 
       const secret = generateSecret();
-      user.set("mfa_secret_enc", encryptSecret(secret));
-      user.set("mfa_verified_at", null);
+      user.set('mfa_secret_enc', encryptSecret(secret));
+      user.set('mfa_verified_at', null);
       await user.save();
 
       return res.json({
@@ -405,37 +405,37 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/mfa/enroll/verify",
+    '/mfa/enroll/verify',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = validate(MfaEnrollVerifySchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const userId = req.authUser!.sub;
       const user = await User.findOne({ where: { id: userId } });
       if (!user || !user.mfa_secret_enc) {
         return err(
           res,
           400,
-          "No pending MFA enrollment. Start enrollment first.",
+          'No pending MFA enrollment. Start enrollment first.',
         );
       }
       if (user.mfa_enabled) {
-        return err(res, 409, "MFA is already enabled.");
+        return err(res, 409, 'MFA is already enabled.');
       }
 
       const valid = verifyTotp(body.code, decryptSecret(user.mfa_secret_enc));
       if (!valid) {
-        return err(res, 400, "Invalid code. Scan the QR and try again.");
+        return err(res, 400, 'Invalid code. Scan the QR and try again.');
       }
 
       const plaintextCodes = generateRecoveryCodes();
       const hashedCodes = await hashRecoveryCodes(plaintextCodes);
 
-      user.set("mfa_enabled", true);
-      user.set("mfa_verified_at", new Date());
-      user.set("mfa_recovery_codes_enc", encryptRecoveryCodes(hashedCodes));
-      user.set("mfa_failed_count", 0);
-      user.set("mfa_locked_until", null);
+      user.set('mfa_enabled', true);
+      user.set('mfa_verified_at', new Date());
+      user.set('mfa_recovery_codes_enc', encryptRecoveryCodes(hashedCodes));
+      user.set('mfa_failed_count', 0);
+      user.set('mfa_locked_until', null);
       await user.save();
 
       return res.json({ recovery_codes: plaintextCodes });
@@ -443,25 +443,25 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/mfa/disable",
+    '/mfa/disable',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = validate(MfaDisableSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const userId = req.authUser!.sub;
       const user = await User.findOne({ where: { id: userId } });
       if (!user || !user.password_hash) {
-        return err(res, 404, "User not found");
+        return err(res, 404, 'User not found');
       }
       if (!user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 400, "MFA is not enabled.");
+        return err(res, 400, 'MFA is not enabled.');
       }
 
       const passwordOk = await verifyPassword(
         body.password,
         user.password_hash,
       );
-      if (!passwordOk) return err(res, 400, "Invalid password");
+      if (!passwordOk) return err(res, 400, 'Invalid password');
 
       let mfaOk: boolean;
       if (body.use_recovery) {
@@ -472,15 +472,15 @@ export function authRouter(sequelize: Sequelize): Router {
       }
       if (!mfaOk) {
         await recordMfaFailure(user);
-        return err(res, 400, "Invalid MFA code");
+        return err(res, 400, 'Invalid MFA code');
       }
 
-      user.set("mfa_enabled", false);
-      user.set("mfa_secret_enc", null);
-      user.set("mfa_recovery_codes_enc", null);
-      user.set("mfa_verified_at", null);
-      user.set("mfa_failed_count", 0);
-      user.set("mfa_locked_until", null);
+      user.set('mfa_enabled', false);
+      user.set('mfa_secret_enc', null);
+      user.set('mfa_recovery_codes_enc', null);
+      user.set('mfa_verified_at', null);
+      user.set('mfa_failed_count', 0);
+      user.set('mfa_locked_until', null);
       await user.save();
 
       return res.json({ ok: true });
@@ -488,30 +488,30 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/mfa/recovery-codes/regenerate",
+    '/mfa/recovery-codes/regenerate',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = validate(MfaRegenerateSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const userId = req.authUser!.sub;
       const user = await User.findOne({ where: { id: userId } });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 400, "MFA is not enabled.");
+        return err(res, 400, 'MFA is not enabled.');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
-        return err(res, 429, "MFA temporarily locked.");
+        return err(res, 429, 'MFA temporarily locked.');
       }
 
       if (!verifyTotp(body.code, decryptSecret(user.mfa_secret_enc))) {
         await recordMfaFailure(user);
-        return err(res, 400, "Invalid MFA code");
+        return err(res, 400, 'Invalid MFA code');
       }
 
       const plaintextCodes = generateRecoveryCodes();
       const hashedCodes = await hashRecoveryCodes(plaintextCodes);
-      user.set("mfa_recovery_codes_enc", encryptRecoveryCodes(hashedCodes));
-      user.set("mfa_failed_count", 0);
-      user.set("mfa_locked_until", null);
+      user.set('mfa_recovery_codes_enc', encryptRecoveryCodes(hashedCodes));
+      user.set('mfa_failed_count', 0);
+      user.set('mfa_locked_until', null);
       await user.save();
 
       return res.json({ recovery_codes: plaintextCodes });
@@ -519,20 +519,20 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/refresh",
+    '/refresh',
     asyncHandler(async (req, res) => {
       const body = validate(RefreshSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
 
       let decoded: RefreshTokenPayload;
       try {
         decoded = verifyJwt<RefreshTokenPayload>(body.refresh_token);
       } catch {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
-      if (decoded.token_type !== "refresh") {
-        return err(res, 401, "Unauthorized");
+      if (decoded.token_type !== 'refresh') {
+        return err(res, 401, 'Unauthorized');
       }
 
       if (
@@ -542,7 +542,7 @@ export function authRouter(sequelize: Sequelize): Router {
         !decoded.role ||
         !decoded.jti
       ) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const presentedHash = hashRefreshToken(body.refresh_token);
@@ -555,7 +555,7 @@ export function authRouter(sequelize: Sequelize): Router {
         tokenRow.session_id !== decoded.sid ||
         tokenRow.user_id !== decoded.sub
       ) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const handleReplay = async () => {
@@ -579,9 +579,9 @@ export function authRouter(sequelize: Sequelize): Router {
             user_id: tokenRow.user_id,
             token_id: tokenRow.id,
           },
-          "refresh_token_replay_detected",
+          'refresh_token_replay_detected',
         );
-        return err(res, 401, "token_replay_detected");
+        return err(res, 401, 'token_replay_detected');
       };
 
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
@@ -589,15 +589,15 @@ export function authRouter(sequelize: Sequelize): Router {
       }
 
       if (tokenRow.expires_at.getTime() < Date.now()) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const freshUser = await User.findOne({
         where: { id: decoded.sub },
-        attributes: ["id", "name", "email", "role"],
+        attributes: ['id', 'name', 'email', 'role'],
       });
       if (!freshUser) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const payload = {
@@ -628,7 +628,7 @@ export function authRouter(sequelize: Sequelize): Router {
             token_hash: hashRefreshToken(tokens.refresh_token),
             expires_at: newExpiresAt,
             ip_address: req.ip ?? null,
-            user_agent: req.headers["user-agent"] ?? null,
+            user_agent: req.headers['user-agent'] ?? null,
           },
           { transaction: t },
         );
@@ -650,7 +650,7 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/logout",
+    '/logout',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
@@ -659,7 +659,7 @@ export function authRouter(sequelize: Sequelize): Router {
         (parsed.success ? parsed.data?.session_id : undefined) ??
         req.authUser?.sid;
       if (!userId || !sessionId) {
-        return err(res, 400, "session_id is required");
+        return err(res, 400, 'session_id is required');
       }
 
       await RefreshToken.update(
@@ -669,20 +669,20 @@ export function authRouter(sequelize: Sequelize): Router {
         },
       );
 
-      return res.json({ status: "ok" });
+      return res.json({ status: 'ok' });
     }),
   );
 
   router.post(
-    "/change-password",
+    '/change-password',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = validate(ChangePasswordSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const userId = req.authUser!.sub;
       const user = await User.findOne({ where: { id: userId } });
       if (!user || !user.password_hash) {
-        return err(res, 404, "User not found");
+        return err(res, 404, 'User not found');
       }
 
       const ok = await verifyPassword(
@@ -690,11 +690,11 @@ export function authRouter(sequelize: Sequelize): Router {
         user.password_hash,
       );
       if (!ok) {
-        return err(res, 400, "Invalid password");
+        return err(res, 400, 'Invalid password');
       }
 
       const password_hash = await hashPassword(body.new_password);
-      user.set("password_hash", password_hash);
+      user.set('password_hash', password_hash);
       await user.save();
 
       const currentSessionId = req.authUser?.sid;
@@ -710,19 +710,19 @@ export function authRouter(sequelize: Sequelize): Router {
         { where: revokeWhere },
       );
 
-      return res.json({ status: "ok" });
+      return res.json({ status: 'ok' });
     }),
   );
 
   router.get(
-    "/sessions",
+    '/sessions',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
-      if (!userId) return err(res, 401, "Unauthorized");
+      if (!userId) return err(res, 401, 'Unauthorized');
       const tokens = await RefreshToken.findAll({
         where: { user_id: userId, revoked_at: null },
-        order: [["created_at", "DESC"]],
+        order: [['created_at', 'DESC']],
       });
       const seen = new Set<string>();
       const unique: RefreshToken[] = [];
@@ -745,10 +745,10 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/forgot-password",
+    '/forgot-password',
     asyncHandler(async (req, res) => {
       const body = validate(ForgotPasswordSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const user = await User.findOne({
         where: { email: body.email.toLowerCase(), deleted_at: null },
       });
@@ -756,7 +756,7 @@ export function authRouter(sequelize: Sequelize): Router {
       if (!user) {
         return res.json({
           message:
-            "If the account exists, a password reset link has been generated.",
+            'If the account exists, a password reset link has been generated.',
         });
       }
 
@@ -766,7 +766,7 @@ export function authRouter(sequelize: Sequelize): Router {
       await VerificationToken.create({
         user_id: user.id,
         token_hash: tokenHash,
-        kind: "password_reset",
+        kind: 'password_reset',
         expires_at: new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000),
       });
 
@@ -774,40 +774,40 @@ export function authRouter(sequelize: Sequelize): Router {
       try {
         const sent = await sendPasswordResetEmail(user.email, resetLink);
         if (!sent) {
-          req.log?.warn?.("SMTP is not configured; reset email was not sent.");
+          req.log?.warn?.('SMTP is not configured; reset email was not sent.');
         }
       } catch (e) {
         req.log?.error?.(
           { err: e },
-          "Failed to send password reset email via SMTP",
+          'Failed to send password reset email via SMTP',
         );
       }
 
       return res.json({
         message:
-          "If the account exists, a password reset link has been generated.",
+          'If the account exists, a password reset link has been generated.',
       });
     }),
   );
 
   router.post(
-    "/reset-password",
+    '/reset-password',
     asyncHandler(async (req, res) => {
       const body = validate(ResetPasswordSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
 
       const tokenHash = hashToken(body.token);
       const reset = await VerificationToken.findOne({
         where: {
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           consumed_at: null,
           expires_at: { [Op.gt]: new Date() },
         },
       });
 
       if (!reset) {
-        return err(res, 400, "Invalid or expired reset token");
+        return err(res, 400, 'Invalid or expired reset token');
       }
 
       const password_hash = await hashPassword(body.new_password);
@@ -830,28 +830,28 @@ export function authRouter(sequelize: Sequelize): Router {
         );
       });
 
-      return res.json({ status: "ok" });
+      return res.json({ status: 'ok' });
     }),
   );
 
   router.post(
-    "/verify-email",
+    '/verify-email',
     asyncHandler(async (req, res) => {
       const body = validate(VerifyEmailSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const tokenHash = hashToken(body.token);
 
       const record = await VerificationToken.findOne({
         where: {
           token_hash: tokenHash,
-          kind: "email_verify",
+          kind: 'email_verify',
           consumed_at: null,
           expires_at: { [Op.gt]: new Date() },
         },
       });
 
       if (!record) {
-        return err(res, 400, "Invalid or expired verification token");
+        return err(res, 400, 'Invalid or expired verification token');
       }
 
       await sequelize.transaction(async (t) => {
@@ -870,10 +870,10 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.post(
-    "/resend-verification",
+    '/resend-verification',
     asyncHandler(async (req, res) => {
       const body = validate(ResendVerificationSchema, req.body);
-      if (!body) return err(res, 400, "Invalid request body");
+      if (!body) return err(res, 400, 'Invalid request body');
       const user = await User.findOne({
         where: { email: body.email.toLowerCase(), deleted_at: null },
       });
@@ -883,7 +883,7 @@ export function authRouter(sequelize: Sequelize): Router {
         await VerificationToken.create({
           user_id: user.id,
           token_hash: hashToken(rawToken),
-          kind: "email_verify",
+          kind: 'email_verify',
           expires_at: new Date(
             Date.now() + VERIFICATION_TOKEN_TTL_SECONDS * 1000,
           ),
@@ -894,13 +894,13 @@ export function authRouter(sequelize: Sequelize): Router {
           const sent = await sendVerificationEmail(user.email, link);
           if (!sent) {
             req.log?.warn?.(
-              "SMTP is not configured; verification email was not sent.",
+              'SMTP is not configured; verification email was not sent.',
             );
           }
         } catch (e) {
           req.log?.error?.(
             { err: e },
-            "Failed to send verification email via SMTP",
+            'Failed to send verification email via SMTP',
           );
         }
       }
@@ -910,13 +910,13 @@ export function authRouter(sequelize: Sequelize): Router {
   );
 
   router.get(
-    "/me",
+    '/me',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
-      if (!userId) return err(res, 401, "Unauthorized");
+      if (!userId) return err(res, 401, 'Unauthorized');
       const user = await User.findOne({ where: { id: userId } });
-      if (!user || user.deleted_at) return err(res, 404, "User not found");
+      if (!user || user.deleted_at) return err(res, 404, 'User not found');
       return res.json({
         id: user.id,
         email: user.email,

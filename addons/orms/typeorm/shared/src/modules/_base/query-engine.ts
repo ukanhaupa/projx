@@ -1,4 +1,4 @@
-import { ILike, type FindOptionsOrder, type FindOptionsWhere } from "typeorm";
+import { ILike, type FindOptionsOrder, type FindOptionsWhere } from 'typeorm';
 
 export interface ParsedQuery {
   page: number;
@@ -11,14 +11,14 @@ export interface ParsedQuery {
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
-const RESERVED = new Set(["page", "page_size", "order_by", "search"]);
+const RESERVED = new Set(['page', 'page_size', 'order_by', 'search']);
 
 export function parseRawQuery(rawQs: string): ParsedQuery {
   const params = new URLSearchParams(rawQs);
-  const page = Math.max(1, Number(params.get("page")) || 1);
+  const page = Math.max(1, Number(params.get('page')) || 1);
   const page_size = Math.min(
     MAX_PAGE_SIZE,
-    Math.max(1, Number(params.get("page_size")) || DEFAULT_PAGE_SIZE),
+    Math.max(1, Number(params.get('page_size')) || DEFAULT_PAGE_SIZE),
   );
   const filters: Record<string, string> = {};
   for (const [key, value] of params.entries()) {
@@ -28,8 +28,8 @@ export function parseRawQuery(rawQs: string): ParsedQuery {
   return {
     page,
     page_size,
-    order_by: params.get("order_by") ?? undefined,
-    search: params.get("search") ?? undefined,
+    order_by: params.get('order_by') ?? undefined,
+    search: params.get('search') ?? undefined,
     filters,
   };
 }
@@ -64,14 +64,14 @@ export function buildOrder<T>(
   orderBy: string | undefined,
 ): FindOptionsOrder<T> {
   if (!orderBy) return {} as FindOptionsOrder<T>;
-  const out: Record<string, "ASC" | "DESC"> = {};
-  for (const raw of orderBy.split(",")) {
+  const out: Record<string, 'ASC' | 'DESC'> = {};
+  for (const raw of orderBy.split(',')) {
     const term = raw.trim();
     if (!term) continue;
-    const descOrder = term.startsWith("-");
+    const descOrder = term.startsWith('-');
     const fieldName = descOrder ? term.slice(1) : term;
     if (!columns.has(fieldName)) continue;
-    out[fieldName] = descOrder ? "DESC" : "ASC";
+    out[fieldName] = descOrder ? 'DESC' : 'ASC';
   }
   return out as FindOptionsOrder<T>;
 }

@@ -47,6 +47,22 @@ func newRouteMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, *sql.DB) {
 	return gormDB, mock, sqlDB
 }
 
+func expectAuditWrite(mock sqlmock.Sqlmock, table, recordID, action string) {
+	mock.ExpectQuery(`INSERT INTO "audit_logs"`).
+		WithArgs(
+			sqlmock.AnyArg(),
+			table,
+			recordID,
+			action,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
+		WillReturnRows(sqlmock.NewRows([]string{"performed_at"}).AddRow(time.Now()))
+}
+
 func mountForTest(t *testing.T, gdb *gorm.DB, cfg EntityConfig) chi.Router {
 	t.Helper()
 	s, err := schema.Parse(cfg.Model, &sync.Map{}, gdb.NamingStrategy)
@@ -197,6 +213,7 @@ func TestCreateReturns201AndInvokesBeforeCreate(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO "route_models"`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
+	expectAuditWrite(mock, "route_models", "hook-set-id", "INSERT")
 
 	body, _ := json.Marshal(map[string]any{"title": "first"})
 	req := httptest.NewRequest(http.MethodPost, "/things/", bytes.NewReader(body))
@@ -304,6 +321,7 @@ func TestPatchAllowlistDropsImmutableColumns(t *testing.T) {
 		WithArgs("p1", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "body", "published", "created_at", "updated_at"}).
 			AddRow("p1", "new", "", false, time.Now(), time.Now()))
+	expectAuditWrite(mock, "route_models", "p1", "UPDATE")
 
 	body, _ := json.Marshal(map[string]any{
 		"title":      "new",
@@ -371,6 +389,7 @@ func TestPatchEmptyBodyRefetches(t *testing.T) {
 		WithArgs("e1", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "body", "published", "created_at", "updated_at"}).
 			AddRow("e1", "kept", "", false, time.Now(), time.Now()))
+	expectAuditWrite(mock, "route_models", "e1", "UPDATE")
 
 	body, _ := json.Marshal(map[string]any{})
 	req := httptest.NewRequest(http.MethodPatch, "/things/e1", bytes.NewReader(body))
@@ -379,6 +398,7 @@ func TestPatchEmptyBodyRefetches(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestDeleteReturns204(t *testing.T) {
@@ -392,11 +412,16 @@ func TestDeleteReturns204(t *testing.T) {
 		SoftDelete: false,
 	})
 
+	mock.ExpectQuery(`SELECT \* FROM "route_models" WHERE id = \$1`).
+		WithArgs("d1", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "body", "published", "created_at", "updated_at"}).
+			AddRow("d1", "doomed", "", false, time.Now(), time.Now()))
 	mock.ExpectBegin()
 	mock.ExpectExec(`DELETE FROM "route_models"`).
 		WithArgs("d1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
+	expectAuditWrite(mock, "route_models", "d1", "DELETE")
 
 	req := httptest.NewRequest(http.MethodDelete, "/things/d1", nil)
 	rec := httptest.NewRecorder()
@@ -417,6 +442,9 @@ func TestDeleteRowsAffectedZeroReturns404(t *testing.T) {
 		BasePath: "/things",
 	})
 
+	mock.ExpectQuery(`SELECT \* FROM "route_models" WHERE id = \$1`).
+		WithArgs("nope", 1).
+		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectBegin()
 	mock.ExpectExec(`DELETE FROM "route_models"`).
 		WithArgs("nope").
@@ -428,6 +456,7 @@ func TestDeleteRowsAffectedZeroReturns404(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestDeleteBeforeHookCanAbort(t *testing.T) {
@@ -474,6 +503,8 @@ func TestBulkCreateRunsInTransaction(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO "route_models"`).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
+	expectAuditWrite(mock, "route_models", "auto-one", "INSERT")
+	expectAuditWrite(mock, "route_models", "auto-two", "INSERT")
 
 	body, _ := json.Marshal([]map[string]any{
 		{"title": "one"},
@@ -568,11 +599,18 @@ func TestBulkDelete(t *testing.T) {
 		BasePath: "/things",
 	})
 
+	mock.ExpectQuery(`SELECT \* FROM "route_models" WHERE id IN \(\$1,\$2\)`).
+		WithArgs("a", "b").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "body", "published", "created_at", "updated_at"}).
+			AddRow("a", "first", "", false, time.Now(), time.Now()).
+			AddRow("b", "second", "", false, time.Now(), time.Now()))
 	mock.ExpectBegin()
 	mock.ExpectExec(`DELETE FROM "route_models"`).
 		WithArgs("a", "b").
 		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
+	expectAuditWrite(mock, "route_models", "a", "DELETE")
+	expectAuditWrite(mock, "route_models", "b", "DELETE")
 
 	body, _ := json.Marshal(map[string][]string{"ids": {"a", "b"}})
 	req := httptest.NewRequest(http.MethodDelete, "/things/bulk", bytes.NewReader(body))
@@ -714,6 +752,7 @@ func TestAfterCreateHookInvoked(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO "route_models"`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
+	expectAuditWrite(mock, "route_models", "ac-id", "INSERT")
 
 	body, _ := json.Marshal(map[string]any{"title": "t"})
 	req := httptest.NewRequest(http.MethodPost, "/things/", bytes.NewReader(body))
@@ -723,6 +762,7 @@ func TestAfterCreateHookInvoked(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	assert.True(t, afterCalled)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestAfterUpdateHookInvoked(t *testing.T) {
@@ -757,6 +797,7 @@ func TestAfterUpdateHookInvoked(t *testing.T) {
 		WithArgs("u1", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "title", "body", "published", "created_at", "updated_at"}).
 			AddRow("u1", "new", "", false, time.Now(), time.Now()))
+	expectAuditWrite(mock, "route_models", "u1", "UPDATE")
 
 	body, _ := json.Marshal(map[string]any{"title": "new"})
 	req := httptest.NewRequest(http.MethodPatch, "/things/u1", bytes.NewReader(body))

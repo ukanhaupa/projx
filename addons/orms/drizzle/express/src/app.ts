@@ -8,6 +8,7 @@ import pinoHttp from 'pino-http';
 import { allowedOrigins, config } from './config.js';
 import { ApiError, errorHandler, notFoundHandler } from './errors.js';
 import { checkDatabase, db } from './db/client.js';
+import { setRequestUserId } from './utils/request-context.js';
 // projx-anchor: imports
 // projx-anchor: entity-imports
 
@@ -54,6 +55,13 @@ export function buildApp(): express.Express {
       legacyHeaders: false,
     }),
   );
+
+  app.use((req, _res, next) => {
+    const authUser = (req as { authUser?: { email?: string; sub?: string } })
+      .authUser;
+    setRequestUserId(authUser?.email || authUser?.sub);
+    next();
+  });
 
   // projx-anchor: plugins
 

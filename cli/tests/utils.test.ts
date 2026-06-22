@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -17,6 +17,7 @@ import {
   suggestComponent,
   normalizeComponent,
   readComponentMarker,
+  copyComponent,
   COMPONENT_MARKER,
   type Component,
 } from '../src/utils.js';
@@ -895,5 +896,48 @@ describe('replaceInDir', () => {
     expect(await readFile(join(tmp, 'c.ts'), 'utf-8')).toBe(
       "import 'package:projx_mobile/z';",
     );
+  });
+});
+
+describe('copyComponent', () => {
+  let repo: string;
+  let dest: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'projx-copy-src-'));
+    dest = await mkdtemp(join(tmpdir(), 'projx-copy-dst-'));
+    await mkdir(join(repo, 'express/src'), { recursive: true });
+    await writeFile(join(repo, 'express/src/app.ts'), 'export const x = 1;');
+  });
+
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+    await rm(dest, { recursive: true, force: true });
+  });
+
+  it('excludes coverage artifact dirs including ci-locals dynamic coverage-ci-<pid>', async () => {
+    await mkdir(join(repo, 'express/coverage/.tmp'), { recursive: true });
+    await writeFile(join(repo, 'express/coverage/.tmp/c.json'), '{}');
+    await mkdir(join(repo, 'express/coverage-ci-88515/.tmp'), {
+      recursive: true,
+    });
+    await writeFile(join(repo, 'express/coverage-ci-88515/.tmp/c.json'), '{}');
+    await mkdir(join(repo, 'express/node_modules'), { recursive: true });
+    await writeFile(join(repo, 'express/node_modules/dep.js'), '');
+
+    await copyComponent(repo, 'express', dest);
+
+    expect(await readFileOrNull(join(dest, 'express/src/app.ts'))).toBe(
+      'export const x = 1;',
+    );
+    expect(
+      await readFileOrNull(join(dest, 'express/coverage/.tmp/c.json')),
+    ).toBeNull();
+    expect(
+      await readFileOrNull(join(dest, 'express/coverage-ci-88515/.tmp/c.json')),
+    ).toBeNull();
+    expect(
+      await readFileOrNull(join(dest, 'express/node_modules/dep.js')),
+    ).toBeNull();
   });
 });

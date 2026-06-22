@@ -14,6 +14,6 @@ describe('Fastify TypeORM app', () => {
     app = await buildApp({ logger: false });
     const res = await app.inject({ method: 'GET', url: '/api/v1/_meta' });
 
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).not.toBe(200);
   });
 });

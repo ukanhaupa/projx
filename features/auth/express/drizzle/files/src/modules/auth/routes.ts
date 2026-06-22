@@ -1,18 +1,18 @@
-import express, { type Request, type Response, type Router } from "express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { and, count, eq, gt, isNull, ne } from "drizzle-orm";
-import type { DbClient } from "../../db/client.js";
-import { refreshTokens, users, verificationTokens } from "../../db/schema.js";
-import { requireAuth } from "../../middlewares/authenticate.js";
-import { hashPassword, verifyPassword, hashToken } from "./password.js";
+import express, { type Request, type Response, type Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { and, count, eq, gt, isNull, ne } from 'drizzle-orm';
+import type { DbClient } from '../../db/client.js';
+import { refreshTokens, users, verificationTokens } from '../../db/schema.js';
+import { requireAuth } from '../../middlewares/authenticate.js';
+import { hashPassword, verifyPassword, hashToken } from './password.js';
 import {
   buildResetLink,
   buildVerificationLink,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from "./mailer.js";
+} from './mailer.js';
 import {
   buildOtpauthUrl,
   decryptRecoveryCodes,
@@ -27,8 +27,8 @@ import {
   MFA_LOCKOUT_MS,
   MFA_MAX_ATTEMPTS,
   verifyTotp,
-} from "./mfa.js";
-import { sendInitialVerificationEmail } from "./verification-jobs.js";
+} from './mfa.js';
+import { sendInitialVerificationEmail } from './verification-jobs.js';
 import {
   hashRefreshToken,
   issueAuthSession,
@@ -37,7 +37,7 @@ import {
   signJwt,
   signTokens,
   verifyJwt,
-} from "./session.js";
+} from './session.js';
 
 type User = typeof users.$inferSelect;
 
@@ -45,18 +45,18 @@ const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
-const MFA_CHALLENGE_TTL = "5m" as const;
+const MFA_CHALLENGE_TTL = '5m' as const;
 const PUBLIC_RATE_LIMIT_WINDOW_MS = 60_000;
 const RESEND_VERIFICATION_WINDOW_MS = 60 * 60 * 1000;
 const EXPOSE_RESET_TOKEN =
-  (process.env.AUTH_EXPOSE_RESET_TOKEN ?? "").toLowerCase() === "true";
+  (process.env.AUTH_EXPOSE_RESET_TOKEN ?? '').toLowerCase() === 'true';
 
 function publicRateLimitMax(): number {
-  return Number(process.env.AUTH_PUBLIC_RATE_LIMIT_MAX ?? "5");
+  return Number(process.env.AUTH_PUBLIC_RATE_LIMIT_MAX ?? '5');
 }
 
 function resendVerificationRateLimitMax(): number {
-  return Number(process.env.AUTH_RESEND_VERIFICATION_RATE_LIMIT_MAX ?? "5");
+  return Number(process.env.AUTH_RESEND_VERIFICATION_RATE_LIMIT_MAX ?? '5');
 }
 
 const SignupBody = z.object({
@@ -149,12 +149,12 @@ function err(
 }
 
 function bodyValidationError(res: Response, parseError: z.ZodError): Response {
-  return err(res, 400, parseError.issues[0]?.message ?? "Invalid body");
+  return err(res, 400, parseError.issues[0]?.message ?? 'Invalid body');
 }
 
 function signMfaChallenge(user: User): string {
   return signJwt(
-    { sub: user.id, stage: "mfa_pending" },
+    { sub: user.id, stage: 'mfa_pending' },
     { expiresIn: MFA_CHALLENGE_TTL },
   );
 }
@@ -181,9 +181,9 @@ function publicRateLimit() {
   return rateLimit({
     windowMs: PUBLIC_RATE_LIMIT_WINDOW_MS,
     limit: publicRateLimitMax(),
-    standardHeaders: "draft-8",
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
-    keyGenerator: (req) => (req.ip ? ipKeyGenerator(req.ip) : "unknown"),
+    keyGenerator: (req) => (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
   });
 }
 
@@ -191,13 +191,13 @@ function resendVerificationRateLimit() {
   return rateLimit({
     windowMs: RESEND_VERIFICATION_WINDOW_MS,
     limit: resendVerificationRateLimitMax(),
-    standardHeaders: "draft-8",
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
     keyGenerator: (req) => {
       const email =
-        typeof req.body?.email === "string" ? req.body.email.toLowerCase() : "";
+        typeof req.body?.email === 'string' ? req.body.email.toLowerCase() : '';
       if (email) return email;
-      return req.ip ? ipKeyGenerator(req.ip) : "unknown";
+      return req.ip ? ipKeyGenerator(req.ip) : 'unknown';
     },
   });
 }
@@ -206,7 +206,7 @@ export function authRouter(db: DbClient): Router {
   const router = express.Router();
 
   router.post(
-    "/signup",
+    '/signup',
     publicRateLimit(),
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -225,7 +225,7 @@ export function authRouter(db: DbClient): Router {
             .limit(1)
         )[0];
         if (existing) {
-          err(res, 409, "An account with this email already exists.");
+          err(res, 409, 'An account with this email already exists.');
           return;
         }
         const passwordHash = await hashPassword(body.password);
@@ -240,7 +240,7 @@ export function authRouter(db: DbClient): Router {
               email: normalizedEmail,
               name: body.name,
               password_hash: passwordHash,
-              role: isFirstUser ? "admin" : "user",
+              role: isFirstUser ? 'admin' : 'user',
             })
             .returning()
         )[0];
@@ -263,13 +263,13 @@ export function authRouter(db: DbClient): Router {
           token_hash: hashRefreshToken(tokens.refresh_token),
           expires_at: expiresAt,
           ip_address: req.ip ?? null,
-          user_agent: req.get("user-agent") ?? null,
+          user_agent: req.get('user-agent') ?? null,
         });
 
         try {
           await sendInitialVerificationEmail(db, user.id);
         } catch (e) {
-          console.error("[auth] failed to send initial verification email", e, {
+          console.error('[auth] failed to send initial verification email', e, {
             userId: user.id,
           });
         }
@@ -295,7 +295,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/login",
+    '/login',
     publicRateLimit(),
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -322,13 +322,13 @@ export function authRouter(db: DbClient): Router {
           err(
             res,
             429,
-            `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+            `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
           );
           return;
         }
 
         if (!user || !user.password_hash) {
-          err(res, 401, "Invalid credentials");
+          err(res, 401, 'Invalid credentials');
           return;
         }
 
@@ -346,7 +346,7 @@ export function authRouter(db: DbClient): Router {
             lockData.locked_until = new Date(Date.now() + LOGIN_LOCKOUT_MS);
           }
           await db.update(users).set(lockData).where(eq(users.id, user.id));
-          err(res, 401, "Invalid credentials");
+          err(res, 401, 'Invalid credentials');
           return;
         }
 
@@ -370,7 +370,7 @@ export function authRouter(db: DbClient): Router {
             err(
               res,
               429,
-              `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+              `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
             );
             return;
           }
@@ -392,7 +392,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/mfa/verify-challenge",
+    '/mfa/verify-challenge',
     publicRateLimit(),
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -407,11 +407,11 @@ export function authRouter(db: DbClient): Router {
         try {
           decoded = verifyJwt<MfaChallengePayload>(body.challenge_token);
         } catch {
-          err(res, 401, "Challenge token invalid or expired");
+          err(res, 401, 'Challenge token invalid or expired');
           return;
         }
-        if (decoded.stage !== "mfa_pending" || !decoded.sub) {
-          err(res, 401, "Challenge token invalid");
+        if (decoded.stage !== 'mfa_pending' || !decoded.sub) {
+          err(res, 401, 'Challenge token invalid');
           return;
         }
 
@@ -423,7 +423,7 @@ export function authRouter(db: DbClient): Router {
             .limit(1)
         )[0];
         if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-          err(res, 401, "MFA not configured");
+          err(res, 401, 'MFA not configured');
           return;
         }
         if (isMfaLocked(user.mfa_locked_until)) {
@@ -433,7 +433,7 @@ export function authRouter(db: DbClient): Router {
           err(
             res,
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
           );
           return;
         }
@@ -451,7 +451,7 @@ export function authRouter(db: DbClient): Router {
 
         if (!success) {
           await recordMfaFailure(db, user);
-          err(res, 401, "Invalid MFA code");
+          err(res, 401, 'Invalid MFA code');
           return;
         }
 
@@ -479,7 +479,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/mfa/enroll",
+    '/mfa/enroll',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -488,14 +488,14 @@ export function authRouter(db: DbClient): Router {
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user) {
-          err(res, 404, "User not found");
+          err(res, 404, 'User not found');
           return;
         }
         if (user.mfa_enabled) {
           err(
             res,
             409,
-            "MFA is already enabled. Disable it first to re-enroll.",
+            'MFA is already enabled. Disable it first to re-enroll.',
           );
           return;
         }
@@ -517,7 +517,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/mfa/enroll/verify",
+    '/mfa/enroll/verify',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -532,17 +532,17 @@ export function authRouter(db: DbClient): Router {
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user || !user.mfa_secret_enc) {
-          err(res, 400, "No pending MFA enrollment. Start enrollment first.");
+          err(res, 400, 'No pending MFA enrollment. Start enrollment first.');
           return;
         }
         if (user.mfa_enabled) {
-          err(res, 409, "MFA is already enabled.");
+          err(res, 409, 'MFA is already enabled.');
           return;
         }
 
         const valid = verifyTotp(code, decryptSecret(user.mfa_secret_enc));
         if (!valid) {
-          err(res, 400, "Invalid code. Scan the QR and try again.");
+          err(res, 400, 'Invalid code. Scan the QR and try again.');
           return;
         }
 
@@ -568,7 +568,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/mfa/disable",
+    '/mfa/disable',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -583,11 +583,11 @@ export function authRouter(db: DbClient): Router {
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user || !user.password_hash) {
-          err(res, 404, "User not found");
+          err(res, 404, 'User not found');
           return;
         }
         if (!user.mfa_enabled || !user.mfa_secret_enc) {
-          err(res, 400, "MFA is not enabled.");
+          err(res, 400, 'MFA is not enabled.');
           return;
         }
 
@@ -596,7 +596,7 @@ export function authRouter(db: DbClient): Router {
           user.password_hash,
         );
         if (!passwordOk) {
-          err(res, 400, "Invalid password");
+          err(res, 400, 'Invalid password');
           return;
         }
 
@@ -609,7 +609,7 @@ export function authRouter(db: DbClient): Router {
         }
         if (!mfaOk) {
           await recordMfaFailure(db, user);
-          err(res, 400, "Invalid MFA code");
+          err(res, 400, 'Invalid MFA code');
           return;
         }
 
@@ -633,7 +633,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/mfa/recovery-codes/regenerate",
+    '/mfa/recovery-codes/regenerate',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -648,17 +648,17 @@ export function authRouter(db: DbClient): Router {
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-          err(res, 400, "MFA is not enabled.");
+          err(res, 400, 'MFA is not enabled.');
           return;
         }
         if (isMfaLocked(user.mfa_locked_until)) {
-          err(res, 429, "MFA temporarily locked.");
+          err(res, 429, 'MFA temporarily locked.');
           return;
         }
 
         if (!verifyTotp(code, decryptSecret(user.mfa_secret_enc))) {
           await recordMfaFailure(db, user);
-          err(res, 400, "Invalid MFA code");
+          err(res, 400, 'Invalid MFA code');
           return;
         }
 
@@ -681,7 +681,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/refresh",
+    '/refresh',
     async (req: Request, res: Response, next): Promise<void> => {
       try {
         const parsed = RefreshBody.safeParse(req.body);
@@ -694,11 +694,11 @@ export function authRouter(db: DbClient): Router {
         try {
           decoded = verifyJwt<RefreshTokenPayload>(refresh_token);
         } catch {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
-        if (decoded.token_type !== "refresh") {
-          err(res, 401, "Unauthorized");
+        if (decoded.token_type !== 'refresh') {
+          err(res, 401, 'Unauthorized');
           return;
         }
 
@@ -709,7 +709,7 @@ export function authRouter(db: DbClient): Router {
           !decoded.role ||
           !decoded.jti
         ) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
 
@@ -727,7 +727,7 @@ export function authRouter(db: DbClient): Router {
           tokenRow.session_id !== decoded.sid ||
           tokenRow.user_id !== decoded.sub
         ) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
 
@@ -748,12 +748,12 @@ export function authRouter(db: DbClient): Router {
               .set({ replay_detected_at: now })
               .where(eq(refreshTokens.id, tokenRow.id));
           });
-          console.warn("[auth] refresh_token_replay_detected", {
+          console.warn('[auth] refresh_token_replay_detected', {
             session_id: tokenRow.session_id,
             user_id: tokenRow.user_id,
             token_id: tokenRow.id,
           });
-          err(res, 401, "token_replay_detected");
+          err(res, 401, 'token_replay_detected');
         };
 
         if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
@@ -762,7 +762,7 @@ export function authRouter(db: DbClient): Router {
         }
 
         if (tokenRow.expires_at.getTime() < Date.now()) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
 
@@ -774,7 +774,7 @@ export function authRouter(db: DbClient): Router {
             .limit(1)
         )[0];
         if (!freshUser) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
 
@@ -812,7 +812,7 @@ export function authRouter(db: DbClient): Router {
                 token_hash: hashRefreshToken(tokens.refresh_token),
                 expires_at: newExpiresAt,
                 ip_address: req.ip ?? null,
-                user_agent: req.get("user-agent") ?? null,
+                user_agent: req.get('user-agent') ?? null,
               })
               .returning()
           )[0];
@@ -844,7 +844,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/logout",
+    '/logout',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -857,7 +857,7 @@ export function authRouter(db: DbClient): Router {
         const body = parsed.data ?? {};
         const sessionId = body.session_id ?? req.authUser?.sid;
         if (!userId || !sessionId) {
-          err(res, 400, "session_id is required");
+          err(res, 400, 'session_id is required');
           return;
         }
 
@@ -872,7 +872,7 @@ export function authRouter(db: DbClient): Router {
             ),
           );
 
-        res.json({ status: "ok" });
+        res.json({ status: 'ok' });
       } catch (e) {
         next(e);
       }
@@ -880,7 +880,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/change-password",
+    '/change-password',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -895,13 +895,13 @@ export function authRouter(db: DbClient): Router {
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user || !user.password_hash) {
-          err(res, 404, "User not found");
+          err(res, 404, 'User not found');
           return;
         }
 
         const ok = await verifyPassword(current_password, user.password_hash);
         if (!ok) {
-          err(res, 400, "Invalid password");
+          err(res, 400, 'Invalid password');
           return;
         }
 
@@ -927,7 +927,7 @@ export function authRouter(db: DbClient): Router {
           .set({ revoked_at: new Date() })
           .where(revokeFilter);
 
-        res.json({ status: "ok" });
+        res.json({ status: 'ok' });
       } catch (e) {
         next(e);
       }
@@ -935,13 +935,13 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.get(
-    "/sessions",
+    '/sessions',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
         const userId = req.authUser?.sub;
         if (!userId) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
         const rows = await db
@@ -971,7 +971,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/forgot-password",
+    '/forgot-password',
     publicRateLimit(),
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -997,7 +997,7 @@ export function authRouter(db: DbClient): Router {
         if (!user) {
           res.json({
             message:
-              "If the account exists, a password reset link has been generated.",
+              'If the account exists, a password reset link has been generated.',
           });
           return;
         }
@@ -1008,7 +1008,7 @@ export function authRouter(db: DbClient): Router {
         await db.insert(verificationTokens).values({
           user_id: user.id,
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           expires_at: new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000),
         });
 
@@ -1017,16 +1017,16 @@ export function authRouter(db: DbClient): Router {
           const sent = await sendPasswordResetEmail(user.email, resetLink);
           if (!sent) {
             console.warn(
-              "[auth] SMTP is not configured; reset email was not sent.",
+              '[auth] SMTP is not configured; reset email was not sent.',
             );
           }
         } catch (e) {
-          console.error("[auth] failed to send password reset email", e);
+          console.error('[auth] failed to send password reset email', e);
         }
 
         res.json({
           message:
-            "If the account exists, a password reset link has been generated.",
+            'If the account exists, a password reset link has been generated.',
           ...(EXPOSE_RESET_TOKEN ? { reset_token: rawToken } : {}),
         });
       } catch (e) {
@@ -1036,7 +1036,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/reset-password",
+    '/reset-password',
     async (req: Request, res: Response, next): Promise<void> => {
       try {
         const parsed = ResetPasswordBody.safeParse(req.body);
@@ -1054,7 +1054,7 @@ export function authRouter(db: DbClient): Router {
             .where(
               and(
                 eq(verificationTokens.token_hash, tokenHash),
-                eq(verificationTokens.kind, "password_reset"),
+                eq(verificationTokens.kind, 'password_reset'),
                 isNull(verificationTokens.consumed_at),
                 gt(verificationTokens.expires_at, new Date()),
               ),
@@ -1063,7 +1063,7 @@ export function authRouter(db: DbClient): Router {
         )[0];
 
         if (!reset) {
-          err(res, 400, "Invalid or expired reset token");
+          err(res, 400, 'Invalid or expired reset token');
           return;
         }
 
@@ -1090,7 +1090,7 @@ export function authRouter(db: DbClient): Router {
             );
         });
 
-        res.json({ status: "ok" });
+        res.json({ status: 'ok' });
       } catch (e) {
         next(e);
       }
@@ -1098,7 +1098,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/verify-email",
+    '/verify-email',
     async (req: Request, res: Response, next): Promise<void> => {
       try {
         const parsed = VerifyEmailBody.safeParse(req.body);
@@ -1116,7 +1116,7 @@ export function authRouter(db: DbClient): Router {
             .where(
               and(
                 eq(verificationTokens.token_hash, tokenHash),
-                eq(verificationTokens.kind, "email_verify"),
+                eq(verificationTokens.kind, 'email_verify'),
                 isNull(verificationTokens.consumed_at),
                 gt(verificationTokens.expires_at, new Date()),
               ),
@@ -1125,7 +1125,7 @@ export function authRouter(db: DbClient): Router {
         )[0];
 
         if (!record) {
-          err(res, 400, "Invalid or expired verification token");
+          err(res, 400, 'Invalid or expired verification token');
           return;
         }
 
@@ -1149,7 +1149,7 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.post(
-    "/resend-verification",
+    '/resend-verification',
     resendVerificationRateLimit(),
     async (req: Request, res: Response, next): Promise<void> => {
       try {
@@ -1177,7 +1177,7 @@ export function authRouter(db: DbClient): Router {
           await db.insert(verificationTokens).values({
             user_id: user.id,
             token_hash: hashToken(rawToken),
-            kind: "email_verify",
+            kind: 'email_verify',
             expires_at: new Date(
               Date.now() + VERIFICATION_TOKEN_TTL_SECONDS * 1000,
             ),
@@ -1188,11 +1188,11 @@ export function authRouter(db: DbClient): Router {
             const sent = await sendVerificationEmail(user.email, link);
             if (!sent) {
               console.warn(
-                "[auth] SMTP is not configured; verification email was not sent.",
+                '[auth] SMTP is not configured; verification email was not sent.',
               );
             }
           } catch (e) {
-            console.error("[auth] failed to send verification email", e);
+            console.error('[auth] failed to send verification email', e);
           }
         }
 
@@ -1204,20 +1204,20 @@ export function authRouter(db: DbClient): Router {
   );
 
   router.get(
-    "/me",
+    '/me',
     requireAuth,
     async (req: Request, res: Response, next): Promise<void> => {
       try {
         const userId = req.authUser?.sub;
         if (!userId) {
-          err(res, 401, "Unauthorized");
+          err(res, 401, 'Unauthorized');
           return;
         }
         const user = (
           await db.select().from(users).where(eq(users.id, userId)).limit(1)
         )[0];
         if (!user || user.deleted_at) {
-          err(res, 404, "User not found");
+          err(res, 404, 'User not found');
           return;
         }
         res.json({

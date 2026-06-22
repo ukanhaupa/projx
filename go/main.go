@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"projx.local/go/internal/apperr"
+	"projx.local/go/internal/audit"
 	"projx.local/go/internal/auth"
 	"projx.local/go/internal/cors"
 	"projx.local/go/internal/db"
@@ -48,7 +49,7 @@ func main() {
 	defer cancel()
 
 	gdb := db.MustOpen(ctx)
-	if err := gdb.AutoMigrate(&posts.Post{}, &serviceconfig.ServiceConfig{}); err != nil {
+	if err := gdb.AutoMigrate(&posts.Post{}, &serviceconfig.ServiceConfig{}, &audit.AuditLog{}); err != nil {
 		logger.Error("automigrate failed", "error", err)
 		os.Exit(1)
 	}

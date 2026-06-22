@@ -7,6 +7,14 @@ import type {
 } from 'typeorm';
 import { dataSource } from '../../db/data-source.js';
 import {
+  auditedCreate,
+  auditedCreateMany,
+  auditedDelete,
+  auditedDeleteMany,
+  auditedUpdate,
+  type AuditLogger,
+} from './audit.js';
+import {
   buildOrder,
   buildPagination,
   buildSearchWheres,
@@ -69,6 +77,11 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
     return dataSource.getRepository(config.entity);
   }
 
+  function auditLog(request: FastifyRequest): AuditLogger {
+    return (message, err) =>
+      request.log.warn({ err, entity: config.name }, message);
+  }
+
   app.get('/', { schema: { tags: [config.tag] } }, async (request, reply) => {
     const rawQs = request.url.split('?')[1] ?? '';
     const query = parseRawQuery(rawQs);
@@ -118,7 +131,11 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
     await config.beforeCreate?.(request, data);
     const r = repo();
     const entity = r.create(data as DeepPartial<T>);
-    const record = (await r.save(entity)) as unknown as Record<string, unknown>;
+    const record = (await auditedCreate(
+      r,
+      entity,
+      auditLog(request),
+    )) as unknown as Record<string, unknown>;
     if (config.afterCreate) {
       try {
         await config.afterCreate(request, record);
@@ -158,9 +175,14 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
         return reply
           .status(404)
           .send({ detail: 'Not found', request_id: request.id });
-      const before = { ...(existing as Record<string, unknown>) };
+      const before = { ...(existing as Record<string, unknown>) } as T;
       Object.assign(existing, data);
-      const saved = (await r.save(existing)) as Record<string, unknown>;
+      const saved = (await auditedUpdate(
+        r,
+        before,
+        existing,
+        auditLog(request),
+      )) as Record<string, unknown>;
       if (config.afterUpdate) {
         try {
           await config.afterUpdate(request, before, saved);
@@ -182,7 +204,7 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
       const { id } = request.params as { id: string };
       if (config.beforeDelete) await config.beforeDelete(request, id);
       const r = repo();
-      const result = await r.delete({ [pk]: id } as never);
+      const result = await auditedDelete(r, { [pk]: id }, auditLog(request));
       if (!result.affected) {
         return reply
           .status(404)
@@ -210,10 +232,11 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
       }
       const r = repo();
       const entities = r.create(items as DeepPartial<T>[]);
-      const rows = (await r.save(entities)) as unknown as Record<
-        string,
-        unknown
-      >[];
+      const rows = (await auditedCreateMany(
+        r,
+        entities,
+        auditLog(request),
+      )) as unknown as Record<string, unknown>[];
       return reply.status(201).send({ data: rows, count: rows.length });
     },
   );
@@ -230,7 +253,7 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
         });
       }
       const r = repo();
-      await r.delete(ids as never);
+      await auditedDeleteMany(r, ids, auditLog(request));
       return reply.status(204).send();
     },
   );

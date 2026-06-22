@@ -3,6 +3,7 @@
   "displayName": "sqlc",
   "frameworks": ["go"],
   "removeFromBase": [
+    "internal/audit",
     "internal/apperr/errors.go",
     "internal/apperr/middleware_test.go",
     "internal/db/client.go",

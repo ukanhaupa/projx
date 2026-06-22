@@ -11,12 +11,19 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::warn;
 
+use crate::audit::AuditHandler;
 use crate::entities::query::ListParams;
 use crate::entities::types::EntityConfig;
 use crate::error::AppError;
 use crate::middleware::request_id::RequestId;
 
 const MAX_BULK: usize = 100;
+
+fn with_audit(cfg: Arc<EntityConfig>) -> Arc<EntityConfig> {
+    let mut next = (*cfg).clone();
+    next.handler = AuditHandler::wrap(cfg.handler.clone());
+    Arc::new(next)
+}
 
 #[derive(Clone)]
 pub struct EntityState {
@@ -28,6 +35,7 @@ pub fn mount_entity(router: Router, db: Arc<DatabaseConnection>, cfg: Arc<Entity
     if let Err(e) = cfg.validate() {
         panic!("mount_entity({}): {}", cfg.name, e);
     }
+    let cfg = with_audit(cfg);
     let base = format!("/api/v1{}", cfg.base_path);
     let id_path = format!("{}/:id", base);
     let bulk_path = format!("{}/bulk", base);
@@ -762,15 +770,17 @@ mod tests {
 
     #[tokio::test]
     async fn before_create_hook_mutates_payload() {
-        let mut hooks = Hooks::default();
-        hooks.before_create = Some(Arc::new(|_headers, payload| {
-            Box::pin(async move {
-                if let Some(obj) = payload.as_object_mut() {
-                    obj.insert("title".into(), json!("rewritten"));
-                }
-                Ok(())
-            })
-        }));
+        let hooks = Hooks {
+            before_create: Some(Arc::new(|_headers, payload| {
+                Box::pin(async move {
+                    if let Some(obj) = payload.as_object_mut() {
+                        obj.insert("title".into(), json!("rewritten"));
+                    }
+                    Ok(())
+                })
+            })),
+            ..Default::default()
+        };
         let app = app_with_hooks(hooks);
         let resp = create_thing(&app, r#"{"title":"original"}"#).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -780,10 +790,12 @@ mod tests {
 
     #[tokio::test]
     async fn before_create_hook_error_aborts() {
-        let mut hooks = Hooks::default();
-        hooks.before_create = Some(Arc::new(|_headers, _payload| {
-            Box::pin(async move { Err(AppError::Forbidden("nope".into())) })
-        }));
+        let hooks = Hooks {
+            before_create: Some(Arc::new(|_headers, _payload| {
+                Box::pin(async move { Err(AppError::Forbidden("nope".into())) })
+            })),
+            ..Default::default()
+        };
         let app = app_with_hooks(hooks);
         let resp = create_thing(&app, r#"{"title":"x"}"#).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
@@ -791,10 +803,12 @@ mod tests {
 
     #[tokio::test]
     async fn after_create_hook_error_is_swallowed() {
-        let mut hooks = Hooks::default();
-        hooks.after_create = Some(Arc::new(|_headers, _record| {
-            Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("boom"))) })
-        }));
+        let hooks = Hooks {
+            after_create: Some(Arc::new(|_headers, _record| {
+                Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("boom"))) })
+            })),
+            ..Default::default()
+        };
         let app = app_with_hooks(hooks);
         let resp = create_thing(&app, r#"{"title":"persisted"}"#).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -809,10 +823,12 @@ mod tests {
         let created = create_thing(&app, r#"{"title":"a"}"#).await;
         let id = json_body(created).await["id"].as_str().unwrap().to_string();
 
-        let mut hooks = Hooks::default();
-        hooks.before_update = Some(Arc::new(|_headers, _patch| {
-            Box::pin(async move { Ok(true) })
-        }));
+        let hooks = Hooks {
+            before_update: Some(Arc::new(|_headers, _patch| {
+                Box::pin(async move { Ok(true) })
+            })),
+            ..Default::default()
+        };
         let app2 = Router::new();
         let cfg = Arc::new(EntityConfig {
             name: "thing",
@@ -840,10 +856,12 @@ mod tests {
 
     #[tokio::test]
     async fn after_update_hook_error_is_swallowed() {
-        let mut hooks = Hooks::default();
-        hooks.after_update = Some(Arc::new(|_headers, _before, _after| {
-            Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("late"))) })
-        }));
+        let hooks = Hooks {
+            after_update: Some(Arc::new(|_headers, _before, _after| {
+                Box::pin(async move { Err(AppError::Internal(anyhow::anyhow!("late"))) })
+            })),
+            ..Default::default()
+        };
         let app = app_with_hooks(hooks);
         let created = create_thing(&app, r#"{"title":"a"}"#).await;
         let id = json_body(created).await["id"].as_str().unwrap().to_string();
@@ -865,10 +883,12 @@ mod tests {
 
     #[tokio::test]
     async fn before_delete_hook_aborts() {
-        let mut hooks = Hooks::default();
-        hooks.before_delete = Some(Arc::new(|_headers, _id| {
-            Box::pin(async move { Err(AppError::Forbidden("locked".into())) })
-        }));
+        let hooks = Hooks {
+            before_delete: Some(Arc::new(|_headers, _id| {
+                Box::pin(async move { Err(AppError::Forbidden("locked".into())) })
+            })),
+            ..Default::default()
+        };
         let app = app_with_hooks(hooks);
         let created = create_thing(&app, r#"{"title":"a"}"#).await;
         let id = json_body(created).await["id"].as_str().unwrap().to_string();

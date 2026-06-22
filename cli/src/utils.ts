@@ -376,6 +376,7 @@ export const EXCLUDE = new Set([
   '.nyc_output',
   '.swc',
   'dist-e2e',
+  '.next-e2e',
   'vendor',
 ]);
 
@@ -410,6 +411,7 @@ export async function copyComponent(
       const base = source.split('/').pop()!;
       if (EXCLUDE.has(base)) return false;
       if (EXCLUDE_FILES.has(base)) return false;
+      if (base.startsWith('coverage-')) return false;
       if (base.endsWith('.pyc')) return false;
       return true;
     },

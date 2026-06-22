@@ -1,6 +1,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
+import { getRequestUserId } from '../../utils/request-context.js';
+import {
+  auditDelete,
+  auditInsert,
+  auditUpdate,
+  SYSTEM_ACTOR,
+  type AuditContext,
+} from './audit.js';
 import {
   buildOrderBy,
   buildPagination,
@@ -69,6 +77,21 @@ export function registerEntityRoutes(
   config: DrizzleEntityConfig,
 ): void {
   const pk = pkColumn(config) as Parameters<typeof eq>[0];
+  const primaryKey = config.primaryKey ?? 'id';
+
+  function auditContext(request: FastifyRequest): AuditContext {
+    return {
+      db: app.db,
+      table: config.table,
+      primaryKey,
+      actor: getRequestUserId() ?? SYSTEM_ACTOR,
+      logError: (err) =>
+        request.log.error(
+          { err, entity: config.name },
+          'failed to write audit log',
+        ),
+    };
+  }
 
   app.get('/', { schema: { tags: [config.tag] } }, async (request, reply) => {
     const rawQs = request.url.split('?')[1] ?? '';
@@ -133,6 +156,9 @@ export function registerEntityRoutes(
       .insert(config.table)
       .values(data as never)
       .returning();
+    await auditInsert(auditContext(request), [
+      record as Record<string, unknown>,
+    ]);
     if (config.afterCreate) {
       try {
         await config.afterCreate(request, record as Record<string, unknown>);
@@ -166,15 +192,12 @@ export function registerEntityRoutes(
         await config.beforeUpdate(request, reply, data);
         if (reply.sent) return;
       }
-      let before: Record<string, unknown> | null = null;
-      if (config.afterUpdate) {
-        const [existing] = await app.db
-          .select()
-          .from(config.table)
-          .where(eq(pk, id))
-          .limit(1);
-        before = (existing as Record<string, unknown>) ?? null;
-      }
+      const [existing] = await app.db
+        .select()
+        .from(config.table)
+        .where(eq(pk, id))
+        .limit(1);
+      const before = (existing as Record<string, unknown>) ?? null;
       const [record] = await app.db
         .update(config.table)
         .set(data as never)
@@ -185,6 +208,11 @@ export function registerEntityRoutes(
           .status(404)
           .send({ detail: 'Not found', request_id: request.id });
       }
+      await auditUpdate(
+        auditContext(request),
+        before,
+        record as Record<string, unknown>,
+      );
       if (config.afterUpdate && before) {
         try {
           await config.afterUpdate(
@@ -218,6 +246,10 @@ export function registerEntityRoutes(
           .status(404)
           .send({ detail: 'Not found', request_id: request.id });
       }
+      await auditDelete(
+        auditContext(request),
+        deleted as Record<string, unknown>[],
+      );
       return reply.status(204).send();
     },
   );
@@ -242,6 +274,10 @@ export function registerEntityRoutes(
         .insert(config.table)
         .values(items as never)
         .returning();
+      await auditInsert(
+        auditContext(request),
+        rows as Record<string, unknown>[],
+      );
       return reply.status(201).send({ data: rows, count: rows.length });
     },
   );
@@ -257,9 +293,14 @@ export function registerEntityRoutes(
           request_id: request.id,
         });
       }
-      await app.db
+      const deleted = await app.db
         .delete(config.table)
-        .where(inArray(pk as Parameters<typeof inArray>[0], ids));
+        .where(inArray(pk as Parameters<typeof inArray>[0], ids))
+        .returning();
+      await auditDelete(
+        auditContext(request),
+        deleted as Record<string, unknown>[],
+      );
       return reply.status(204).send();
     },
   );

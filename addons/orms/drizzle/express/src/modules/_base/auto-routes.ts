@@ -7,6 +7,14 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import type { DbClient } from '../../db/client.js';
 import { ApiError } from '../../errors.js';
+import { getRequestUserId } from '../../utils/request-context.js';
+import {
+  auditDelete,
+  auditInsert,
+  auditUpdate,
+  SYSTEM_ACTOR,
+  type AuditContext,
+} from './audit.js';
 import {
   buildOrderBy,
   buildPagination,
@@ -88,6 +96,21 @@ export function registerEntityRoutes(
 ): express.Router {
   const router = express.Router();
   const pk = pkColumn(config) as Parameters<typeof eq>[0];
+  const primaryKey = config.primaryKey ?? 'id';
+
+  function auditContext(req: Request): AuditContext {
+    return {
+      db,
+      table: config.table,
+      primaryKey,
+      actor: getRequestUserId() ?? SYSTEM_ACTOR,
+      logError: (err) =>
+        req.log?.error?.(
+          { err, entity: config.name },
+          'failed to write audit log',
+        ),
+    };
+  }
 
   router.get(
     '/',
@@ -152,6 +175,7 @@ export function registerEntityRoutes(
         .insert(config.table)
         .values(data as never)
         .returning();
+      await auditInsert(auditContext(req), [record as Record<string, unknown>]);
       if (config.afterCreate) {
         try {
           await config.afterCreate(req, record as Record<string, unknown>);
@@ -182,21 +206,23 @@ export function registerEntityRoutes(
         await config.beforeUpdate(req, res, data);
         if (res.headersSent) return;
       }
-      let before: Record<string, unknown> | null = null;
-      if (config.afterUpdate) {
-        const [existing] = await db
-          .select()
-          .from(config.table)
-          .where(eq(pk, id))
-          .limit(1);
-        before = (existing as Record<string, unknown>) ?? null;
-      }
+      const [existing] = await db
+        .select()
+        .from(config.table)
+        .where(eq(pk, id))
+        .limit(1);
+      const before = (existing as Record<string, unknown>) ?? null;
       const [record] = await db
         .update(config.table)
         .set(data as never)
         .where(eq(pk, id))
         .returning();
       if (!record) throw new ApiError(404, 'Not found', 'not_found');
+      await auditUpdate(
+        auditContext(req),
+        before,
+        record as Record<string, unknown>,
+      );
       if (config.afterUpdate && before) {
         try {
           await config.afterUpdate(
@@ -226,6 +252,10 @@ export function registerEntityRoutes(
         .returning();
       if (deleted.length === 0)
         throw new ApiError(404, 'Not found', 'not_found');
+      await auditDelete(
+        auditContext(req),
+        deleted as Record<string, unknown>[],
+      );
       res.status(204).send();
     }),
   );
@@ -250,6 +280,7 @@ export function registerEntityRoutes(
         .insert(config.table)
         .values(items as never)
         .returning();
+      await auditInsert(auditContext(req), rows as Record<string, unknown>[]);
       res.status(201).json({ data: rows, count: rows.length });
     }),
   );
@@ -265,9 +296,14 @@ export function registerEntityRoutes(
           'validation_error',
         );
       }
-      await db
+      const deleted = await db
         .delete(config.table)
-        .where(inArray(pk as Parameters<typeof inArray>[0], ids));
+        .where(inArray(pk as Parameters<typeof inArray>[0], ids))
+        .returning();
+      await auditDelete(
+        auditContext(req),
+        deleted as Record<string, unknown>[],
+      );
       res.status(204).send();
     }),
   );
