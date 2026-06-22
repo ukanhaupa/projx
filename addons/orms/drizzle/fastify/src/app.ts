@@ -9,6 +9,7 @@ import authzPlugin from './plugins/authz.js';
 import requestIdPlugin from './plugins/request-id.js';
 import swaggerPlugin from './plugins/swagger.js';
 import { checkDatabase, closeDatabase, db } from './db/client.js';
+import { setRequestUserId } from './utils/request-context.js';
 // projx-anchor: imports
 // projx-anchor: entity-imports
 
@@ -43,6 +44,10 @@ export async function buildApp(
   await app.register(requestIdPlugin);
   await app.register(authPlugin);
   await app.register(authzPlugin);
+
+  app.addHook('onRequest', async (request) => {
+    setRequestUserId(request.authUser?.email ?? request.authUser?.sub);
+  });
 
   // projx-anchor: plugins
 

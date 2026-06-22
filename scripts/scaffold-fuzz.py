@@ -40,55 +40,82 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "cli" / "dist" / "index.js"
 
-NON_BACKEND = ["vitejs", "nextjs", "mobile", "e2e", "infra", "admin-panel"]
+# ── Capability discovery — no hardcoded lists. Everything the fuzzer tests is
+# derived at runtime from the CLI's own constants (cli/src/utils.ts), the ORM
+# addon manifests, and feature.json. Add a template/orm/feature to the repo and
+# it is fuzzed automatically — nothing here needs touching. ────────────────────
+_UTILS = (ROOT / "cli" / "src" / "utils.ts").read_text()
 
-ORM_FAMILIES = {
-    "node": {
-        "backends": ["fastify", "express"],
-        "orms": ["prisma", "drizzle", "sequelize", "typeorm"],
-    },
-    "go": {"backends": ["go"], "orms": ["gorm", "sqlc", "ent"]},
-    "rust": {"backends": ["rust"], "orms": ["seaorm"]},
-    "laravel": {"backends": ["laravel"], "orms": ["eloquent"]},
+
+def _ts_array(name):
+    m = re.search(rf"export const {name}\b[^=]*=\s*\[(.*?)\]", _UTILS, re.DOTALL)
+    return re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)) if m else []
+
+
+def _ts_record(name):
+    m = re.search(rf"export const {name}\b[^=]*=\s*\{{(.*?)\n\}}", _UTILS, re.DOTALL)
+    return dict(re.findall(r"(\w+)\s*:\s*['\"]([^'\"]+)['\"]", m.group(1))) if m else {}
+
+
+COMPONENTS = _ts_array("COMPONENTS")
+BACKEND_COMPONENTS = _ts_array("BACKEND_COMPONENTS")
+BACKEND_DEFAULT_ORM = _ts_record("BACKEND_DEFAULT_ORM")
+KNOWN_FEATURES = _ts_array("KNOWN_FEATURES")
+ORM_GROUPS = {
+    g: _ts_array(g) for g in re.findall(r"export const (\w+_ORM_PROVIDERS)\b", _UTILS)
 }
-ALL_BACKENDS = {b for spec in ORM_FAMILIES.values() for b in spec["backends"]} | {
-    "fastapi"
-}
+
+ALL_BACKENDS = {c for c in COMPONENTS if c in BACKEND_COMPONENTS}
+NON_BACKEND = [c for c in COMPONENTS if c not in ALL_BACKENDS]
 PACKAGE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
 
-AUTH_LANDING = {
-    "fastify": "fastify/src/modules/auth",
-    "express": "express/src/modules/auth",
-    "fastapi": "fastapi/src/auth",
-    "go": "go/internal/auth",
-    "rust": "rust/src/auth/models",
-    "laravel": "laravel/app/Http/Controllers/Auth",
-}
-AUTH_FEATURE_BROKEN = set()
-AUTH_TARGETS = set(AUTH_LANDING) - AUTH_FEATURE_BROKEN
 
-AUTH_OK_ORMS = {
-    "prisma",
-    "drizzle",
-    "sequelize",
-    "typeorm",
-    "gorm",
-    "sqlc",
-    "ent",
-    "seaorm",
-    "eloquent",
-}
-FAMILY_DEFAULT_ORM = {
-    "node": "prisma",
-    "go": "gorm",
-    "rust": "seaorm",
-    "laravel": "eloquent",
-}
+def _group_for_orm(orm):
+    for g, orms in ORM_GROUPS.items():
+        if orm in orms:
+            return g
+    return None
+
+
+# A "family" is the set of backends sharing one ORM list (node = fastify+express,
+# go, rust, php…), discovered via each backend's default ORM's provider group.
+ORM_FAMILIES = {}
+for _b in BACKEND_COMPONENTS:
+    _g = _group_for_orm(BACKEND_DEFAULT_ORM.get(_b))
+    if _g is None:
+        continue  # e.g. fastapi — no --orm flag
+    _fam = _g.replace("_ORM_PROVIDERS", "").lower()
+    spec = ORM_FAMILIES.setdefault(_fam, {"backends": [], "orms": ORM_GROUPS[_g]})
+    if _b not in spec["backends"]:
+        spec["backends"].append(_b)
+
+FAMILY_DEFAULT_ORM = {fam: spec["orms"][0] for fam, spec in ORM_FAMILIES.items()}
+
+# ORM addons: the frameworks each targets + the base files it deletes (the latter
+# tells the audit check exactly which audit module each ORM strips).
+ADDON_ORMS = {}
+for _mf in (ROOT / "addons" / "orms").glob("*/manifest.json"):
+    _d = json.loads(_mf.read_text())
+    ADDON_ORMS[_d["name"]] = {
+        "frameworks": _d.get("frameworks", []),
+        "removeFromBase": _d.get("removeFromBase", []),
+    }
+
+# Features + the orms they require — drives both the auth journey and its negatives.
+FEATURES = {}
+for _fj in sorted((ROOT / "features").glob("*/feature.json")):
+    _d = json.loads(_fj.read_text())
+    FEATURES[_fj.parent.name] = {
+        "supports": _d.get("supports", []),
+        "requiresOrm": _d.get("requiresOrm"),
+    }
+AUTH_TARGETS = set(FEATURES.get("auth", {}).get("supports", []))
 
 
 def auth_allowed_for(family, orm):
     eff = orm or FAMILY_DEFAULT_ORM.get(family)
-    return eff is None or eff in AUTH_OK_ORMS
+    ok = FEATURES.get("auth", {}).get("requiresOrm")
+    return ok is None or eff is None or eff in ok
 
 
 ORM_MARKERS = {
@@ -103,8 +130,39 @@ ORM_MARKERS = {
     "eloquent": ["laravel/composer.json", "laravel/bootstrap/app.php"],
 }
 
+
+def _discover_audit_marker(backend):
+    best = None
+    for cand in (ROOT / backend).rglob("*audit*"):
+        if "test" in cand.name.lower() or "node_modules" in cand.parts:
+            continue
+        rel = cand.relative_to(ROOT / backend)
+        score = (0 if cand.is_dir() else 1, len(rel.parts))
+        if best is None or score < best[0]:
+            best = (score, str(cand.relative_to(ROOT)))
+    return best[1] if best else None
+
+
+# Per-backend audit marker, discovered from the template (path within the backend).
+AUDIT_MARKERS = {b: m for b in BACKEND_COMPONENTS if (m := _discover_audit_marker(b))}
+
+
+def audit_removed_by_orm(component, orm, rel):
+    addon = ADDON_ORMS.get(orm)
+    if not addon or component not in addon["frameworks"]:
+        return False
+    return any(
+        rel == r or rel.startswith(r.rstrip("/") + "/") for r in addon["removeFromBase"]
+    )
+
+
 COMPOSE_COMPONENTS = ALL_BACKENDS | {"vitejs", "nextjs", "admin-panel"}
 COMPOSE_SERVICE = {"admin-panel": "admin-panel:", "nextjs": "nextjs:"}
+
+# gen-entity placeholders are multi-word SCREAMING_CASE (__ENTITY_PASCAL__,
+# __ENT_PKG__ …); the internal underscore is what keeps this from matching PHP
+# magic constants like __DIR__ / __FILE__.
+PLACEHOLDER_LEFTOVER = re.compile(r"__[A-Z][A-Z0-9]*_[A-Z0-9_]+__")
 
 SHARED_RENDERED = [
     "docker-compose.yml",
@@ -130,8 +188,8 @@ DETECTABLE = {
 }
 EJS_LEFTOVER = re.compile(r"<%|%>")
 
-JOURNEYS = ["create", "add", "update", "init"]
-JOURNEY_WEIGHTS = [5, 3, 3, 2]
+JOURNEYS = ["create", "add", "update", "init", "gen", "sequence"]
+JOURNEY_WEIGHTS = [5, 3, 3, 2, 3, 2]
 
 
 @dataclass
@@ -326,9 +384,16 @@ def check_structure(combo, app, failures):
             failures.append(f"orm {combo.orm}: none of {markers} present")
 
     for target in combo.auth:
-        landing = AUTH_LANDING.get(target)
-        if landing and not (app / landing).is_dir():
-            failures.append(f"auth requested for {target} but {landing}/ missing")
+        marker = app / target / ".projx-component"
+        if marker.exists():
+            try:
+                feats = json.loads(marker.read_text()).get("features", [])
+            except (json.JSONDecodeError, OSError):
+                feats = []
+            if "auth" not in feats:
+                failures.append(
+                    f"auth applied to {target} but not recorded in its .projx-component"
+                )
 
     for rel in SHARED_RENDERED:
         f = app / rel
@@ -343,6 +408,24 @@ def check_structure(combo, app, failures):
                     json.loads(pkg.read_text())
                 except json.JSONDecodeError:
                     failures.append(f"{c}/package.json not valid JSON")
+
+    check_audit(combo, app, failures)
+
+
+def check_audit(combo, app, failures):
+    for c in combo.components:
+        marker = AUDIT_MARKERS.get(c)
+        if marker is None:
+            continue
+        rel = "/".join(marker.split("/")[1:])  # path within the backend
+        removed = audit_removed_by_orm(c, combo.orm, rel)
+        present = (app / marker).exists()
+        if removed and present:
+            failures.append(
+                f"{c}: audit {rel} should be stripped by orm '{combo.orm}' but is present"
+            )
+        elif not removed and not present:
+            failures.append(f"{c}: audit infrastructure missing ({marker})")
 
 
 def journey_create(combo, workdir):
@@ -547,6 +630,174 @@ def journey_init(combo, workdir):
     )
 
 
+GEN_FIELD_SETS = [
+    "name:string,qty:number,active:boolean",
+    "title:string,note?:text,paid?:boolean",
+    "amount:number,when:datetime,meta?:json",
+    "label:string,score:number,tags?:json,seen?:datetime,owner?:string",
+]
+GEN_ENTITIES = ["widget", "invoice", "ticket", "shipment", "gadget", "parcel"]
+
+
+def check_gen_output(app, backend, entity, failures):
+    # The entity name is referenced in some casing in every stack (PascalCase
+    # struct in TS/Prisma, snake/lower module dir in Rust/SeaORM, etc.), so match
+    # case-insensitively rather than assuming one convention.
+    name = re.compile(re.escape(entity), re.IGNORECASE)
+    referenced = False
+    leftovers = []
+    for f in (app / backend).rglob("*"):
+        if not f.is_file():
+            continue
+        try:
+            body = f.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if name.search(body):
+            referenced = True
+        if PLACEHOLDER_LEFTOVER.search(body):
+            leftovers.append(str(f.relative_to(app)))
+    if not referenced:
+        failures.append(f"gen entity {entity}: no {backend}/ file references it")
+    for rel in leftovers[:3]:
+        failures.append(f"unrendered placeholder after gen in {rel}")
+
+
+def _pick_backend(combo, rng):
+    # One backend + the orm it actually supports, so a single-backend create is
+    # always valid and gen has one unambiguous target (gen prompts for a primary
+    # when multiple backends are present, defaulting to the first non-interactively).
+    backends = [c for c in combo.components if c in ALL_BACKENDS]
+    if not backends:
+        return None, None
+    fam = ORM_FAMILIES.get(combo.family or "", {}).get("backends", [])
+    fam_present = [b for b in backends if b in fam]
+    if combo.orm and fam_present:
+        return rng.choice(fam_present), combo.orm
+    return rng.choice(backends), None
+
+
+def journey_gen(combo, workdir, rng):
+    app = Path(workdir) / "app"
+    backend, orm = _pick_backend(combo, rng)
+    if backend is None:
+        return journey_create(combo, workdir)
+    base = Combo(combo.family, [backend], orm, [])
+    rc, _o, err = run_cli(create_cmd(base, app))
+    if rc != 0:
+        return Result(
+            combo.label(),
+            [f"create exit {rc}: {err.strip()[-300:]}"],
+            "",
+            workdir,
+            "gen",
+            combo.family or "none",
+        )
+    entity = rng.choice(GEN_ENTITIES)
+    fields = rng.choice(GEN_FIELD_SETS)
+    cmd = [
+        "node",
+        str(CLI),
+        "gen",
+        "entity",
+        entity,
+        f"--fields={fields}",
+        "--local",
+        str(ROOT),
+    ]
+    repro = " ".join(cmd)
+    rc, _out, err = run_cli(cmd, cwd=app)
+    if rc != 0:
+        return Result(
+            combo.label(),
+            [f"gen entity exit {rc}: {err.strip()[-300:]}"],
+            repro,
+            workdir,
+            "gen",
+            combo.family or "none",
+        )
+    failures = []
+    check_gen_output(app, backend, entity, failures)
+    return Result(
+        combo.label(), failures, repro, workdir, "gen", combo.family or "none"
+    )
+
+
+def journey_sequence(combo, workdir, rng):
+    app = Path(workdir) / "app"
+    backend, orm = _pick_backend(combo, rng)
+    if backend is None:
+        return journey_create(combo, workdir)
+    base = Combo(combo.family, [backend], orm, [])
+    rc, _o, err = run_cli(create_cmd(base, app))
+    if rc != 0:
+        return Result(
+            combo.label(),
+            [f"create exit {rc}: {err.strip()[-300:]}"],
+            "",
+            workdir,
+            "sequence",
+            combo.family or "none",
+        )
+    git_init(app)
+    failures = []
+    extra = rng.choice(["vitejs", "nextjs", "e2e", "mobile", "infra"])
+    rc, _o, err = run_cli(
+        ["node", str(CLI), "add", extra, "--no-install", "--local", str(ROOT)],
+        cwd=app,
+    )
+    if rc != 0:
+        failures.append(f"add {extra} exit {rc}: {err.strip()[-200:]}")
+    elif not (app / extra).is_dir():
+        failures.append(f"add {extra} did not create {extra}/")
+    entity = rng.choice(GEN_ENTITIES)
+    rc, _o, err = run_cli(
+        [
+            "node",
+            str(CLI),
+            "gen",
+            "entity",
+            entity,
+            "--fields=name:string,qty:number",
+            "--local",
+            str(ROOT),
+        ],
+        cwd=app,
+    )
+    if rc != 0:
+        failures.append(f"gen after add exit {rc}: {err.strip()[-200:]}")
+    else:
+        check_gen_output(app, backend, entity, failures)
+    git_init(app)
+    proc = subprocess.run(
+        ["node", str(CLI), "update", "--local", str(ROOT)],
+        cwd=app,
+        capture_output=True,
+        text=True,
+        timeout=240,
+        stdin=subprocess.DEVNULL,
+    )
+    if proc.returncode != 0:
+        failures.append(f"update after sequence exit {proc.returncode}")
+    conflicts = subprocess.run(
+        ["git", "grep", "-lE", r"^<<<<<<< (your changes|HEAD)"],
+        cwd=app,
+        capture_output=True,
+        text=True,
+    )
+    if conflicts.stdout.strip():
+        failures.append(
+            f"conflict markers after sequence: {conflicts.stdout.strip()[:160]}"
+        )
+    if not (app / backend).is_dir():
+        failures.append(f"{backend}/ vanished after sequence")
+    check_audit(base, app, failures)
+    repro = f"create {backend} → add {extra} → gen {entity} → update"
+    return Result(
+        combo.label(), failures, repro, workdir, "sequence", combo.family or "none"
+    )
+
+
 def run_journey(combo, journey, workdir, rng):
     if journey == "create":
         return journey_create(combo, workdir)
@@ -554,6 +805,10 @@ def run_journey(combo, journey, workdir, rng):
         return journey_add(combo, workdir, rng)
     if journey == "update":
         return journey_update(combo, workdir)
+    if journey == "gen":
+        return journey_gen(combo, workdir, rng)
+    if journey == "sequence":
+        return journey_sequence(combo, workdir, rng)
     return journey_init(combo, workdir)
 
 
@@ -656,8 +911,260 @@ def scenario_add_honors_skip(workdir):
     return Result("scenario:add-honors-skip", fails, repro, workdir, "scenario", "none")
 
 
-SCENARIOS = [scenario_admin_panel, scenario_add_honors_skip]
+def _scaffold(app, components, orm=None):
+    return run_cli(base_create_cmd(components, app, orm))
+
+
+def scenario_gen_all_field_types(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:gen-field-types",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    fields = (
+        "nm:string,ct:number,ok:boolean,body:text,at:datetime,meta:json,opt?:string"
+    )
+    cmd = [
+        "node",
+        str(CLI),
+        "gen",
+        "entity",
+        "gizmo",
+        f"--fields={fields}",
+        "--local",
+        str(ROOT),
+    ]
+    rc, _out, err = run_cli(cmd, cwd=app)
+    fails = []
+    if rc != 0:
+        fails.append(f"gen all field types exit {rc}: {err.strip()[-300:]}")
+    else:
+        check_gen_output(app, "fastify", "gizmo", fails)
+    return Result(
+        "scenario:gen-field-types", fails, " ".join(cmd), workdir, "scenario", "none"
+    )
+
+
+def scenario_doctor(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify", "vitejs"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:doctor",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    git_init(app)
+    rc, out, err = run_cli(["node", str(CLI), "doctor", "--local", str(ROOT)], cwd=app)
+    fails = []
+    if rc not in (0, 1):
+        fails.append(f"doctor crashed (exit {rc})")
+    blob = out + err
+    if re.search(r"\bat Object\.|TypeError:|ReferenceError:|undefined is not", blob):
+        fails.append(f"doctor threw a JS error: {blob.strip()[-200:]}")
+    return Result("scenario:doctor", fails, "doctor", workdir, "scenario", "none")
+
+
+def scenario_pin_unpin(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:pin-unpin",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    fails = []
+    pattern = "README.md"
+    rc, _o, err = run_cli(["node", str(CLI), "pin", pattern], cwd=app)
+    if rc != 0:
+        fails.append(f"pin exit {rc}: {err.strip()[-200:]}")
+    skip = json.loads((app / ".projx").read_text()).get("skip", [])
+    if pattern not in skip:
+        fails.append(f"pin did not add {pattern} to .projx skip (skip={skip})")
+    rc, _o, err = run_cli(["node", str(CLI), "unpin", pattern], cwd=app)
+    if rc != 0:
+        fails.append(f"unpin exit {rc}: {err.strip()[-200:]}")
+    skip = json.loads((app / ".projx").read_text()).get("skip", [])
+    if pattern in skip:
+        fails.append(f"unpin did not remove {pattern} (skip={skip})")
+    rc, _o, _e = run_cli(["node", str(CLI), "pin", "--list"], cwd=app)
+    if rc != 0:
+        fails.append("pin --list exited non-zero")
+    return Result("scenario:pin-unpin", fails, "pin/unpin", workdir, "scenario", "none")
+
+
+def scenario_diff(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:diff",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    git_init(app)
+    rc, out, err = run_cli(["node", str(CLI), "diff", "--local", str(ROOT)], cwd=app)
+    fails = []
+    if rc != 0:
+        fails.append(f"diff exit {rc}: {err.strip()[-200:]}")
+    if EJS_LEFTOVER.search(out):
+        fails.append("diff output contains unrendered EJS")
+    return Result("scenario:diff", fails, "diff", workdir, "scenario", "none")
+
+
+def scenario_multi_instance(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:multi-instance",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    git_init(app)
+    inst = "worker-svc"
+    cmd = [
+        "node",
+        str(CLI),
+        "add",
+        "fastify",
+        "--name",
+        inst,
+        "--no-install",
+        "--local",
+        str(ROOT),
+    ]
+    rc, _o, err = run_cli(cmd, cwd=app)
+    fails = []
+    if rc != 0:
+        fails.append(f"add --name exit {rc}: {err.strip()[-200:]}")
+    if not (app / inst).is_dir():
+        fails.append(f"add --name {inst} did not create {inst}/")
+    elif not (app / inst / ".projx-component").exists():
+        fails.append(f"{inst}/ missing .projx-component marker")
+    if (app / "fastify").is_dir() and not (app / "fastify" / "src").is_dir():
+        fails.append("original fastify/ instance damaged by add --name")
+    return Result(
+        "scenario:multi-instance", fails, " ".join(cmd), workdir, "scenario", "none"
+    )
+
+
+def scenario_per_instance_orm(workdir):
+    app = Path(workdir) / "app"
+    rc, _o, err = _scaffold(app, ["fastify"], "prisma")
+    if rc != 0:
+        return Result(
+            "scenario:per-instance-orm",
+            [f"create exit {rc}: {err.strip()[-200:]}"],
+            "",
+            workdir,
+            "scenario",
+            "none",
+        )
+    git_init(app)
+    inst = "svc-drizzle"
+    cmd = [
+        "node",
+        str(CLI),
+        "add",
+        "fastify",
+        "--name",
+        inst,
+        "--orm",
+        "drizzle",
+        "--no-install",
+        "--local",
+        str(ROOT),
+    ]
+    rc, _o, err = run_cli(cmd, cwd=app)
+    fails = []
+    if rc != 0:
+        fails.append(f"add --name --orm exit {rc}: {err.strip()[-200:]}")
+    if not (app / inst).is_dir():
+        fails.append(f"per-instance orm: {inst}/ not created")
+    else:
+        has_drizzle = (app / inst / "drizzle.config.ts").exists()
+        has_prisma = (app / inst / "prisma" / "schema.prisma").exists()
+        if not has_drizzle:
+            fails.append(f"{inst}/ requested --orm drizzle but no drizzle.config.ts")
+        if has_prisma:
+            fails.append(f"{inst}/ got prisma schema despite --orm drizzle")
+    if (app / "fastify" / "prisma" / "schema.prisma").exists() is False:
+        fails.append("original fastify/ lost its prisma schema after heterogeneous add")
+    return Result(
+        "scenario:per-instance-orm", fails, " ".join(cmd), workdir, "scenario", "none"
+    )
+
+
+def cmd_negative(setup, args, why):
+    def run(workdir):
+        app = Path(workdir) / "app"
+        rc, _o, err = _scaffold(app, setup)
+        if rc != 0:
+            return Result(
+                f"cmd-negative:{why}",
+                [f"setup create exit {rc}: {err.strip()[-200:]}"],
+                "",
+                workdir,
+                "negative",
+                "none",
+            )
+        cmd = ["node", str(CLI), *args, "--local", str(ROOT)]
+        rc, _o, err = run_cli(cmd, cwd=app)
+        fails = []
+        if rc == 0:
+            fails.append(f"expected non-zero exit: {why}")
+        return Result(
+            f"cmd-negative:{why}", fails, " ".join(cmd), workdir, "negative", "none"
+        )
+
+    run.__name__ = f"cmd_negative_{re.sub('[^a-z]+', '_', why.lower())}"
+    return run
+
+
+CMD_NEGATIVES = [
+    (
+        ["fastify"],
+        ["gen", "entity", "thing", "--fields=x:bogustype"],
+        "gen rejects unknown field type",
+    ),
+    (["fastify"], ["gen", "entity"], "gen rejects missing entity name"),
+    (["fastify"], ["add", "not-a-component"], "add rejects unknown component"),
+    (["fastify"], ["unpin"], "unpin rejects missing patterns"),
+]
+
+
+SCENARIOS = [
+    scenario_admin_panel,
+    scenario_add_honors_skip,
+    scenario_gen_all_field_types,
+    scenario_doctor,
+    scenario_pin_unpin,
+    scenario_diff,
+    scenario_multi_instance,
+    scenario_per_instance_orm,
+]
 SCENARIOS += [negative_scenario(c, o, w) for c, o, w in NEGATIVES]
+SCENARIOS += [cmd_negative(s, a, w) for s, a, w in CMD_NEGATIVES]
 
 
 def execute(task_fn, keep):

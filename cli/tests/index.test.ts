@@ -85,6 +85,21 @@ describe('parseArgs', () => {
     expect(parseArgs(['gen', 'entity', 'foo']).command).toBe('gen');
   });
 
+  it('accepts --fields and --name in both space and equals forms', () => {
+    expect(
+      parseArgs(['gen', 'entity', 'foo', '--fields', 'a:string']).extraArgs,
+    ).toContain('--fields=a:string');
+    expect(
+      parseArgs(['gen', 'entity', 'foo', '--fields=a:string']).extraArgs,
+    ).toContain('--fields=a:string');
+    expect(parseArgs(['add', 'fastify', '--name', 'svc']).extraArgs).toContain(
+      '--name=svc',
+    );
+    expect(parseArgs(['add', 'fastify', '--name=svc']).extraArgs).toContain(
+      '--name=svc',
+    );
+  });
+
   it('defaults to create and captures the project name', () => {
     const parsed = parseArgs(['my-app']);
     expect(parsed.command).toBe('create');

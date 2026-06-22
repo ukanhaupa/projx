@@ -12,6 +12,14 @@ import type {
 import { dataSource } from '../../db/data-source.js';
 import { ApiError } from '../../errors.js';
 import {
+  auditedCreate,
+  auditedCreateMany,
+  auditedDelete,
+  auditedDeleteMany,
+  auditedUpdate,
+  type AuditLogger,
+} from './audit.js';
+import {
   buildOrder,
   buildPagination,
   buildSearchWheres,
@@ -86,6 +94,11 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
     return dataSource.getRepository(config.entity);
   }
 
+  function auditLog(req: Request): AuditLogger {
+    return (message, err) =>
+      req.log?.warn?.({ err, entity: config.name }, message);
+  }
+
   router.get(
     '/',
     asyncHandler(async (req, res) => {
@@ -129,6 +142,49 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
 
   if (config.readonly) return router;
 
+  if (config.bulkOperations) {
+    router.post(
+      '/bulk',
+      asyncHandler(async (req, res) => {
+        const { items } = req.body as { items: Record<string, unknown>[] };
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new ApiError(
+            400,
+            'items must be a non-empty array',
+            'validation_error',
+          );
+        }
+        for (const item of items) {
+          await config.beforeCreate?.(req, item);
+        }
+        const r = repo();
+        const entities = r.create(items as DeepPartial<T>[]);
+        const rows = (await auditedCreateMany(
+          r,
+          entities,
+          auditLog(req),
+        )) as unknown as Record<string, unknown>[];
+        res.status(201).json({ data: rows, count: rows.length });
+      }),
+    );
+
+    router.delete(
+      '/bulk',
+      asyncHandler(async (req, res) => {
+        const { ids } = req.body as { ids: string[] };
+        if (!Array.isArray(ids) || ids.length === 0) {
+          throw new ApiError(
+            400,
+            'ids must be a non-empty array',
+            'validation_error',
+          );
+        }
+        await auditedDeleteMany(repo(), ids, auditLog(req));
+        res.status(204).send();
+      }),
+    );
+  }
+
   router.post(
     '/',
     asyncHandler(async (req, res) => {
@@ -136,10 +192,11 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
       await config.beforeCreate?.(req, data);
       const r = repo();
       const entity = r.create(data as DeepPartial<T>);
-      const record = (await r.save(entity)) as unknown as Record<
-        string,
-        unknown
-      >;
+      const record = (await auditedCreate(
+        r,
+        entity,
+        auditLog(req),
+      )) as unknown as Record<string, unknown>;
       if (config.afterCreate) {
         try {
           await config.afterCreate(req, record);
@@ -173,9 +230,14 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
       const r = repo();
       const existing = await r.findOne({ where: { [pk]: id } as never });
       if (!existing) throw new ApiError(404, 'Not found', 'not_found');
-      const before = { ...(existing as Record<string, unknown>) };
+      const before = { ...(existing as Record<string, unknown>) } as T;
       Object.assign(existing, data);
-      const saved = (await r.save(existing)) as Record<string, unknown>;
+      const saved = (await auditedUpdate(
+        r,
+        before,
+        existing,
+        auditLog(req),
+      )) as Record<string, unknown>;
       if (config.afterUpdate) {
         try {
           await config.afterUpdate(req, before, saved);
@@ -195,50 +257,8 @@ export function registerEntityRoutes<T extends ObjectLiteral>(
     asyncHandler(async (req, res) => {
       const id = String(req.params.id);
       if (config.beforeDelete) await config.beforeDelete(req, id);
-      const result = await repo().delete({ [pk]: id } as never);
+      const result = await auditedDelete(repo(), { [pk]: id }, auditLog(req));
       if (!result.affected) throw new ApiError(404, 'Not found', 'not_found');
-      res.status(204).send();
-    }),
-  );
-
-  if (!config.bulkOperations) return router;
-
-  router.post(
-    '/bulk',
-    asyncHandler(async (req, res) => {
-      const { items } = req.body as { items: Record<string, unknown>[] };
-      if (!Array.isArray(items) || items.length === 0) {
-        throw new ApiError(
-          400,
-          'items must be a non-empty array',
-          'validation_error',
-        );
-      }
-      for (const item of items) {
-        await config.beforeCreate?.(req, item);
-      }
-      const r = repo();
-      const entities = r.create(items as DeepPartial<T>[]);
-      const rows = (await r.save(entities)) as unknown as Record<
-        string,
-        unknown
-      >[];
-      res.status(201).json({ data: rows, count: rows.length });
-    }),
-  );
-
-  router.delete(
-    '/bulk',
-    asyncHandler(async (req, res) => {
-      const { ids } = req.body as { ids: string[] };
-      if (!Array.isArray(ids) || ids.length === 0) {
-        throw new ApiError(
-          400,
-          'ids must be a non-empty array',
-          'validation_error',
-        );
-      }
-      await repo().delete(ids as never);
       res.status(204).send();
     }),
   );

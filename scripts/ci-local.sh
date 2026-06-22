@@ -325,7 +325,15 @@ sec_laravel() {
   run_step "laravel format" ./vendor/bin/pint
   git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
   run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
-  run_step "laravel tests" ./vendor/bin/pest --no-coverage
+  local pg_user pg_host pg_port
+  pg_user="${PGUSER:-$(whoami)}"
+  pg_host="${PGHOST:-localhost}"
+  pg_port="${PGPORT:-5432}"
+  createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_audit_laravel 2>/dev/null || true
+  run_step "laravel tests" env \
+    AUDIT_DB_HOST="$pg_host" AUDIT_DB_PORT="$pg_port" \
+    AUDIT_DB_DATABASE=projx_audit_laravel AUDIT_DB_USERNAME="$pg_user" \
+    ./vendor/bin/pest --no-coverage
 }
 
 sec_vitejs() {

@@ -15,7 +15,7 @@ describe('Express TypeORM app', () => {
       .set('x-request-id', 'req-missing');
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatchObject({
+    expect(res.body).toMatchObject({
       code: 'not_found',
       request_id: 'req-missing',
     });

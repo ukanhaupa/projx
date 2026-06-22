@@ -245,9 +245,19 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       continue;
     }
 
+    if (arg.startsWith('--fields=')) {
+      extraArgs.push(arg);
+      continue;
+    }
+
     if (arg === '--name') {
       const val = args[++i];
       if (val) extraArgs.push(`--name=${val}`);
+      continue;
+    }
+
+    if (arg.startsWith('--name=')) {
+      extraArgs.push(arg);
       continue;
     }
 

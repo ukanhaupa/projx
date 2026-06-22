@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm/schema"
 
 	"projx.local/go/internal/apperr"
+	"projx.local/go/internal/audit"
 	"projx.local/go/internal/httputil"
 	"projx.local/go/internal/requestid"
 )
@@ -72,6 +73,10 @@ func MountEntity(r chi.Router, gdb *gorm.DB, cfg EntityConfig) {
 		cfg.schema = s
 		cfg.immutableColumns = immutableColumnSet(s)
 	}
+	cfg.tableName = cfg.schema.Table
+	if cfg.auditor == nil {
+		cfg.auditor = audit.New(gdb)
+	}
 	r.Route(cfg.BasePath, func(sub chi.Router) {
 		sub.Method(http.MethodGet, "/", apperr.H(listHandler(gdb, cfg)))
 		sub.Method(http.MethodPost, "/", apperr.H(createHandler(gdb, cfg)))
@@ -127,6 +132,7 @@ func createHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		if err := gdb.Create(record).Error; err != nil {
 			return apperr.FromDB(err, cfg.Name)
 		}
+		cfg.auditor.RecordInsert(r, cfg.tableName, record)
 		if cfg.Hooks.AfterCreate != nil {
 			runBestEffort(r, cfg.Name, "after_create", func() { cfg.Hooks.AfterCreate(r, record) })
 		}
@@ -183,6 +189,7 @@ func updateHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		if err := scope(gdb, r, cfg).First(after, "id = ?", id).Error; err != nil {
 			return apperr.FromDB(err, cfg.Name)
 		}
+		cfg.auditor.RecordUpdate(r, cfg.tableName, before, after)
 		if cfg.Hooks.AfterUpdate != nil {
 			runBestEffort(r, cfg.Name, "after_update", func() { cfg.Hooks.AfterUpdate(r, before, after) })
 		}
@@ -199,6 +206,8 @@ func deleteHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 				return err
 			}
 		}
+		before := reflect.New(structTypeOf(cfg.Model)).Interface()
+		hasBefore := gdb.WithContext(r.Context()).Model(cfg.Model).First(before, "id = ?", id).Error == nil
 		record := reflect.New(structTypeOf(cfg.Model)).Interface()
 		res := gdb.WithContext(r.Context()).Where("id = ?", id).Delete(record)
 		if res.Error != nil {
@@ -206,6 +215,9 @@ func deleteHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		}
 		if res.RowsAffected == 0 {
 			return apperr.NotFound(cfg.Name)
+		}
+		if hasBefore {
+			cfg.auditor.RecordDelete(r, cfg.tableName, before)
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil
@@ -243,6 +255,9 @@ func bulkCreateHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 		if txErr != nil {
 			return txErr
 		}
+		for i := 0; i < slice.Len(); i++ {
+			cfg.auditor.RecordInsert(r, cfg.tableName, slice.Index(i).Addr().Interface())
+		}
 		if cfg.Hooks.AfterCreate != nil {
 			for i := 0; i < slice.Len(); i++ {
 				item := slice.Index(i).Addr().Interface()
@@ -272,9 +287,15 @@ func bulkDeleteHandler(gdb *gorm.DB, cfg EntityConfig) apperr.HandlerFunc {
 				}
 			}
 		}
+		befores := reflect.New(reflect.SliceOf(structTypeOf(cfg.Model))).Interface()
+		_ = gdb.WithContext(r.Context()).Model(cfg.Model).Where("id IN ?", body.IDs).Find(befores).Error
 		record := reflect.New(structTypeOf(cfg.Model)).Interface()
 		if err := gdb.WithContext(r.Context()).Where("id IN ?", body.IDs).Delete(record).Error; err != nil {
 			return apperr.FromDB(err, cfg.Name)
+		}
+		befSlice := reflect.ValueOf(befores).Elem()
+		for i := 0; i < befSlice.Len(); i++ {
+			cfg.auditor.RecordDelete(r, cfg.tableName, befSlice.Index(i).Addr().Interface())
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil

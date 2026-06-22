@@ -1,4 +1,5 @@
 pub mod apperr;
+pub mod audit;
 pub mod auth;
 pub mod entities;
 pub mod error;

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"projx.local/go/internal/apperr"
+	"projx.local/go/internal/audit"
 	"projx.local/go/internal/db"
 	"projx.local/go/internal/entities"
 	"projx.local/go/internal/posts"
@@ -32,7 +33,7 @@ func setup(t *testing.T) (*httptest.Server, func()) {
 	gdb, err := db.Open(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, gdb.Migrator().DropTable(&posts.Post{}))
-	require.NoError(t, gdb.AutoMigrate(&posts.Post{}))
+	require.NoError(t, gdb.AutoMigrate(&posts.Post{}, &audit.AuditLog{}))
 
 	entities.Reset()
 	entities.Register(posts.Config())

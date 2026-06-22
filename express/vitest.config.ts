@@ -12,7 +12,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/config.ts'],
+      exclude: ['src/server.ts', 'src/config.ts', 'src/prisma.ts'],
       thresholds: {
         statements: 80,
         branches: 80,
@@ -20,5 +20,7 @@ export default defineConfig({
         lines: 80,
       },
     },
+    pool: 'forks',
+    fileParallelism: false,
   },
 });

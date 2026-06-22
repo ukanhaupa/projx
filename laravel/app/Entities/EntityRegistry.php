@@ -64,12 +64,16 @@ final class EntityRegistry
         $name = $config->name;
         $prefix = $config->basePath;
 
-        $router->group(['prefix' => $prefix], function (Router $group) use ($controller, $name): void {
+        $readonly = $config->readonly;
+        $router->group(['prefix' => $prefix], function (Router $group) use ($controller, $name, $readonly): void {
             $group->get('/', [$controller, 'index'])->defaults('entity', $name);
+            $group->get('{id}', [$controller, 'show'])->defaults('entity', $name);
+            if ($readonly) {
+                return;
+            }
             $group->post('/', [$controller, 'store'])->defaults('entity', $name);
             $group->post('bulk', [$controller, 'bulkStore'])->defaults('entity', $name);
             $group->delete('bulk', [$controller, 'bulkDestroy'])->defaults('entity', $name);
-            $group->get('{id}', [$controller, 'show'])->defaults('entity', $name);
             $group->patch('{id}', [$controller, 'update'])->defaults('entity', $name);
             $group->delete('{id}', [$controller, 'destroy'])->defaults('entity', $name);
         });

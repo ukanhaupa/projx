@@ -1,17 +1,17 @@
-import express, { type Router } from "express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { ApiError } from "../../errors.js";
-import type { PrismaLike } from "../../prisma.js";
-import { requireAuth } from "../../middlewares/authenticate.js";
-import { hashPassword, verifyPassword, hashToken } from "./password.js";
+import express, { type Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { ApiError } from '../../errors.js';
+import type { PrismaLike } from '../../prisma.js';
+import { requireAuth } from '../../middlewares/authenticate.js';
+import { hashPassword, verifyPassword, hashToken } from './password.js';
 import {
   buildResetLink,
   buildVerificationLink,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from "./mailer.js";
+} from './mailer.js';
 import {
   buildOtpauthUrl,
   decryptRecoveryCodes,
@@ -26,8 +26,8 @@ import {
   MFA_LOCKOUT_MS,
   MFA_MAX_ATTEMPTS,
   verifyTotp,
-} from "./mfa.js";
-import { sendInitialVerificationEmail } from "./verification-jobs.js";
+} from './mfa.js';
+import { sendInitialVerificationEmail } from './verification-jobs.js';
 import {
   hashRefreshToken,
   issueAuthSession,
@@ -36,18 +36,18 @@ import {
   signTokens,
   signWithExpiry,
   verifyToken,
-} from "./session.js";
+} from './session.js';
 
 const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
-const MFA_CHALLENGE_TTL = "5m";
+const MFA_CHALLENGE_TTL = '5m';
 
 const PUBLIC_RATE_LIMIT_OPTS = {
   windowMs: 60_000,
   limit: 5,
-  standardHeaders: "draft-8",
+  standardHeaders: 'draft-8',
   legacyHeaders: false,
 } as const;
 
@@ -134,8 +134,8 @@ interface RefreshTokenDelegate {
   }): Promise<RefreshTokenRow | null>;
   findMany(args: {
     where: { user_id: string; revoked_at: null };
-    orderBy: { created_at: "desc" };
-    distinct: ["session_id"];
+    orderBy: { created_at: 'desc' };
+    distinct: ['session_id'];
   }): Promise<RefreshTokenRow[]>;
   updateMany(args: {
     where: Partial<RefreshTokenRow> & { NOT?: { session_id: string } };
@@ -241,16 +241,16 @@ function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    const path = first.path.join(".");
+    const path = first.path.join('.');
     const detail = path ? `${path}: ${first.message}` : first.message;
-    throw new ApiError(400, detail, "validation_error");
+    throw new ApiError(400, detail, 'validation_error');
   }
   return parsed.data;
 }
 
 function signMfaChallenge(user: UserRow): string {
   return signWithExpiry(
-    { sub: user.id, stage: "mfa_pending" },
+    { sub: user.id, stage: 'mfa_pending' },
     MFA_CHALLENGE_TTL,
   );
 }
@@ -286,17 +286,17 @@ export function authRouter(prisma: PrismaLike): Router {
   const resendVerificationRateLimit = rateLimit({
     windowMs: 60 * 60_000,
     limit: 5,
-    standardHeaders: "draft-8",
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
     keyGenerator: (req) => {
       const body = (req.body ?? {}) as { email?: string };
-      const email = (body.email ?? "").toLowerCase();
+      const email = (body.email ?? '').toLowerCase();
       if (email) return email;
-      return ipKeyGenerator(req.ip ?? "unknown");
+      return ipKeyGenerator(req.ip ?? 'unknown');
     },
   });
 
-  router.post("/signup", publicRateLimit, async (req, res, next) => {
+  router.post('/signup', publicRateLimit, async (req, res, next) => {
     try {
       const body = parseOrThrow(SignupSchema, req.body);
       const normalizedEmail = body.email.toLowerCase();
@@ -306,8 +306,8 @@ export function authRouter(prisma: PrismaLike): Router {
       if (existing) {
         throw new ApiError(
           409,
-          "An account with this email already exists.",
-          "duplicate_email",
+          'An account with this email already exists.',
+          'duplicate_email',
         );
       }
       const passwordHash = await hashPassword(body.password);
@@ -317,7 +317,7 @@ export function authRouter(prisma: PrismaLike): Router {
           email: normalizedEmail,
           name: body.name,
           password_hash: passwordHash,
-          role: isFirstUser ? "admin" : "user",
+          role: isFirstUser ? 'admin' : 'user',
         },
       });
 
@@ -340,7 +340,7 @@ export function authRouter(prisma: PrismaLike): Router {
           token_hash: hashRefreshToken(tokens.refresh_token),
           expires_at: expiresAt,
           ip_address: req.ip ?? null,
-          user_agent: req.headers["user-agent"] ?? null,
+          user_agent: req.headers['user-agent'] ?? null,
         },
       });
 
@@ -349,7 +349,7 @@ export function authRouter(prisma: PrismaLike): Router {
       } catch (e) {
         req.log?.error?.(
           { err: e, userId: user.id },
-          "Failed to send initial verification email",
+          'Failed to send initial verification email',
         );
       }
 
@@ -372,7 +372,7 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/login", publicRateLimit, async (req, res, next) => {
+  router.post('/login', publicRateLimit, async (req, res, next) => {
     try {
       const body = parseOrThrow(LoginSchema, req.body);
       const normalizedEmail = body.email.toLowerCase();
@@ -386,13 +386,13 @@ export function authRouter(prisma: PrismaLike): Router {
         );
         throw new ApiError(
           429,
-          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
-          "account_locked",
+          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+          'account_locked',
         );
       }
 
       if (!user || !user.password_hash) {
-        throw new ApiError(401, "Invalid credentials", "invalid_credentials");
+        throw new ApiError(401, 'Invalid credentials', 'invalid_credentials');
       }
 
       const validPassword = await verifyPassword(
@@ -408,7 +408,7 @@ export function authRouter(prisma: PrismaLike): Router {
           lockData.locked_until = new Date(Date.now() + LOGIN_LOCKOUT_MS);
         }
         await db.user.update({ where: { id: user.id }, data: lockData });
-        throw new ApiError(401, "Invalid credentials", "invalid_credentials");
+        throw new ApiError(401, 'Invalid credentials', 'invalid_credentials');
       }
 
       const freshUser = await db.user.update({
@@ -427,8 +427,8 @@ export function authRouter(prisma: PrismaLike): Router {
           );
           throw new ApiError(
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
-            "mfa_locked",
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+            'mfa_locked',
           );
         }
         const challenge_token = signMfaChallenge(freshUser);
@@ -448,7 +448,7 @@ export function authRouter(prisma: PrismaLike): Router {
   });
 
   router.post(
-    "/mfa/verify-challenge",
+    '/mfa/verify-challenge',
     publicRateLimit,
     async (req, res, next) => {
       try {
@@ -460,21 +460,21 @@ export function authRouter(prisma: PrismaLike): Router {
         } catch {
           throw new ApiError(
             401,
-            "Challenge token invalid or expired",
-            "invalid_challenge",
+            'Challenge token invalid or expired',
+            'invalid_challenge',
           );
         }
-        if (decoded.stage !== "mfa_pending" || !decoded.sub) {
+        if (decoded.stage !== 'mfa_pending' || !decoded.sub) {
           throw new ApiError(
             401,
-            "Challenge token invalid",
-            "invalid_challenge",
+            'Challenge token invalid',
+            'invalid_challenge',
           );
         }
 
         const user = await db.user.findUnique({ where: { id: decoded.sub } });
         if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-          throw new ApiError(401, "MFA not configured", "mfa_not_configured");
+          throw new ApiError(401, 'MFA not configured', 'mfa_not_configured');
         }
         if (isMfaLocked(user.mfa_locked_until)) {
           const mins = Math.ceil(
@@ -482,8 +482,8 @@ export function authRouter(prisma: PrismaLike): Router {
           );
           throw new ApiError(
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
-            "mfa_locked",
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+            'mfa_locked',
           );
         }
 
@@ -500,7 +500,7 @@ export function authRouter(prisma: PrismaLike): Router {
 
         if (!success) {
           await recordMfaFailure(db, user);
-          throw new ApiError(401, "Invalid MFA code", "invalid_mfa_code");
+          throw new ApiError(401, 'Invalid MFA code', 'invalid_mfa_code');
         }
 
         if (consumedRecoveryIndex >= 0) {
@@ -526,16 +526,16 @@ export function authRouter(prisma: PrismaLike): Router {
     },
   );
 
-  router.post("/mfa/enroll", requireAuth, async (req, res, next) => {
+  router.post('/mfa/enroll', requireAuth, async (req, res, next) => {
     try {
       const userId = req.authUser!.sub;
       const user = await db.user.findUnique({ where: { id: userId } });
-      if (!user) throw new ApiError(404, "User not found", "not_found");
+      if (!user) throw new ApiError(404, 'User not found', 'not_found');
       if (user.mfa_enabled) {
         throw new ApiError(
           409,
-          "MFA is already enabled. Disable it first to re-enroll.",
-          "mfa_already_enabled",
+          'MFA is already enabled. Disable it first to re-enroll.',
+          'mfa_already_enabled',
         );
       }
 
@@ -557,7 +557,7 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/mfa/enroll/verify", requireAuth, async (req, res, next) => {
+  router.post('/mfa/enroll/verify', requireAuth, async (req, res, next) => {
     try {
       const body = parseOrThrow(MfaEnrollVerifySchema, req.body);
       const userId = req.authUser!.sub;
@@ -565,15 +565,15 @@ export function authRouter(prisma: PrismaLike): Router {
       if (!user || !user.mfa_secret_enc) {
         throw new ApiError(
           400,
-          "No pending MFA enrollment. Start enrollment first.",
-          "no_mfa_enrollment",
+          'No pending MFA enrollment. Start enrollment first.',
+          'no_mfa_enrollment',
         );
       }
       if (user.mfa_enabled) {
         throw new ApiError(
           409,
-          "MFA is already enabled.",
-          "mfa_already_enabled",
+          'MFA is already enabled.',
+          'mfa_already_enabled',
         );
       }
 
@@ -581,8 +581,8 @@ export function authRouter(prisma: PrismaLike): Router {
       if (!valid) {
         throw new ApiError(
           400,
-          "Invalid code. Scan the QR and try again.",
-          "invalid_mfa_code",
+          'Invalid code. Scan the QR and try again.',
+          'invalid_mfa_code',
         );
       }
 
@@ -606,16 +606,16 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/mfa/disable", requireAuth, async (req, res, next) => {
+  router.post('/mfa/disable', requireAuth, async (req, res, next) => {
     try {
       const body = parseOrThrow(MfaDisableSchema, req.body);
       const userId = req.authUser!.sub;
       const user = await db.user.findUnique({ where: { id: userId } });
       if (!user || !user.password_hash) {
-        throw new ApiError(404, "User not found", "not_found");
+        throw new ApiError(404, 'User not found', 'not_found');
       }
       if (!user.mfa_enabled || !user.mfa_secret_enc) {
-        throw new ApiError(400, "MFA is not enabled.", "mfa_not_enabled");
+        throw new ApiError(400, 'MFA is not enabled.', 'mfa_not_enabled');
       }
 
       const passwordOk = await verifyPassword(
@@ -623,7 +623,7 @@ export function authRouter(prisma: PrismaLike): Router {
         user.password_hash,
       );
       if (!passwordOk) {
-        throw new ApiError(400, "Invalid password", "invalid_password");
+        throw new ApiError(400, 'Invalid password', 'invalid_password');
       }
 
       let mfaOk: boolean;
@@ -635,7 +635,7 @@ export function authRouter(prisma: PrismaLike): Router {
       }
       if (!mfaOk) {
         await recordMfaFailure(db, user);
-        throw new ApiError(400, "Invalid MFA code", "invalid_mfa_code");
+        throw new ApiError(400, 'Invalid MFA code', 'invalid_mfa_code');
       }
 
       await db.user.update({
@@ -657,7 +657,7 @@ export function authRouter(prisma: PrismaLike): Router {
   });
 
   router.post(
-    "/mfa/recovery-codes/regenerate",
+    '/mfa/recovery-codes/regenerate',
     requireAuth,
     async (req, res, next) => {
       try {
@@ -665,15 +665,15 @@ export function authRouter(prisma: PrismaLike): Router {
         const userId = req.authUser!.sub;
         const user = await db.user.findUnique({ where: { id: userId } });
         if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-          throw new ApiError(400, "MFA is not enabled.", "mfa_not_enabled");
+          throw new ApiError(400, 'MFA is not enabled.', 'mfa_not_enabled');
         }
         if (isMfaLocked(user.mfa_locked_until)) {
-          throw new ApiError(429, "MFA temporarily locked.", "mfa_locked");
+          throw new ApiError(429, 'MFA temporarily locked.', 'mfa_locked');
         }
 
         if (!verifyTotp(body.code, decryptSecret(user.mfa_secret_enc))) {
           await recordMfaFailure(db, user);
-          throw new ApiError(400, "Invalid MFA code", "invalid_mfa_code");
+          throw new ApiError(400, 'Invalid MFA code', 'invalid_mfa_code');
         }
 
         const plaintextCodes = generateRecoveryCodes();
@@ -694,17 +694,17 @@ export function authRouter(prisma: PrismaLike): Router {
     },
   );
 
-  router.post("/refresh", async (req, res, next) => {
+  router.post('/refresh', async (req, res, next) => {
     try {
       const body = parseOrThrow(RefreshSchema, req.body);
       let decoded: RefreshTokenPayload;
       try {
         decoded = verifyToken<RefreshTokenPayload>(body.refresh_token);
       } catch {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
-      if (decoded.token_type !== "refresh") {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+      if (decoded.token_type !== 'refresh') {
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
       if (
         !decoded.sid ||
@@ -713,7 +713,7 @@ export function authRouter(prisma: PrismaLike): Router {
         !decoded.role ||
         !decoded.jti
       ) {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
       const presentedHash = hashRefreshToken(body.refresh_token);
@@ -726,7 +726,7 @@ export function authRouter(prisma: PrismaLike): Router {
         tokenRow.session_id !== decoded.sid ||
         tokenRow.user_id !== decoded.sub
       ) {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
       const handleReplay = async (): Promise<never> => {
@@ -747,12 +747,12 @@ export function authRouter(prisma: PrismaLike): Router {
             user_id: tokenRow.user_id,
             token_id: tokenRow.id,
           },
-          "refresh_token_replay_detected",
+          'refresh_token_replay_detected',
         );
         throw new ApiError(
           401,
-          "token_replay_detected",
-          "token_replay_detected",
+          'token_replay_detected',
+          'token_replay_detected',
         );
       };
 
@@ -761,14 +761,14 @@ export function authRouter(prisma: PrismaLike): Router {
       }
 
       if (tokenRow.expires_at.getTime() < Date.now()) {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
       const freshUser = await db.user.findUnique({
         where: { id: decoded.sub },
       });
       if (!freshUser) {
-        throw new ApiError(401, "Unauthorized", "unauthorized");
+        throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
       const payload = {
@@ -797,7 +797,7 @@ export function authRouter(prisma: PrismaLike): Router {
           token_hash: hashRefreshToken(tokens.refresh_token),
           expires_at: newExpiresAt,
           ip_address: req.ip ?? null,
-          user_agent: req.headers["user-agent"] ?? null,
+          user_agent: req.headers['user-agent'] ?? null,
         },
       });
 
@@ -812,7 +812,7 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/logout", requireAuth, async (req, res, next) => {
+  router.post('/logout', requireAuth, async (req, res, next) => {
     try {
       const userId = req.authUser?.sub;
       const parsed = LogoutSchema.safeParse(req.body ?? {});
@@ -820,18 +820,18 @@ export function authRouter(prisma: PrismaLike): Router {
         throw new ApiError(
           400,
           parsed.error.issues[0].message,
-          "validation_error",
+          'validation_error',
         );
       }
       const body = parsed.data ?? {};
       const sessionId =
         body.session_id ??
-        (typeof req.authUser?.sid === "string" ? req.authUser.sid : undefined);
+        (typeof req.authUser?.sid === 'string' ? req.authUser.sid : undefined);
       if (!userId || !sessionId) {
         throw new ApiError(
           400,
-          "session_id is required",
-          "session_id_required",
+          'session_id is required',
+          'session_id_required',
         );
       }
 
@@ -840,19 +840,19 @@ export function authRouter(prisma: PrismaLike): Router {
         data: { revoked_at: new Date() },
       });
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     } catch (err) {
       next(err);
     }
   });
 
-  router.post("/change-password", requireAuth, async (req, res, next) => {
+  router.post('/change-password', requireAuth, async (req, res, next) => {
     try {
       const body = parseOrThrow(ChangePasswordSchema, req.body);
       const userId = req.authUser!.sub;
       const user = await db.user.findUnique({ where: { id: userId } });
       if (!user || !user.password_hash) {
-        throw new ApiError(404, "User not found", "not_found");
+        throw new ApiError(404, 'User not found', 'not_found');
       }
 
       const ok = await verifyPassword(
@@ -860,14 +860,14 @@ export function authRouter(prisma: PrismaLike): Router {
         user.password_hash,
       );
       if (!ok) {
-        throw new ApiError(400, "Invalid password", "invalid_password");
+        throw new ApiError(400, 'Invalid password', 'invalid_password');
       }
 
       const password_hash = await hashPassword(body.new_password);
       await db.user.update({ where: { id: userId }, data: { password_hash } });
 
       const currentSessionId =
-        typeof req.authUser?.sid === "string" ? req.authUser.sid : undefined;
+        typeof req.authUser?.sid === 'string' ? req.authUser.sid : undefined;
       await db.refreshToken.updateMany({
         where: {
           user_id: userId,
@@ -879,20 +879,20 @@ export function authRouter(prisma: PrismaLike): Router {
         data: { revoked_at: new Date() },
       });
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     } catch (err) {
       next(err);
     }
   });
 
-  router.get("/sessions", requireAuth, async (req, res, next) => {
+  router.get('/sessions', requireAuth, async (req, res, next) => {
     try {
       const userId = req.authUser?.sub;
-      if (!userId) throw new ApiError(401, "Unauthorized", "unauthorized");
+      if (!userId) throw new ApiError(401, 'Unauthorized', 'unauthorized');
       const tokens = await db.refreshToken.findMany({
         where: { user_id: userId, revoked_at: null },
-        orderBy: { created_at: "desc" },
-        distinct: ["session_id"],
+        orderBy: { created_at: 'desc' },
+        distinct: ['session_id'],
       });
       res.json({
         data: tokens.map((token) => ({
@@ -909,7 +909,7 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/forgot-password", publicRateLimit, async (req, res, next) => {
+  router.post('/forgot-password', publicRateLimit, async (req, res, next) => {
     try {
       const body = parseOrThrow(ForgotPasswordSchema, req.body);
       const user = await db.user.findFirst({
@@ -919,7 +919,7 @@ export function authRouter(prisma: PrismaLike): Router {
       if (!user) {
         res.json({
           message:
-            "If the account exists, a password reset link has been generated.",
+            'If the account exists, a password reset link has been generated.',
         });
         return;
       }
@@ -931,7 +931,7 @@ export function authRouter(prisma: PrismaLike): Router {
         data: {
           user_id: user.id,
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           expires_at: new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000),
         },
       });
@@ -940,19 +940,19 @@ export function authRouter(prisma: PrismaLike): Router {
       try {
         const sent = await sendPasswordResetEmail(user.email, resetLink);
         if (!sent) {
-          req.log?.warn?.("SMTP is not configured; reset email was not sent.");
+          req.log?.warn?.('SMTP is not configured; reset email was not sent.');
         }
       } catch (e) {
         req.log?.error?.(
           { err: e },
-          "Failed to send password reset email via SMTP",
+          'Failed to send password reset email via SMTP',
         );
       }
 
       res.json({
         message:
-          "If the account exists, a password reset link has been generated.",
-        ...(process.env.AUTH_EXPOSE_RESET_TOKEN === "true"
+          'If the account exists, a password reset link has been generated.',
+        ...(process.env.AUTH_EXPOSE_RESET_TOKEN === 'true'
           ? { reset_token: rawToken }
           : {}),
       });
@@ -961,14 +961,14 @@ export function authRouter(prisma: PrismaLike): Router {
     }
   });
 
-  router.post("/reset-password", async (req, res, next) => {
+  router.post('/reset-password', async (req, res, next) => {
     try {
       const body = parseOrThrow(ResetPasswordSchema, req.body);
       const tokenHash = hashToken(body.token);
       const reset = await db.verificationToken.findFirst({
         where: {
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           consumed_at: null,
           expires_at: { gt: new Date() },
         },
@@ -977,8 +977,8 @@ export function authRouter(prisma: PrismaLike): Router {
       if (!reset) {
         throw new ApiError(
           400,
-          "Invalid or expired reset token",
-          "invalid_reset_token",
+          'Invalid or expired reset token',
+          'invalid_reset_token',
         );
       }
 
@@ -999,13 +999,13 @@ export function authRouter(prisma: PrismaLike): Router {
         }),
       ]);
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     } catch (err) {
       next(err);
     }
   });
 
-  router.post("/verify-email", async (req, res, next) => {
+  router.post('/verify-email', async (req, res, next) => {
     try {
       const body = parseOrThrow(VerifyEmailSchema, req.body);
       const tokenHash = hashToken(body.token);
@@ -1013,7 +1013,7 @@ export function authRouter(prisma: PrismaLike): Router {
       const record = await db.verificationToken.findFirst({
         where: {
           token_hash: tokenHash,
-          kind: "email_verify",
+          kind: 'email_verify',
           consumed_at: null,
           expires_at: { gt: new Date() },
         },
@@ -1022,8 +1022,8 @@ export function authRouter(prisma: PrismaLike): Router {
       if (!record) {
         throw new ApiError(
           400,
-          "Invalid or expired verification token",
-          "invalid_verification_token",
+          'Invalid or expired verification token',
+          'invalid_verification_token',
         );
       }
 
@@ -1045,7 +1045,7 @@ export function authRouter(prisma: PrismaLike): Router {
   });
 
   router.post(
-    "/resend-verification",
+    '/resend-verification',
     resendVerificationRateLimit,
     async (req, res, next) => {
       try {
@@ -1060,7 +1060,7 @@ export function authRouter(prisma: PrismaLike): Router {
             data: {
               user_id: user.id,
               token_hash: hashToken(rawToken),
-              kind: "email_verify",
+              kind: 'email_verify',
               expires_at: new Date(
                 Date.now() + VERIFICATION_TOKEN_TTL_SECONDS * 1000,
               ),
@@ -1072,13 +1072,13 @@ export function authRouter(prisma: PrismaLike): Router {
             const sent = await sendVerificationEmail(user.email, link);
             if (!sent) {
               req.log?.warn?.(
-                "SMTP is not configured; verification email was not sent.",
+                'SMTP is not configured; verification email was not sent.',
               );
             }
           } catch (e) {
             req.log?.error?.(
               { err: e },
-              "Failed to send verification email via SMTP",
+              'Failed to send verification email via SMTP',
             );
           }
         }
@@ -1090,13 +1090,13 @@ export function authRouter(prisma: PrismaLike): Router {
     },
   );
 
-  router.get("/me", requireAuth, async (req, res, next) => {
+  router.get('/me', requireAuth, async (req, res, next) => {
     try {
       const userId = req.authUser?.sub;
-      if (!userId) throw new ApiError(401, "Unauthorized", "unauthorized");
+      if (!userId) throw new ApiError(401, 'Unauthorized', 'unauthorized');
       const user = await db.user.findUnique({ where: { id: userId } });
       if (!user || user.deleted_at)
-        throw new ApiError(404, "User not found", "not_found");
+        throw new ApiError(404, 'User not found', 'not_found');
       res.json({
         id: user.id,
         email: user.email,

@@ -3,6 +3,7 @@
   "displayName": "ent",
   "frameworks": ["go"],
   "removeFromBase": [
+    "internal/audit",
     "internal/apperr/errors.go",
     "internal/apperr/errors_test.go",
     "internal/apperr/middleware_test.go",

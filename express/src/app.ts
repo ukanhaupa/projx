@@ -10,6 +10,7 @@ import { ApiError, errorHandler, notFoundHandler } from './errors.js';
 import { sentryErrorHandler, sentryRequestHandler } from './lib/sentry.js';
 import { authenticate, requireAuth } from './middlewares/authenticate.js';
 import { prisma as defaultPrisma, type PrismaLike } from './prisma.js';
+import { setRequestUserId } from './utils/request-context.js';
 import { EntityRegistry, registerEntityRoutes } from './modules/_base/index.js';
 import './modules/audit-logs/index.js';
 // projx-anchor: imports
@@ -90,6 +91,12 @@ export function buildApp(options: BuildAppOptions = {}): express.Express {
   app.set('trust proxy', 1);
   app.use(authenticate);
   app.use(requireAuth);
+  app.use((req, _res, next) => {
+    const authUser = (req as { authUser?: { email?: string; sub?: string } })
+      .authUser;
+    setRequestUserId(authUser?.email || authUser?.sub);
+    next();
+  });
   // projx-anchor: plugins
 
   app.get('/api/health/live', (_req, res) => {

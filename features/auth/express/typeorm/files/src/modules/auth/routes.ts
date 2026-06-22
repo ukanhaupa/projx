@@ -3,24 +3,24 @@ import express, {
   type Request,
   type Response,
   type Router,
-} from "express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { IsNull, MoreThan } from "typeorm";
-import { dataSource } from "../../db/data-source.js";
-import { ApiError } from "../../errors.js";
-import { requireAuth } from "../../middlewares/authenticate.js";
-import { RefreshToken } from "../../entities/refresh-token.js";
-import { User } from "../../entities/user.js";
-import { VerificationToken } from "../../entities/verification-token.js";
-import { hashPassword, verifyPassword, hashToken } from "./password.js";
+} from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { IsNull, MoreThan } from 'typeorm';
+import { dataSource } from '../../db/data-source.js';
+import { ApiError } from '../../errors.js';
+import { requireAuth } from '../../middlewares/authenticate.js';
+import { RefreshToken } from '../../entities/refresh-token.js';
+import { User } from '../../entities/user.js';
+import { VerificationToken } from '../../entities/verification-token.js';
+import { hashPassword, verifyPassword, hashToken } from './password.js';
 import {
   buildResetLink,
   buildVerificationLink,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from "./mailer.js";
+} from './mailer.js';
 import {
   buildOtpauthUrl,
   decryptRecoveryCodes,
@@ -35,8 +35,8 @@ import {
   MFA_LOCKOUT_MS,
   MFA_MAX_ATTEMPTS,
   verifyTotp,
-} from "./mfa.js";
-import { sendInitialVerificationEmail } from "./verification-jobs.js";
+} from './mfa.js';
+import { sendInitialVerificationEmail } from './verification-jobs.js';
 import {
   hashRefreshToken,
   issueAuthSession,
@@ -45,7 +45,7 @@ import {
   signJwt,
   signTokens,
   verifyJwt,
-} from "./session.js";
+} from './session.js';
 
 const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
@@ -53,13 +53,13 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
 const EXPOSE_RESET_TOKEN =
-  (process.env.AUTH_EXPOSE_RESET_TOKEN ?? "").toLowerCase() === "true";
+  (process.env.AUTH_EXPOSE_RESET_TOKEN ?? '').toLowerCase() === 'true';
 
 const publicLimiter = (): ReturnType<typeof rateLimit> =>
   rateLimit({
     windowMs: 60 * 1000,
     limit: 5,
-    standardHeaders: "draft-8",
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
   });
 
@@ -67,19 +67,19 @@ const resendLimiter = (): ReturnType<typeof rateLimit> =>
   rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 5,
-    standardHeaders: "draft-8",
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
     keyGenerator: (req) => {
       const body = (req.body ?? {}) as { email?: string };
-      const email = (body.email ?? "").toLowerCase();
+      const email = (body.email ?? '').toLowerCase();
       if (email) return email;
-      return req.ip ? ipKeyGenerator(req.ip) : "unknown";
+      return req.ip ? ipKeyGenerator(req.ip) : 'unknown';
     },
   });
 
 interface MfaChallengePayload {
   sub: string;
-  stage: "mfa_pending";
+  stage: 'mfa_pending';
 }
 
 interface RefreshTokenPayload {
@@ -106,14 +106,14 @@ function err(
 function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   const result = schema.safeParse(body);
   if (!result.success) {
-    throw new ApiError(422, z.prettifyError(result.error), "validation_error");
+    throw new ApiError(422, z.prettifyError(result.error), 'validation_error');
   }
   return result.data;
 }
 
 function signMfaChallenge(userId: string): string {
   return signJwt(
-    { sub: userId, stage: "mfa_pending" },
+    { sub: userId, stage: 'mfa_pending' },
     MFA_CHALLENGE_TTL_SECONDS,
   );
 }
@@ -217,7 +217,7 @@ export function authRouter(): Router {
   const verificationRepo = () => dataSource.getRepository(VerificationToken);
 
   router.post(
-    "/signup",
+    '/signup',
     publicLimiter(),
     asyncHandler(async (req, res) => {
       const body = parseBody(signupSchema, req.body);
@@ -226,7 +226,7 @@ export function authRouter(): Router {
         where: { email: body.email.toLowerCase() },
       });
       if (existing) {
-        return err(res, 409, "An account with this email already exists.");
+        return err(res, 409, 'An account with this email already exists.');
       }
       const passwordHash = await hashPassword(body.password);
       const isFirstUser = (await userRepo().count()) === 0;
@@ -234,7 +234,7 @@ export function authRouter(): Router {
         email: body.email.toLowerCase(),
         name: body.name,
         password_hash: passwordHash,
-        role: isFirstUser ? "admin" : "user",
+        role: isFirstUser ? 'admin' : 'user',
       });
 
       const sessionId = randomUUID();
@@ -255,7 +255,7 @@ export function authRouter(): Router {
         token_hash: hashRefreshToken(tokens.refresh_token),
         expires_at: expiresAt,
         ip_address: req.ip ?? null,
-        user_agent: req.headers["user-agent"] ?? null,
+        user_agent: req.headers['user-agent'] ?? null,
       });
 
       try {
@@ -263,7 +263,7 @@ export function authRouter(): Router {
       } catch (e) {
         req.log?.error?.(
           { err: e, userId: user.id },
-          "Failed to send initial verification email",
+          'Failed to send initial verification email',
         );
       }
 
@@ -285,7 +285,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/login",
+    '/login',
     publicLimiter(),
     asyncHandler(async (req, res) => {
       const body = parseBody(loginSchema, req.body);
@@ -302,12 +302,12 @@ export function authRouter(): Router {
         return err(
           res,
           429,
-          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
       if (!user || !user.password_hash) {
-        return err(res, 401, "Invalid credentials");
+        return err(res, 401, 'Invalid credentials');
       }
 
       const validPassword = await verifyPassword(
@@ -323,7 +323,7 @@ export function authRouter(): Router {
           lockData.locked_until = new Date(Date.now() + LOGIN_LOCKOUT_MS);
         }
         await userRepo().update({ id: user.id }, lockData);
-        return err(res, 401, "Invalid credentials");
+        return err(res, 401, 'Invalid credentials');
       }
 
       await userRepo().update(
@@ -336,7 +336,7 @@ export function authRouter(): Router {
       );
       const freshUser = await userRepo().findOne({ where: { id: user.id } });
       if (!freshUser) {
-        return err(res, 401, "Invalid credentials");
+        return err(res, 401, 'Invalid credentials');
       }
 
       if (freshUser.mfa_enabled) {
@@ -347,7 +347,7 @@ export function authRouter(): Router {
           return err(
             res,
             429,
-            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+            `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
           );
         }
         const challenge_token = signMfaChallenge(freshUser.id);
@@ -364,7 +364,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/mfa/verify-challenge",
+    '/mfa/verify-challenge',
     publicLimiter(),
     asyncHandler(async (req, res) => {
       const body = parseBody(mfaChallengeSchema, req.body);
@@ -373,15 +373,15 @@ export function authRouter(): Router {
       try {
         decoded = verifyJwt<MfaChallengePayload>(body.challenge_token);
       } catch {
-        return err(res, 401, "Challenge token invalid or expired");
+        return err(res, 401, 'Challenge token invalid or expired');
       }
-      if (decoded.stage !== "mfa_pending" || !decoded.sub) {
-        return err(res, 401, "Challenge token invalid");
+      if (decoded.stage !== 'mfa_pending' || !decoded.sub) {
+        return err(res, 401, 'Challenge token invalid');
       }
 
       const user = await userRepo().findOne({ where: { id: decoded.sub } });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 401, "MFA not configured");
+        return err(res, 401, 'MFA not configured');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
         const mins = Math.ceil(
@@ -390,7 +390,7 @@ export function authRouter(): Router {
         return err(
           res,
           429,
-          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          `MFA temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
         );
       }
 
@@ -407,7 +407,7 @@ export function authRouter(): Router {
 
       if (!success) {
         await recordMfaFailure(user);
-        return err(res, 401, "Invalid MFA code");
+        return err(res, 401, 'Invalid MFA code');
       }
 
       if (consumedRecoveryIndex >= 0) {
@@ -431,17 +431,17 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/mfa/enroll",
+    '/mfa/enroll',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser!.sub;
       const user = await userRepo().findOne({ where: { id: userId } });
-      if (!user) return err(res, 404, "User not found");
+      if (!user) return err(res, 404, 'User not found');
       if (user.mfa_enabled) {
         return err(
           res,
           409,
-          "MFA is already enabled. Disable it first to re-enroll.",
+          'MFA is already enabled. Disable it first to re-enroll.',
         );
       }
 
@@ -462,7 +462,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/mfa/enroll/verify",
+    '/mfa/enroll/verify',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = parseBody(mfaEnrollVerifySchema, req.body);
@@ -472,16 +472,16 @@ export function authRouter(): Router {
         return err(
           res,
           400,
-          "No pending MFA enrollment. Start enrollment first.",
+          'No pending MFA enrollment. Start enrollment first.',
         );
       }
       if (user.mfa_enabled) {
-        return err(res, 409, "MFA is already enabled.");
+        return err(res, 409, 'MFA is already enabled.');
       }
 
       const valid = verifyTotp(body.code, decryptSecret(user.mfa_secret_enc));
       if (!valid) {
-        return err(res, 400, "Invalid code. Scan the QR and try again.");
+        return err(res, 400, 'Invalid code. Scan the QR and try again.');
       }
 
       const plaintextCodes = generateRecoveryCodes();
@@ -503,22 +503,22 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/mfa/disable",
+    '/mfa/disable',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = parseBody(mfaDisableSchema, req.body);
       const userId = req.authUser!.sub;
       const user = await userRepo().findOne({ where: { id: userId } });
-      if (!user || !user.password_hash) return err(res, 404, "User not found");
+      if (!user || !user.password_hash) return err(res, 404, 'User not found');
       if (!user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 400, "MFA is not enabled.");
+        return err(res, 400, 'MFA is not enabled.');
       }
 
       const passwordOk = await verifyPassword(
         body.password,
         user.password_hash,
       );
-      if (!passwordOk) return err(res, 400, "Invalid password");
+      if (!passwordOk) return err(res, 400, 'Invalid password');
 
       let mfaOk: boolean;
       if (body.use_recovery) {
@@ -529,7 +529,7 @@ export function authRouter(): Router {
       }
       if (!mfaOk) {
         await recordMfaFailure(user);
-        return err(res, 400, "Invalid MFA code");
+        return err(res, 400, 'Invalid MFA code');
       }
 
       await userRepo().update(
@@ -549,22 +549,22 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/mfa/recovery-codes/regenerate",
+    '/mfa/recovery-codes/regenerate',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = parseBody(mfaRegenerateSchema, req.body);
       const userId = req.authUser!.sub;
       const user = await userRepo().findOne({ where: { id: userId } });
       if (!user || !user.mfa_enabled || !user.mfa_secret_enc) {
-        return err(res, 400, "MFA is not enabled.");
+        return err(res, 400, 'MFA is not enabled.');
       }
       if (isMfaLocked(user.mfa_locked_until)) {
-        return err(res, 429, "MFA temporarily locked.");
+        return err(res, 429, 'MFA temporarily locked.');
       }
 
       if (!verifyTotp(body.code, decryptSecret(user.mfa_secret_enc))) {
         await recordMfaFailure(user);
-        return err(res, 400, "Invalid MFA code");
+        return err(res, 400, 'Invalid MFA code');
       }
 
       const plaintextCodes = generateRecoveryCodes();
@@ -583,17 +583,17 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/refresh",
+    '/refresh',
     asyncHandler(async (req, res) => {
       const body = parseBody(refreshSchema, req.body);
       let decoded: RefreshTokenPayload;
       try {
         decoded = verifyJwt<RefreshTokenPayload>(body.refresh_token);
       } catch {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
-      if (decoded.token_type !== "refresh") {
-        return err(res, 401, "Unauthorized");
+      if (decoded.token_type !== 'refresh') {
+        return err(res, 401, 'Unauthorized');
       }
 
       if (
@@ -603,7 +603,7 @@ export function authRouter(): Router {
         !decoded.role ||
         !decoded.jti
       ) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const presentedHash = hashRefreshToken(body.refresh_token);
@@ -616,7 +616,7 @@ export function authRouter(): Router {
         tokenRow.session_id !== decoded.sid ||
         tokenRow.user_id !== decoded.sub
       ) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const handleReplay = async () => {
@@ -638,9 +638,9 @@ export function authRouter(): Router {
             user_id: tokenRow.user_id,
             token_id: tokenRow.id,
           },
-          "refresh_token_replay_detected",
+          'refresh_token_replay_detected',
         );
-        return err(res, 401, "token_replay_detected");
+        return err(res, 401, 'token_replay_detected');
       };
 
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
@@ -648,7 +648,7 @@ export function authRouter(): Router {
       }
 
       if (tokenRow.expires_at.getTime() < Date.now()) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const freshUser = await userRepo().findOne({
@@ -656,7 +656,7 @@ export function authRouter(): Router {
         select: { id: true, name: true, email: true, role: true },
       });
       if (!freshUser) {
-        return err(res, 401, "Unauthorized");
+        return err(res, 401, 'Unauthorized');
       }
 
       const payload = {
@@ -688,7 +688,7 @@ export function authRouter(): Router {
           token_hash: hashRefreshToken(tokens.refresh_token),
           expires_at: newExpiresAt,
           ip_address: req.ip ?? null,
-          user_agent: req.headers["user-agent"] ?? null,
+          user_agent: req.headers['user-agent'] ?? null,
         });
 
         await repo.update({ id: tokenRow.id }, { rotated_to: created.id });
@@ -705,7 +705,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/logout",
+    '/logout',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
@@ -715,14 +715,14 @@ export function authRouter(): Router {
         throw new ApiError(
           422,
           z.prettifyError(parsed.error),
-          "validation_error",
+          'validation_error',
         );
       }
       const sessionId =
         parsed.data?.session_id ??
-        (typeof req.authUser?.sid === "string" ? req.authUser.sid : undefined);
+        (typeof req.authUser?.sid === 'string' ? req.authUser.sid : undefined);
       if (!userId || !sessionId) {
-        return err(res, 400, "session_id is required");
+        return err(res, 400, 'session_id is required');
       }
 
       await refreshRepo().update(
@@ -730,19 +730,19 @@ export function authRouter(): Router {
         { revoked_at: new Date() },
       );
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     }),
   );
 
   router.post(
-    "/change-password",
+    '/change-password',
     requireAuth,
     asyncHandler(async (req, res) => {
       const body = parseBody(changePasswordSchema, req.body);
       const userId = req.authUser!.sub;
       const user = await userRepo().findOne({ where: { id: userId } });
       if (!user || !user.password_hash) {
-        return err(res, 404, "User not found");
+        return err(res, 404, 'User not found');
       }
 
       const ok = await verifyPassword(
@@ -750,43 +750,43 @@ export function authRouter(): Router {
         user.password_hash,
       );
       if (!ok) {
-        return err(res, 400, "Invalid password");
+        return err(res, 400, 'Invalid password');
       }
 
       const password_hash = await hashPassword(body.new_password);
       await userRepo().update({ id: userId }, { password_hash });
 
       const currentSessionId =
-        typeof req.authUser?.sid === "string" ? req.authUser.sid : undefined;
+        typeof req.authUser?.sid === 'string' ? req.authUser.sid : undefined;
 
       const qb = refreshRepo()
         .createQueryBuilder()
         .update()
         .set({ revoked_at: new Date() })
-        .where("user_id = :userId", { userId })
-        .andWhere("revoked_at IS NULL");
+        .where('user_id = :userId', { userId })
+        .andWhere('revoked_at IS NULL');
       if (currentSessionId) {
-        qb.andWhere("session_id <> :sid", { sid: currentSessionId });
+        qb.andWhere('session_id <> :sid', { sid: currentSessionId });
       }
       await qb.execute();
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     }),
   );
 
   router.get(
-    "/sessions",
+    '/sessions',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
-      if (!userId) return err(res, 401, "Unauthorized");
+      if (!userId) return err(res, 401, 'Unauthorized');
       const tokens = await refreshRepo()
-        .createQueryBuilder("rt")
-        .distinctOn(["rt.session_id"])
-        .where("rt.user_id = :userId", { userId })
-        .andWhere("rt.revoked_at IS NULL")
-        .orderBy("rt.session_id")
-        .addOrderBy("rt.created_at", "DESC")
+        .createQueryBuilder('rt')
+        .distinctOn(['rt.session_id'])
+        .where('rt.user_id = :userId', { userId })
+        .andWhere('rt.revoked_at IS NULL')
+        .orderBy('rt.session_id')
+        .addOrderBy('rt.created_at', 'DESC')
         .getMany();
       res.json({
         data: tokens.map((token) => ({
@@ -802,7 +802,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/forgot-password",
+    '/forgot-password',
     publicLimiter(),
     asyncHandler(async (req, res) => {
       const body = parseBody(forgotPasswordSchema, req.body);
@@ -813,7 +813,7 @@ export function authRouter(): Router {
       if (!user) {
         res.json({
           message:
-            "If the account exists, a password reset link has been generated.",
+            'If the account exists, a password reset link has been generated.',
         });
         return;
       }
@@ -824,7 +824,7 @@ export function authRouter(): Router {
       await verificationRepo().save({
         user_id: user.id,
         token_hash: tokenHash,
-        kind: "password_reset",
+        kind: 'password_reset',
         expires_at: new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000),
       });
 
@@ -832,39 +832,39 @@ export function authRouter(): Router {
       try {
         const sent = await sendPasswordResetEmail(user.email, resetLink);
         if (!sent) {
-          req.log?.warn?.("SMTP is not configured; reset email was not sent.");
+          req.log?.warn?.('SMTP is not configured; reset email was not sent.');
         }
       } catch (e) {
         req.log?.error?.(
           { err: e },
-          "Failed to send password reset email via SMTP",
+          'Failed to send password reset email via SMTP',
         );
       }
 
       res.json({
         message:
-          "If the account exists, a password reset link has been generated.",
+          'If the account exists, a password reset link has been generated.',
         ...(EXPOSE_RESET_TOKEN ? { reset_token: rawToken } : {}),
       });
     }),
   );
 
   router.post(
-    "/reset-password",
+    '/reset-password',
     asyncHandler(async (req, res) => {
       const body = parseBody(resetPasswordSchema, req.body);
       const tokenHash = hashToken(body.token);
       const reset = await verificationRepo().findOne({
         where: {
           token_hash: tokenHash,
-          kind: "password_reset",
+          kind: 'password_reset',
           consumed_at: IsNull(),
           expires_at: MoreThan(new Date()),
         },
       });
 
       if (!reset) {
-        return err(res, 400, "Invalid or expired reset token");
+        return err(res, 400, 'Invalid or expired reset token');
       }
 
       const password_hash = await hashPassword(body.new_password);
@@ -884,12 +884,12 @@ export function authRouter(): Router {
           );
       });
 
-      res.json({ status: "ok" });
+      res.json({ status: 'ok' });
     }),
   );
 
   router.post(
-    "/verify-email",
+    '/verify-email',
     asyncHandler(async (req, res) => {
       const body = parseBody(verifyEmailSchema, req.body);
       const tokenHash = hashToken(body.token);
@@ -897,14 +897,14 @@ export function authRouter(): Router {
       const record = await verificationRepo().findOne({
         where: {
           token_hash: tokenHash,
-          kind: "email_verify",
+          kind: 'email_verify',
           consumed_at: IsNull(),
           expires_at: MoreThan(new Date()),
         },
       });
 
       if (!record) {
-        return err(res, 400, "Invalid or expired verification token");
+        return err(res, 400, 'Invalid or expired verification token');
       }
 
       await dataSource.transaction(async (manager) => {
@@ -921,7 +921,7 @@ export function authRouter(): Router {
   );
 
   router.post(
-    "/resend-verification",
+    '/resend-verification',
     resendLimiter(),
     asyncHandler(async (req, res) => {
       const body = parseBody(resendVerificationSchema, req.body);
@@ -934,7 +934,7 @@ export function authRouter(): Router {
         await verificationRepo().save({
           user_id: user.id,
           token_hash: hashToken(rawToken),
-          kind: "email_verify",
+          kind: 'email_verify',
           expires_at: new Date(
             Date.now() + VERIFICATION_TOKEN_TTL_SECONDS * 1000,
           ),
@@ -945,13 +945,13 @@ export function authRouter(): Router {
           const sent = await sendVerificationEmail(user.email, link);
           if (!sent) {
             req.log?.warn?.(
-              "SMTP is not configured; verification email was not sent.",
+              'SMTP is not configured; verification email was not sent.',
             );
           }
         } catch (e) {
           req.log?.error?.(
             { err: e },
-            "Failed to send verification email via SMTP",
+            'Failed to send verification email via SMTP',
           );
         }
       }
@@ -961,13 +961,13 @@ export function authRouter(): Router {
   );
 
   router.get(
-    "/me",
+    '/me',
     requireAuth,
     asyncHandler(async (req, res) => {
       const userId = req.authUser?.sub;
-      if (!userId) return err(res, 401, "Unauthorized");
+      if (!userId) return err(res, 401, 'Unauthorized');
       const user = await userRepo().findOne({ where: { id: userId } });
-      if (!user || user.deleted_at) return err(res, 404, "User not found");
+      if (!user || user.deleted_at) return err(res, 404, 'User not found');
       res.json({
         id: user.id,
         email: user.email,

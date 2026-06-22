@@ -422,6 +422,11 @@ jobs:
       DB_DATABASE: ci_test
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
+      AUDIT_DB_HOST: localhost
+      AUDIT_DB_PORT: 5432
+      AUDIT_DB_DATABASE: ci_test
+      AUDIT_DB_USERNAME: postgres
+      AUDIT_DB_PASSWORD: postgres
     defaults:
       run:
         working-directory: laravel

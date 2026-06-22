@@ -13,6 +13,13 @@ import {
   combineWhere,
   parseRawQuery,
 } from './query-engine.js';
+import {
+  auditBulkCreate,
+  auditBulkDelete,
+  auditCreate,
+  auditDelete,
+  auditUpdate,
+} from './audit.js';
 
 export type BeforeCreateHook = (
   request: Request,
@@ -121,6 +128,7 @@ export function registerEntityRoutes(
       await config.beforeCreate?.(req, data);
       const created = await config.model.create(data);
       const record = created.toJSON() as Record<string, unknown>;
+      await auditCreate(config.model, pk, record);
       if (config.afterCreate) {
         try {
           await config.afterCreate(req, record);
@@ -156,6 +164,7 @@ export function registerEntityRoutes(
       const before = existing.toJSON() as Record<string, unknown>;
       await existing.update(data);
       const after = existing.toJSON() as Record<string, unknown>;
+      await auditUpdate(config.model, pk, before, after);
       if (config.afterUpdate) {
         try {
           await config.afterUpdate(req, before, after);
@@ -175,8 +184,11 @@ export function registerEntityRoutes(
     asyncHandler(async (req, res) => {
       const id = String(req.params.id);
       if (config.beforeDelete) await config.beforeDelete(req, id);
-      const removed = await config.model.destroy({ where: { [pk]: id } });
-      if (removed === 0) throw new ApiError(404, 'Not found', 'not_found');
+      const existing = await config.model.findOne({ where: { [pk]: id } });
+      if (!existing) throw new ApiError(404, 'Not found', 'not_found');
+      const before = existing.toJSON() as Record<string, unknown>;
+      await config.model.destroy({ where: { [pk]: id } });
+      await auditDelete(config.model, pk, before);
       res.status(204).send();
     }),
   );
@@ -198,6 +210,7 @@ export function registerEntityRoutes(
         await config.beforeCreate?.(req, item);
       }
       const rows = await config.model.bulkCreate(items);
+      await auditBulkCreate(config.model, pk, rows);
       res
         .status(201)
         .json({ data: rows.map((r) => r.toJSON()), count: rows.length });
@@ -215,7 +228,9 @@ export function registerEntityRoutes(
           'validation_error',
         );
       }
-      await config.model.destroy({ where: { [pk]: ids } });
+      await auditBulkDelete(config.model, pk, { [pk]: ids }, () =>
+        config.model.destroy({ where: { [pk]: ids } }),
+      );
       res.status(204).send();
     }),
   );

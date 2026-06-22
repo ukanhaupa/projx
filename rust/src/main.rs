@@ -30,6 +30,10 @@ async fn main() -> Result<()> {
     let db = open_db().await?;
     let db = Arc::new(db);
 
+    projx::audit::migrate(&db)
+        .await
+        .context("audit_logs migration")?;
+
     // projx-anchor: entity-registrations
 
     let app = build_router(db.clone());
@@ -54,7 +58,8 @@ fn build_router(db: Arc<DatabaseConnection>) -> Router {
         .layer(RequestIdLayer)
         .layer(axum_middleware::from_fn(log_request))
         .layer(cors_layer())
-        .layer(axum_middleware::from_fn(catch_panic));
+        .layer(axum_middleware::from_fn(catch_panic))
+        .layer(axum_middleware::from_fn(projx::audit::capture_actor));
 
     Router::new()
         .merge(health::routes(db.clone()))

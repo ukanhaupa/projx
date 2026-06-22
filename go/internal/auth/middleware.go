@@ -58,7 +58,7 @@ func Authenticate(v *Verifier) func(http.Handler) http.Handler {
 				apperr.WriteError(w, r, err)
 				return
 			}
-			ctx := context.WithValue(r.Context(), authUserKey, toAuthUser(claims))
+			ctx := WithUser(r.Context(), toAuthUser(claims))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -99,4 +99,8 @@ func FromContext(ctx context.Context) (*AuthUser, bool) {
 		return nil, false
 	}
 	return v, true
+}
+
+func WithUser(ctx context.Context, user *AuthUser) context.Context {
+	return context.WithValue(ctx, authUserKey, user)
 }

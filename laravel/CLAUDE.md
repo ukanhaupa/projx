@@ -17,20 +17,20 @@
 
 ## Layout
 
-| Path                                         | What it holds                                                                              |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `bootstrap/app.php`                          | `Application::configure()` — routing, middleware (`RequestId`, Sanctum), exceptions        |
-| `bootstrap/cache/`                           | Compiled-container cache dir (must exist for boot — keep the `.gitignore`)                 |
-| `app/Http/Middleware/`                       | `RequestId.php`, auth/authz, CORS, per-user rate-limit                                     |
-| `app/Exceptions/`                            | `Handler.php`, `AppException` subclasses (status-carrying)                                 |
-| `app/Services/`                              | `JwtVerifier.php`, `ServiceConfig.php` (AES-256-GCM, cross-language wire-format)           |
-| `app/Entities/`                              | `EntityRegistry.php`, `EntityConfig.php`, `AutoRoutesController.php`, `QueryBuilder.php`   |
-| `app/Models/`                                | `User.php`, `ServiceConfig.php`, example `Post`                                            |
-| `app/Providers/`                             | `AppServiceProvider.php` (`// projx-anchor: providers`), `EntityServiceProvider.php`       |
-| `routes/api.php`                             | `/api/v1` mount + `// projx-anchor: routes`                                                |
-| `database/migrations/`                       | `service_configs` + `posts` (schema, not pre-baked app migrations)                         |
-| `tests/`                                     | Pest `Unit/` (JwtVerifier, RequestId, Cors, RateLimit, ServiceConfig, Authenticate, Authz) |
-| `phpstan.neon` / `pint.json` / `phpunit.xml` | Gate configs                                                                               |
+| Path                                         | What it holds                                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/app.php`                          | `Application::configure()` — routing, middleware (`RequestId`, Sanctum), exceptions                                                   |
+| `bootstrap/cache/`                           | Compiled-container cache dir (must exist for boot — keep the `.gitignore`)                                                            |
+| `app/Http/Middleware/`                       | `RequestId.php`, auth/authz, CORS, per-user rate-limit                                                                                |
+| `app/Exceptions/`                            | `Handler.php`, `AppException` subclasses (status-carrying)                                                                            |
+| `app/Services/`                              | `JwtVerifier.php`, `ServiceConfig.php` (AES-256-GCM, cross-language wire-format)                                                      |
+| `app/Entities/`                              | `EntityRegistry.php`, `EntityConfig.php`, `AutoRoutesController.php`, `QueryBuilder.php`, `AuditLogger.php`                           |
+| `app/Models/`                                | `User.php`, `ServiceConfig.php`, `AuditLog.php`, example `Post`                                                                       |
+| `app/Providers/`                             | `AppServiceProvider.php` (`// projx-anchor: providers`), `EntityServiceProvider.php`                                                  |
+| `routes/api.php`                             | `/api/v1` mount + `// projx-anchor: routes`                                                                                           |
+| `database/migrations/`                       | `service_configs` + `posts` + `audit_logs` (schema, not pre-baked app migrations)                                                     |
+| `tests/`                                     | Pest `Unit/` (JwtVerifier, RequestId, Cors, RateLimit, ServiceConfig, Authenticate, Authz); `Integration/` (audit-log, real Postgres) |
+| `phpstan.neon` / `pint.json` / `phpunit.xml` | Gate configs                                                                                                                          |
 
 ## Quality gates (root §"Per-template gates")
 
@@ -42,4 +42,6 @@
 - **`bootstrap/cache/` must exist** or `artisan package:discover` (a post-autoload-dump script) fails. The dir ships with a `.gitignore` (`*` except itself).
 - **`strict_types=1`** at the top of every PHP file; type + return declarations everywhere (PHPStan level 8 enforces).
 - **Runtime creds are DB-backed** (`service_configs`); env is bootstrap-only — JWT secret reads go through `ServiceConfig`, not `env()`.
+- **Audit logging is wired into the central write path** (`AutoRoutesController` → `AuditLogger`), not an Eloquent observer — observers are bypassed by the bulk delete's Query-Builder `whereIn(...)->delete()`, so `bulkDestroy` pre-fetches matching rows and records one `audit_logs` DELETE per affected record. Every single + bulk create/update/delete writes one row per record. `AuditLogger::SKIP_TABLES` (`audit_logs` only) prevents an audit-of-audit loop and is a separate concern from any scoping skip set; the action is classified per write path, never an allowlist.
+- **Audit tests live in `tests/Integration/` and need real Postgres** (`AUDIT_DB_*` env, default DB `projx_audit_laravel`). They self-skip when Postgres is unreachable, so the SQLite `Unit`/`Feature` suites stay green without it; CI and `ci-local.sh laravel` provision the DB so they actually run.
 - **`--auth=laravel`** overlays the full auth feature from [`../features/auth/laravel/`](../features/auth/laravel/).

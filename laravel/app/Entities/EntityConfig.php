@@ -24,6 +24,8 @@ final class EntityConfig
 
     public readonly bool $softDelete;
 
+    public readonly bool $readonly;
+
     /** @var array<int, string> */
     public readonly array $updatableColumns;
 
@@ -52,6 +54,7 @@ final class EntityConfig
         bool $softDelete = false,
         array $updatableColumns = [],
         array $hooks = [],
+        bool $readonly = false,
     ) {
         if ($name === '') {
             throw new InvalidArgumentException('EntityConfig: name must not be empty');
@@ -69,6 +72,7 @@ final class EntityConfig
         $this->searchableFields = array_values($searchableFields);
         $this->hiddenFields = array_values($hiddenFields);
         $this->softDelete = $softDelete;
+        $this->readonly = $readonly;
         $this->updatableColumns = array_values($updatableColumns);
         $this->beforeCreate = $hooks['beforeCreate'] ?? null;
         $this->afterCreate = $hooks['afterCreate'] ?? null;

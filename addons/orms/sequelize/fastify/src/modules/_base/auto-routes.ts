@@ -8,6 +8,13 @@ import {
   combineWhere,
   parseRawQuery,
 } from './query-engine.js';
+import {
+  auditBulkCreate,
+  auditBulkDelete,
+  auditCreate,
+  auditDelete,
+  auditUpdate,
+} from './audit.js';
 
 export type BeforeCreateHook = (
   request: FastifyRequest,
@@ -102,6 +109,7 @@ export function registerEntityRoutes(
     await config.beforeCreate?.(request, data);
     const created = await config.model.create(data);
     const record = created.toJSON() as Record<string, unknown>;
+    await auditCreate(config.model, pk, record);
     if (config.afterCreate) {
       try {
         await config.afterCreate(request, record);
@@ -143,6 +151,7 @@ export function registerEntityRoutes(
       const before = existing.toJSON() as Record<string, unknown>;
       await existing.update(data);
       const after = existing.toJSON() as Record<string, unknown>;
+      await auditUpdate(config.model, pk, before, after);
       if (config.afterUpdate) {
         try {
           await config.afterUpdate(request, before, after);
@@ -163,12 +172,15 @@ export function registerEntityRoutes(
     async (request, reply) => {
       const { id } = request.params as { id: string };
       if (config.beforeDelete) await config.beforeDelete(request, id);
-      const removed = await config.model.destroy({ where: { [pk]: id } });
-      if (removed === 0) {
+      const existing = await config.model.findOne({ where: { [pk]: id } });
+      if (!existing) {
         return reply
           .status(404)
           .send({ detail: 'Not found', request_id: request.id });
       }
+      const before = existing.toJSON() as Record<string, unknown>;
+      await config.model.destroy({ where: { [pk]: id } });
+      await auditDelete(config.model, pk, before);
       return reply.status(204).send();
     },
   );
@@ -190,6 +202,7 @@ export function registerEntityRoutes(
         await config.beforeCreate?.(request, item);
       }
       const rows = await config.model.bulkCreate(items);
+      await auditBulkCreate(config.model, pk, rows);
       return reply
         .status(201)
         .send({ data: rows.map((r) => r.toJSON()), count: rows.length });
@@ -207,7 +220,9 @@ export function registerEntityRoutes(
           request_id: request.id,
         });
       }
-      await config.model.destroy({ where: { [pk]: ids } });
+      await auditBulkDelete(config.model, pk, { [pk]: ids }, () =>
+        config.model.destroy({ where: { [pk]: ids } }),
+      );
       return reply.status(204).send();
     },
   );

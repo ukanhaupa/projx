@@ -19,6 +19,8 @@ final class AutoRoutesController extends Controller
 {
     private const MAX_BULK = 100;
 
+    public function __construct(private readonly AuditLogger $audit) {}
+
     public function index(Request $request): JsonResponse
     {
         $config = $this->resolveConfig($request);
@@ -48,6 +50,7 @@ final class AutoRoutesController extends Controller
         }
 
         $record = $this->createOne($config, $payload);
+        $this->audit->recordInsert($request, $record);
 
         $this->bestEffort($config, 'afterCreate', function () use ($config, $request, $record): void {
             if ($config->afterCreate !== null) {
@@ -77,7 +80,9 @@ final class AutoRoutesController extends Controller
                 if ($config->beforeCreate !== null) {
                     ($config->beforeCreate)($request, $payload);
                 }
-                $out[] = $this->createOne($config, $payload);
+                $record = $this->createOne($config, $payload);
+                $this->audit->recordInsert($request, $record);
+                $out[] = $record;
             }
 
             return $out;
@@ -126,6 +131,7 @@ final class AutoRoutesController extends Controller
             $record->{$key} = $value;
         }
         $record->save();
+        $this->audit->recordUpdate($request, $before, $record);
 
         $this->bestEffort($config, 'afterUpdate', function () use ($config, $request, $before, $record): void {
             if ($config->afterUpdate !== null) {
@@ -146,7 +152,9 @@ final class AutoRoutesController extends Controller
         if ($config->beforeDelete !== null) {
             ($config->beforeDelete)($request, $id);
         }
+        $before = $record->replicate()->setRawAttributes($record->getOriginal());
         $record->delete();
+        $this->audit->recordDelete($request, $before);
 
         return new JsonResponse(null, 204);
     }
@@ -169,9 +177,13 @@ final class AutoRoutesController extends Controller
 
         $model = $config->newModel();
         $key = $model->getKeyName();
+        $matched = $model->newQuery()->whereIn($key, $stringIds)->get();
         $deleted = $model->newQuery()->whereIn($key, $stringIds)->delete();
         if ($deleted === 0) {
             throw new NotFoundError('no '.$config->name.' rows matched');
+        }
+        foreach ($matched as $row) {
+            $this->audit->recordDelete($request, $row);
         }
 
         return new JsonResponse(null, 204);
