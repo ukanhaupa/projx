@@ -1,0 +1,28 @@
+{{define "content"}}
+<section class="content">
+  <div class="content-head">
+    <h1>Service Config</h1>
+    {{if .CanEditConfig}}<a class="btn" href="{{.Base}}/service-config/new">New config</a>{{end}}
+  </div>
+  {{if .CredMissing}}
+  <p class="muted">Decryption key is not configured (CRED_ENCRYPTION_KEY) — service config values cannot be edited.</p>
+  {{else if not .CanEditConfig}}
+  <p class="muted">Enable write mode to edit service configuration.</p>
+  {{end}}
+  <table class="sc-table">
+    <thead><tr><th>Purpose</th><th>Active</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+      {{range .Configs}}
+      <tr>
+        <td><code>{{.Purpose}}</code></td>
+        <td>{{if .IsActive}}yes{{else}}no{{end}}</td>
+        <td class="muted">{{.UpdatedAt}}</td>
+        <td>{{if $.CanEditConfig}}<a class="btn ghost" href="{{$.Base}}/service-config/{{.ID | urlquery}}">Edit</a>{{end}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4" class="muted">No service configs found.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}

@@ -3,6 +3,7 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -14,7 +15,10 @@ const (
 	keyLen = 32
 )
 
-var errDecrypt = errors.New("decrypt failed")
+var (
+	errDecrypt = errors.New("decrypt failed")
+	errEncrypt = errors.New("encrypt failed")
+)
 
 func ParseKey(raw string) ([]byte, error) {
 	if raw == "" {
@@ -28,6 +32,35 @@ func ParseKey(raw string) ([]byte, error) {
 		return nil, fmt.Errorf("CRED_ENCRYPTION_KEY must decode to %d bytes (got %d)", keyLen, len(key))
 	}
 	return key, nil
+}
+
+func Encrypt(plaintext string, key []byte) (string, error) {
+	if len(key) != keyLen {
+		return "", errEncrypt
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", errEncrypt
+	}
+	gcm, err := cipher.NewGCMWithNonceSize(block, ivLen)
+	if err != nil {
+		return "", errEncrypt
+	}
+	iv := make([]byte, ivLen)
+	if _, err := rand.Read(iv); err != nil {
+		return "", errEncrypt
+	}
+	sealed := gcm.Seal(nil, iv, []byte(plaintext), nil)
+	if len(sealed) < tagLen {
+		return "", errEncrypt
+	}
+	ct := sealed[:len(sealed)-tagLen]
+	tag := sealed[len(sealed)-tagLen:]
+	buf := make([]byte, 0, ivLen+tagLen+len(ct))
+	buf = append(buf, iv...)
+	buf = append(buf, tag...)
+	buf = append(buf, ct...)
+	return base64.StdEncoding.EncodeToString(buf), nil
 }
 
 func Decrypt(payload string, key []byte) (string, error) {

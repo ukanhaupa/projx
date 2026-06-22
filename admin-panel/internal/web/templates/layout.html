@@ -12,6 +12,7 @@
   <header class="topbar">
     <a class="brand" href="{{.Base}}/">Admin</a>
     {{if .User}}
+    <a class="navlink" href="{{.Base}}/service-config">Service Config</a>
     {{if .Schemas}}
     <form method="post" action="{{.Base}}/schema" class="schema-form">
       <label for="schema-select" class="muted">Schema</label>

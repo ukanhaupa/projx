@@ -103,6 +103,8 @@ describe('admin-panel component', () => {
     expect(nginx).toContain('set $admin_panel_upstream admin-panel;');
     expect(nginx).toContain('proxy_pass http://$admin_panel_upstream:8055;');
     expect(nginx).toContain('proxy_set_header X-Forwarded-Prefix /admin;');
+    expect(nginx).toContain('location = /admin {');
+    expect(nginx).toContain('return 308 /admin/;');
   });
 
   it('emits an admin-panel setup block and README entry', async () => {
