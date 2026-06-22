@@ -120,10 +120,7 @@ func (s *Server) challengeForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.base+"/", http.StatusSeeOther)
 		return
 	}
-	s.renderMFA(w, r, "mfa_challenge", viewData{
-		Title:  "Two-factor authentication",
-		Action: s.base + "/2fa",
-	})
+	s.renderAuth(w, r, viewData{Title: "Sign in", Step: "code"})
 }
 
 func (s *Server) challengeSubmit(w http.ResponseWriter, r *http.Request) {
@@ -138,11 +135,7 @@ func (s *Server) challengeSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	ok, err := s.store.VerifyMFAChallenge(r.Context(), sess.User.ID, r.FormValue("code"))
 	if errors.Is(err, auth.ErrMFALocked) {
-		s.renderMFA(w, r, "mfa_challenge", viewData{
-			Title:  "Two-factor authentication",
-			Action: s.base + "/2fa",
-			Error:  "Too many attempts. Try again later.",
-		})
+		s.renderAuth(w, r, viewData{Title: "Sign in", Step: "code", Error: "Too many attempts. Try again later."})
 		return
 	}
 	if err != nil {
@@ -150,18 +143,40 @@ func (s *Server) challengeSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		s.renderMFA(w, r, "mfa_challenge", viewData{
-			Title:  "Two-factor authentication",
-			Action: s.base + "/2fa",
-			Error:  "Invalid authentication code.",
-		})
+		s.renderAuth(w, r, viewData{Title: "Sign in", Step: "code", Error: "Invalid authentication code."})
 		return
 	}
 	if err := s.store.MarkSessionMFAPassed(r.Context(), sessionToken(r)); err != nil {
 		http.Error(w, "could not complete sign-in", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, s.base+"/", http.StatusSeeOther)
+	s.redirectAuth(w, r, s.base+"/")
+}
+
+func (s *Server) renderAuth(w http.ResponseWriter, r *http.Request, data viewData) {
+	data.Base = s.base
+	t, ok := s.tmpl["login"]
+	if !ok {
+		http.Error(w, "template not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	name := "layout"
+	if isHTMXRequest(r) {
+		name = "auth-step"
+	}
+	if err := t.ExecuteTemplate(w, name, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) redirectAuth(w http.ResponseWriter, r *http.Request, target string) {
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", target)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func (s *Server) renderMFA(w http.ResponseWriter, r *http.Request, page string, data viewData) {

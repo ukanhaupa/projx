@@ -1,11 +1,26 @@
 {{define "content"}}
 <div class="card login">
   <h1>Sign in</h1>
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <form method="post" action="{{.Base}}/login">
-    <label>Email<input type="email" name="email" required autofocus></label>
-    <label>Password<input type="password" name="password" required></label>
-    <button type="submit">Sign in</button>
-  </form>
+  {{template "auth-step" .}}
 </div>
+{{end}}
+
+{{define "auth-step"}}
+{{if eq .Step "code"}}
+<form id="auth-step" class="auth-step" method="post" action="{{.Base}}/2fa"
+      hx-post="{{.Base}}/2fa" hx-target="#auth-step" hx-swap="outerHTML">
+  <p class="muted">Enter the 6-digit code from your authenticator app, or a recovery code.</p>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <label>Authenticator code<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9A-Za-z]*" required autofocus></label>
+  <button type="submit">Verify</button>
+</form>
+{{else}}
+<form id="auth-step" class="auth-step" method="post" action="{{.Base}}/login"
+      hx-post="{{.Base}}/login" hx-target="#auth-step" hx-swap="outerHTML">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <label>Email<input type="email" name="email" required autofocus></label>
+  <label>Password<input type="password" name="password" required></label>
+  <button type="submit">Sign in</button>
+</form>
+{{end}}
 {{end}}

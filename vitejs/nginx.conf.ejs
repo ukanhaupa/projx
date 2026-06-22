@@ -83,6 +83,10 @@ server {
         proxy_send_timeout 10s;
     }
 <% if (components.includes('admin-panel')) { %>
+    location = /admin {
+        return 308 /admin/;
+    }
+
     location ^~ /admin/ {
         proxy_pass http://$admin_panel_upstream:8055;
         proxy_http_version 1.1;

@@ -280,6 +280,9 @@ sec_express() {
 sec_go() {
   [ -d "$ROOT_DIR/go" ] || return 0
   cd "$ROOT_DIR/go" || exit 1
+  local gobin
+  gobin="$(go env GOPATH)/bin"
+  export PATH="$PATH:$gobin"
   run_step "go install" go mod download
   gofmt -w .
   local go_unformatted
@@ -290,11 +293,10 @@ sec_go() {
   fi
   run_step "go vet" go vet ./...
   run_step "go build" go build ./...
-  if command -v golangci-lint >/dev/null 2>&1; then
-    run_step "go lint" golangci-lint run ./...
-  else
-    warn "golangci-lint not installed — skipping (install: brew install golangci-lint)"
-  fi
+  command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+  run_step "go lint" golangci-lint run ./...
+  command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+  run_step "govulncheck" govulncheck ./...
   run_step "go test" go test -race -coverprofile=coverage.out ./...
   run_step "go coverage" bash scripts/check-coverage.sh
 }

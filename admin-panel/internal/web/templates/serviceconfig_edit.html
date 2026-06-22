@@ -1,0 +1,46 @@
+{{define "content"}}
+<section class="content">
+  <div class="content-head">
+    <h1>{{if .IsNew}}New service config{{else}}Edit {{.Purpose}}{{end}}</h1>
+    <a class="btn ghost" href="{{.Base}}/service-config">Back</a>
+  </div>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form method="post" action="{{.Action}}" class="row-form">
+    <label>
+      <span>Purpose</span>
+      <input name="purpose" value="{{.Purpose}}" {{if not .IsNew}}readonly{{end}} required>
+    </label>
+    <label class="sc-active">
+      <input type="hidden" name="is_active" value="false">
+      <input type="checkbox" name="is_active" value="true" {{if .IsActive}}checked{{end}}>
+      <span>Active</span>
+    </label>
+
+    <fieldset class="kv-editor">
+      <legend>Key-value pairs</legend>
+      <p class="muted">Values are parsed as JSON: <code>587</code> → number, <code>true</code> → boolean, <code>{"a":1}</code> → object. Wrap in quotes to force a string, e.g. <code>"587"</code>.</p>
+      <div class="kv-list">
+        {{range .Pairs}}
+        <div class="kv-row">
+          <input class="kv-key" name="kv_key" value="{{.Key}}" placeholder="key" autocomplete="off" spellcheck="false">
+          <input class="kv-value" name="kv_value" value="{{.Value}}" placeholder="value" autocomplete="off" spellcheck="false">
+          <button type="button" class="kv-remove btn ghost" title="Remove pair">✕</button>
+        </div>
+        {{end}}
+      </div>
+      <template class="kv-row-template">
+        <div class="kv-row">
+          <input class="kv-key" name="kv_key" value="" placeholder="key" autocomplete="off" spellcheck="false">
+          <input class="kv-value" name="kv_value" value="" placeholder="value" autocomplete="off" spellcheck="false">
+          <button type="button" class="kv-remove btn ghost" title="Remove pair">✕</button>
+        </div>
+      </template>
+      <button type="button" class="kv-add btn ghost">Add pair</button>
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</section>
+{{end}}

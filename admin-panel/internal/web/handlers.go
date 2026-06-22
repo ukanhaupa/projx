@@ -123,7 +123,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if locked, retry := loginFailures.isLocked(ip); locked {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())))
-		s.render(w, r, "login", viewData{Title: "Sign in", Error: "Too many failed attempts. Try again later."})
+		s.renderAuth(w, r, viewData{Title: "Sign in", Error: "Too many failed attempts. Try again later."})
 		return
 	}
 	email := r.FormValue("email")
@@ -131,7 +131,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	user, err := s.store.Authenticate(r.Context(), email, password)
 	if err != nil {
 		loginFailures.recordFailure(ip)
-		s.render(w, r, "login", viewData{Title: "Sign in", Error: "Invalid email or password."})
+		s.renderAuth(w, r, viewData{Title: "Sign in", Error: "Invalid email or password."})
 		return
 	}
 	loginFailures.recordSuccess(ip)
@@ -148,6 +148,19 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   s.secure,
 	})
+	enrolled, err := s.store.MFAEnrolled(r.Context(), user.ID)
+	if err != nil {
+		http.Error(w, "could not check enrollment", http.StatusInternalServerError)
+		return
+	}
+	if !enrolled {
+		s.redirectAuth(w, r, s.base+"/2fa/enroll")
+		return
+	}
+	if isHTMXRequest(r) {
+		s.renderAuth(w, r, viewData{Title: "Sign in", Step: "code"})
+		return
+	}
 	http.Redirect(w, r, s.base+"/2fa", http.StatusSeeOther)
 }
 

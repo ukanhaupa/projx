@@ -64,7 +64,7 @@ func (s *Server) parseTemplates() error {
 		"add":             func(a, b int) int { return a + b },
 		"addPageLen":      func(p *browser.Page) int { return p.Offset + len(p.Rows) },
 	}
-	pages := []string{"login", "tables", "explorer", "editor", "mfa_enroll", "mfa_challenge", "mfa_recovery"}
+	pages := []string{"login", "tables", "explorer", "editor", "mfa_enroll", "mfa_recovery", "serviceconfig_list", "serviceconfig_edit"}
 	s.tmpl = make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS,
@@ -117,6 +117,11 @@ func (s *Server) Handler() http.Handler {
 		pr.Post(s.base+"/mode", s.toggleMode)
 		pr.Post(s.base+"/schema", s.switchSchema)
 		pr.Get(s.base+"/", s.tablesPage)
+		pr.Get(s.base+"/service-config", s.serviceConfigList)
+		pr.Get(s.base+"/service-config/new", s.serviceConfigNewForm)
+		pr.Post(s.base+"/service-config/new", s.serviceConfigCreate)
+		pr.Get(s.base+"/service-config/{id}", s.serviceConfigEditForm)
+		pr.Post(s.base+"/service-config/{id}", s.serviceConfigSave)
 		pr.Get(s.base+"/tables/{table}.csv", s.exportTableCSV)
 		pr.Get(s.base+"/tables/{table}/_filter", s.addFilter)
 		pr.Get(s.base+"/tables/{table}/{id}/decrypt", s.decryptCell)
@@ -163,6 +168,13 @@ type viewData struct {
 	MFASecret     string
 	OTPAuthURL    string
 	RecoveryCodes []string
+	Step          string
+	Configs       []serviceConfigRow
+	Pairs         []kvPair
+	Purpose       string
+	IsActive      bool
+	CanEditConfig bool
+	CredMissing   bool
 }
 
 type columnView struct {

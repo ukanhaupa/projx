@@ -125,3 +125,76 @@ func TestDecryptDoesNotLeakViaError(t *testing.T) {
 		t.Fatal("error message must not contain plaintext")
 	}
 }
+
+func decryptNodeFormat(t *testing.T, key []byte, payload string) string {
+	t.Helper()
+	buf, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		t.Fatalf("b64: %v", err)
+	}
+	if len(buf) < 28 {
+		t.Fatalf("payload too short: %d", len(buf))
+	}
+	iv, tag, ct := buf[:12], buf[12:28], buf[28:]
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	gcm, err := cipher.NewGCMWithNonceSize(block, 12)
+	if err != nil {
+		t.Fatalf("gcm: %v", err)
+	}
+	plain, err := gcm.Open(nil, iv, append(append([]byte{}, ct...), tag...), nil)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	return string(plain)
+}
+
+func TestEncryptRoundTrip(t *testing.T) {
+	key := newKey(t)
+	payload, err := Encrypt("jwt-secret-99", key)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	got, err := Decrypt(payload, key)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if got != "jwt-secret-99" {
+		t.Fatalf("round-trip mismatch: got %q", got)
+	}
+}
+
+func TestEncryptIsBackendReadable(t *testing.T) {
+	key := newKey(t)
+	const plain = `{"host":"smtp.example.com","port":587}`
+	payload, err := Encrypt(plain, key)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if got := decryptNodeFormat(t, key, payload); got != plain {
+		t.Fatalf("backend reader mismatch: got %q", got)
+	}
+}
+
+func TestEncryptUsesFreshIV(t *testing.T) {
+	key := newKey(t)
+	a, err := Encrypt("same", key)
+	if err != nil {
+		t.Fatalf("encrypt a: %v", err)
+	}
+	b, err := Encrypt("same", key)
+	if err != nil {
+		t.Fatalf("encrypt b: %v", err)
+	}
+	if a == b {
+		t.Fatal("Encrypt must use a fresh IV per call; outputs were identical")
+	}
+}
+
+func TestEncryptRejectsBadKeyLength(t *testing.T) {
+	if _, err := Encrypt("x", []byte("not-32-bytes")); err == nil {
+		t.Fatal("Encrypt must reject a key that is not 32 bytes")
+	}
+}
