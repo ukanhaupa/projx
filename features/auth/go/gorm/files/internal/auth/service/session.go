@@ -14,6 +14,7 @@ import (
 const (
 	LoginMaxAttempts    = 5
 	LoginLockoutMinutes = 15
+	MaxRotationAttempts = 3
 )
 
 var (
@@ -85,6 +86,36 @@ type RotateArgs struct {
 	UserAgent    string
 }
 
+// resolveRotationGraceChild returns the unused replacement of a cleanly-rotated
+// token (a lost-rotation retry), or nil for a genuine replay.
+func (s *Sessions) resolveRotationGraceChild(ctx context.Context, sessionID string, token *authmodels.RefreshToken) *authmodels.RefreshToken {
+	if token.RotatedTo == nil || token.ReplayDetectedAt != nil {
+		return nil
+	}
+	var child authmodels.RefreshToken
+	if err := s.db.WithContext(ctx).Where("id = ?", *token.RotatedTo).First(&child).Error; err != nil {
+		return nil
+	}
+	if child.SessionID != sessionID ||
+		child.RotatedTo != nil ||
+		child.RevokedAt != nil ||
+		child.ReplayDetectedAt != nil ||
+		child.ExpiresAt.Before(time.Now().UTC()) {
+		return nil
+	}
+	return &child
+}
+
+func (s *Sessions) revokeForReplay(ctx context.Context, sessionID, tokenID string) {
+	now := time.Now().UTC()
+	s.db.WithContext(ctx).Model(&authmodels.RefreshToken{}).
+		Where("session_id = ? AND revoked_at IS NULL", sessionID).
+		Update("revoked_at", now)
+	s.db.WithContext(ctx).Model(&authmodels.RefreshToken{}).
+		Where("id = ?", tokenID).
+		Update("replay_detected_at", now)
+}
+
 func (s *Sessions) Rotate(ctx context.Context, args RotateArgs) (*IssuedSession, error) {
 	claims, err := s.signer.VerifyRefreshToken(ctx, args.RefreshToken)
 	if err != nil {
@@ -108,18 +139,17 @@ func (s *Sessions) Rotate(ctx context.Context, args RotateArgs) (*IssuedSession,
 		return nil, ErrRefreshInvalid
 	}
 
+	active := &row
 	if row.RotatedTo != nil || row.RevokedAt != nil {
-		now := time.Now().UTC()
-		s.db.WithContext(ctx).Model(&authmodels.RefreshToken{}).
-			Where("session_id = ? AND revoked_at IS NULL", row.SessionID).
-			Update("revoked_at", now)
-		s.db.WithContext(ctx).Model(&authmodels.RefreshToken{}).
-			Where("id = ?", row.ID).
-			Update("replay_detected_at", now)
-		return nil, ErrReplayDetected
+		graceChild := s.resolveRotationGraceChild(ctx, row.SessionID, &row)
+		if graceChild == nil {
+			s.revokeForReplay(ctx, row.SessionID, row.ID)
+			return nil, ErrReplayDetected
+		}
+		active = graceChild
 	}
 
-	if row.ExpiresAt.Before(time.Now().UTC()) {
+	if active.ExpiresAt.Before(time.Now().UTC()) {
 		return nil, ErrRefreshInvalid
 	}
 
@@ -128,45 +158,73 @@ func (s *Sessions) Rotate(ctx context.Context, args RotateArgs) (*IssuedSession,
 		return nil, ErrRefreshInvalid
 	}
 
-	pair, err := s.signer.IssueTokens(ctx, TokenPayload{
-		Sub:         user.ID,
-		SID:         row.SessionID,
-		Email:       user.Email,
-		Name:        user.Name,
-		Role:        user.Role,
-		Permissions: PermissionsForRole(user.Role),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	newRow := &authmodels.RefreshToken{
-		UserID:    user.ID,
-		SessionID: row.SessionID,
-		TokenHash: HashToken(pair.RefreshToken),
-		IPAddress: args.IPAddress,
-		UserAgent: args.UserAgent,
-		ExpiresAt: time.Now().UTC().Add(RefreshTTL),
-	}
-
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(newRow).Error; err != nil {
-			return err
+	for attempt := 1; ; attempt++ {
+		pair, err := s.signer.IssueTokens(ctx, TokenPayload{
+			Sub:         user.ID,
+			SID:         row.SessionID,
+			Email:       user.Email,
+			Name:        user.Name,
+			Role:        user.Role,
+			Permissions: PermissionsForRole(user.Role),
+		})
+		if err != nil {
+			return nil, err
 		}
-		now := time.Now().UTC()
-		return tx.Model(&authmodels.RefreshToken{}).
-			Where("id = ?", row.ID).
-			Updates(map[string]any{"rotated_to": newRow.ID, "revoked_at": now}).Error
-	})
-	if err != nil {
-		return nil, err
-	}
 
-	return &IssuedSession{
-		SessionID:    row.SessionID,
-		AccessToken:  pair.AccessToken,
-		RefreshToken: pair.RefreshToken,
-	}, nil
+		claimedID := active.ID
+		newRow := &authmodels.RefreshToken{
+			UserID:    user.ID,
+			SessionID: row.SessionID,
+			TokenHash: HashToken(pair.RefreshToken),
+			IPAddress: args.IPAddress,
+			UserAgent: args.UserAgent,
+			ExpiresAt: time.Now().UTC().Add(RefreshTTL),
+		}
+
+		conflicted := false
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			now := time.Now().UTC()
+			claim := tx.Model(&authmodels.RefreshToken{}).
+				Where("id = ? AND rotated_to IS NULL AND revoked_at IS NULL", claimedID).
+				Update("revoked_at", now)
+			if claim.Error != nil {
+				return claim.Error
+			}
+			if claim.RowsAffected == 0 {
+				conflicted = true
+				return nil
+			}
+			if err := tx.Create(newRow).Error; err != nil {
+				return err
+			}
+			return tx.Model(&authmodels.RefreshToken{}).
+				Where("id = ?", claimedID).
+				Update("rotated_to", newRow.ID).Error
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if !conflicted {
+			return &IssuedSession{
+				SessionID:    row.SessionID,
+				AccessToken:  pair.AccessToken,
+				RefreshToken: pair.RefreshToken,
+			}, nil
+		}
+
+		var current authmodels.RefreshToken
+		if err := s.db.WithContext(ctx).Where("id = ?", claimedID).First(&current).Error; err != nil {
+			s.revokeForReplay(ctx, row.SessionID, claimedID)
+			return nil, ErrReplayDetected
+		}
+		graceChild := s.resolveRotationGraceChild(ctx, row.SessionID, &current)
+		if graceChild == nil || attempt >= MaxRotationAttempts {
+			s.revokeForReplay(ctx, row.SessionID, claimedID)
+			return nil, ErrReplayDetected
+		}
+		active = graceChild
+	}
 }
 
 func (s *Sessions) RevokeSession(ctx context.Context, userID, sessionID string) error {

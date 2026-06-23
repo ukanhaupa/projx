@@ -137,6 +137,19 @@ func (q *sqlQuerier) GetSessionByID(ctx context.Context, id string) (*Session, e
 	return scanSession(row)
 }
 
+func (q *sqlQuerier) GetChildSession(ctx context.Context, parentSessionID string) (*Session, error) {
+	row := q.db.QueryRowContext(ctx, `SELECT `+sessionCols+` FROM auth_sessions WHERE parent_session_id = $1`, parentSessionID)
+	return scanSession(row)
+}
+
+func (q *sqlQuerier) ClaimSessionForRotation(ctx context.Context, id string) (int64, error) {
+	res, err := q.db.ExecContext(ctx, `UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (q *sqlQuerier) RevokeSession(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, `UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
 	return err

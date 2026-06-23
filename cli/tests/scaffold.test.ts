@@ -979,7 +979,7 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     }
   });
 
-  it('pre-commit hook uses correct exec command', async () => {
+  it('pre-commit hook invokes local node_modules binaries (pm-agnostic)', async () => {
     dest = join(tmpdir(), `projx-pm-${pm}-${Date.now()}`);
     await scaffold(
       {
@@ -994,9 +994,9 @@ describe.each(PMS)('scaffold with %s', (pm) => {
     );
 
     const hook = await readFile(join(dest, '.githooks/pre-commit'), 'utf-8');
-    expect(hook).toContain(`${cmd.exec} prettier`);
-    expect(hook).toContain(`${cmd.exec} eslint`);
-    expect(hook).toContain(`${cmd.exec} tsc`);
+    expect(hook).toContain('./node_modules/.bin/prettier');
+    expect(hook).toContain('./node_modules/.bin/eslint');
+    expect(hook).toContain('./node_modules/.bin/tsc');
   });
 
   it('pre-commit hook does not run pip-audit (moved to CI)', async () => {

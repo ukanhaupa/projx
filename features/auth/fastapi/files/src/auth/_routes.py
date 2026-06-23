@@ -65,6 +65,7 @@ RESET_TOKEN_TTL_SECONDS = 30 * 60
 VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+MAX_ROTATION_ATTEMPTS = 3
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -543,83 +544,121 @@ async def refresh_session(
     ):
         return _err(request, 401, "Unauthorized")
 
-    async def handle_replay() -> Any:
+    async def handle_replay(offending: RefreshToken) -> Any:
         now = _now()
         await db_session.execute(
             update(RefreshToken)
             .where(
                 and_(
-                    RefreshToken.session_id == token_row.session_id,
+                    RefreshToken.session_id == offending.session_id,
                     RefreshToken.revoked_at.is_(None),
                 )
             )
             .values(revoked_at=now)
         )
         await db_session.execute(
-            update(RefreshToken).where(RefreshToken.id == token_row.id).values(replay_detected_at=now)
+            update(RefreshToken).where(RefreshToken.id == offending.id).values(replay_detected_at=now)
         )
         await db_session.commit()
         logger.warning(
-            f"refresh_token_replay_detected | session_id={token_row.session_id} "
-            f"| user_id={token_row.user_id} | token_id={token_row.id}"
+            f"refresh_token_replay_detected | session_id={offending.session_id} "
+            f"| user_id={offending.user_id} | token_id={offending.id}"
         )
         return _err(request, 401, "token_replay_detected")
 
-    if token_row.rotated_to is not None or token_row.revoked_at is not None:
-        return await handle_replay()
+    # A cleanly-rotated token whose replacement is still the unused head is a
+    # lost-rotation retry (client never persisted the replacement), not a replay.
+    async def resolve_rotation_grace_child(stale: RefreshToken) -> RefreshToken | None:
+        if stale.rotated_to is None or stale.replay_detected_at is not None:
+            return None
+        child = (
+            await db_session.execute(select(RefreshToken).where(RefreshToken.id == stale.rotated_to))
+        ).scalar_one_or_none()
+        if (
+            child is None
+            or str(child.session_id) != str(stale.session_id)
+            or child.rotated_to is not None
+            or child.revoked_at is not None
+            or child.replay_detected_at is not None
+            or child.expires_at.astimezone(UTC) < _now()
+        ):
+            return None
+        return child
 
-    if token_row.expires_at.astimezone(UTC) < _now():
+    active_token = token_row
+    if token_row.rotated_to is not None or token_row.revoked_at is not None:
+        grace_child = await resolve_rotation_grace_child(token_row)
+        if grace_child is None:
+            return await handle_replay(token_row)
+        active_token = grace_child
+        logger.info(
+            f"refresh_token_rotation_grace_applied | session_id={token_row.session_id} "
+            f"| user_id={token_row.user_id} | stale_token_id={token_row.id} "
+            f"| grace_token_id={grace_child.id}"
+        )
+
+    if active_token.expires_at.astimezone(UTC) < _now():
         return _err(request, 401, "Unauthorized")
 
     user = await _get_user_by_id(db_session, str(decoded["sub"]))
     if user is None:
         return _err(request, 401, "Unauthorized")
 
-    payload = {
-        "sub": str(decoded["sub"]),
-        "sid": str(decoded["sid"]),
-        "role": user.role,
-        "email": user.email,
-        "name": user.name,
-        "permissions": permissions_for_role(str(user.role)),
-    }
-    tokens = sign_tokens(payload)
-    new_expires_at = _now() + timedelta(seconds=REFRESH_TTL_SECONDS)
+    for attempt in range(1, MAX_ROTATION_ATTEMPTS + 1):
+        payload = {
+            "sub": str(decoded["sub"]),
+            "sid": str(decoded["sid"]),
+            "role": user.role,
+            "email": user.email,
+            "name": user.name,
+            "permissions": permissions_for_role(str(user.role)),
+        }
+        tokens = sign_tokens(payload)
+        new_expires_at = _now() + timedelta(seconds=REFRESH_TTL_SECONDS)
 
-    claimed = await db_session.execute(
-        update(RefreshToken)
-        .where(
-            and_(
-                RefreshToken.id == token_row.id,
-                RefreshToken.rotated_to.is_(None),
-                RefreshToken.revoked_at.is_(None),
+        claimed = await db_session.execute(
+            update(RefreshToken)
+            .where(
+                and_(
+                    RefreshToken.id == active_token.id,
+                    RefreshToken.rotated_to.is_(None),
+                    RefreshToken.revoked_at.is_(None),
+                )
             )
+            .values(revoked_at=_now())
         )
-        .values(revoked_at=_now())
-    )
-    if claimed.rowcount == 0:
-        return await handle_replay()
+        if claimed.rowcount == 0:  # type: ignore[attr-defined]
+            current = (
+                await db_session.execute(select(RefreshToken).where(RefreshToken.id == active_token.id))
+            ).scalar_one_or_none()
+            grace_child = await resolve_rotation_grace_child(current) if current is not None else None
+            if grace_child is None or attempt >= MAX_ROTATION_ATTEMPTS:
+                return await handle_replay(active_token)
+            active_token = grace_child
+            continue
 
-    new_token = RefreshToken(
-        user_id=token_row.user_id,
-        session_id=token_row.session_id,
-        token_hash=hash_refresh_token(tokens["refresh_token"]),
-        expires_at=new_expires_at,
-        ip_address=_client_ip(request),
-        user_agent=_user_agent(request),
-    )
-    db_session.add(new_token)
-    await db_session.flush()
+        new_token = RefreshToken(
+            user_id=active_token.user_id,
+            session_id=active_token.session_id,
+            token_hash=hash_refresh_token(tokens["refresh_token"]),
+            expires_at=new_expires_at,
+            ip_address=_client_ip(request),
+            user_agent=_user_agent(request),
+        )
+        db_session.add(new_token)
+        await db_session.flush()
 
-    await db_session.execute(
-        update(RefreshToken).where(RefreshToken.id == token_row.id).values(rotated_to=new_token.id)
-    )
-    await db_session.commit()
-    return {
-        "token": tokens["token"],
-        "access_token": tokens["access_token"],
-        "refresh_token": tokens["refresh_token"],
-    }
+        await db_session.execute(
+            update(RefreshToken).where(RefreshToken.id == active_token.id).values(rotated_to=new_token.id)
+        )
+        await db_session.commit()
+        return {
+            "token": tokens["token"],
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+        }
+
+    return await handle_replay(active_token)
 
 
 @router.post("/logout")

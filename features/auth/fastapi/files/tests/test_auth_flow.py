@@ -1,8 +1,7 @@
+import asyncio
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
-
-import asyncio
 
 import jwt
 import pyotp
@@ -12,8 +11,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.app import app
-from src.configs import get_db_session
-
 from src.auth import _mailer
 from src.auth._mfa import (
     encrypt_recovery_codes,
@@ -24,6 +21,7 @@ from src.auth._mfa import (
 from src.auth._models import RefreshToken, User, VerificationToken
 from src.auth._password import hash_password, hash_token
 from src.auth._verification_jobs import cleanup_auth_artifacts
+from src.configs import get_db_session
 
 pytestmark = pytest.mark.asyncio
 
@@ -322,22 +320,56 @@ class TestRefreshAndLogout:
         body = response.json()
         assert body["refresh_token"] != refresh_token
 
-    async def test_refresh_replay_detection_revokes_session(self, client: AsyncClient, test_db: AsyncSession):
+    async def test_refresh_lost_rotation_grace_recovers(self, client: AsyncClient, test_db: AsyncSession):
+        await _seed_user(test_db, email="grace@example.com", password="goodpass-1")  # pragma: allowlist secret
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "grace@example.com", "password": "goodpass-1"},
+        )
+        original = login.json()["refresh_token"]
+
+        first = await client.post("/api/v1/auth/refresh", json={"refresh_token": original})
+        assert first.status_code == 200
+        replacement = first.json()["refresh_token"]
+
+        retry = await client.post("/api/v1/auth/refresh", json={"refresh_token": original})
+        assert retry.status_code == 200, retry.text
+        regranted = retry.json()["refresh_token"]
+        assert regranted not in (original, replacement)
+
+        follow_on = await client.post("/api/v1/auth/refresh", json={"refresh_token": regranted})
+        assert follow_on.status_code == 200
+
+        result = await test_db.execute(select(RefreshToken).where(RefreshToken.replay_detected_at.is_not(None)))
+        assert result.scalars().first() is None
+
+    async def test_refresh_genuine_replay_revokes_session(self, client: AsyncClient, test_db: AsyncSession):
         await _seed_user(test_db, email="replay@example.com", password="goodpass-1")  # pragma: allowlist secret
         login = await client.post(
             "/api/v1/auth/login",
             json={"email": "replay@example.com", "password": "goodpass-1"},
         )
-        refresh_token = login.json()["refresh_token"]
+        original = login.json()["refresh_token"]
 
-        first = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+        first = await client.post("/api/v1/auth/refresh", json={"refresh_token": original})
         assert first.status_code == 200
+        replacement = first.json()["refresh_token"]
 
-        replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+        second = await client.post("/api/v1/auth/refresh", json={"refresh_token": replacement})
+        assert second.status_code == 200
+        head = second.json()["refresh_token"]
+
+        replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": original})
         assert replay.status_code == 401
         assert replay.json()["detail"] == "token_replay_detected"
 
-    async def test_refresh_concurrent_rotation_single_winner(self, test_db: AsyncSession, test_engine: AsyncEngine):
+        revoked_head = await client.post("/api/v1/auth/refresh", json={"refresh_token": head})
+        assert revoked_head.status_code == 401
+
+        result = await test_db.execute(select(RefreshToken).where(RefreshToken.revoked_at.is_(None)))
+        assert result.scalars().first() is None
+
+    async def test_refresh_concurrent_same_token_keeps_session(self, test_db: AsyncSession, test_engine: AsyncEngine):
         await _seed_user(test_db, email="race@example.com", password="goodpass-1")  # pragma: allowlist secret
 
         session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -357,15 +389,22 @@ class TestRefreshAndLogout:
                 refresh_token = login.json()["refresh_token"]
 
                 attempts = await asyncio.gather(
-                    *(race_client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}) for _ in range(8))
+                    *(race_client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}) for _ in range(2))
                 )
 
             winners = [r for r in attempts if r.status_code == 200]
-            losers = [r for r in attempts if r.status_code == 401]
-            assert len(winners) == 1
-            assert len(losers) == len(attempts) - 1
-            for loser in losers:
-                assert loser.json()["detail"] == "token_replay_detected"
+            assert len(winners) == len(attempts)
+
+            rows = (
+                (await test_db.execute(select(RefreshToken).where(RefreshToken.user_id.is_not(None)))).scalars().all()
+            )
+            heads = [
+                row
+                for row in rows
+                if row.rotated_to is None and row.revoked_at is None and row.replay_detected_at is None
+            ]
+            assert len(heads) == 1
+            assert all(row.replay_detected_at is None for row in rows)
         finally:
             app.dependency_overrides.clear()
 

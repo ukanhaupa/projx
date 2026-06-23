@@ -40,12 +40,14 @@ import {
 } from './session.js';
 
 type User = typeof users.$inferSelect;
+type RefreshTokenRow = typeof refreshTokens.$inferSelect;
 
 const RESET_TOKEN_TTL_SECONDS = 30 * 60;
 const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MFA_CHALLENGE_TTL = '5m' as const;
+const MAX_ROTATION_ATTEMPTS = 3;
 const PUBLIC_RATE_LIMIT_WINDOW_MS = 60_000;
 const RESEND_VERIFICATION_WINDOW_MS = 60 * 60 * 1000;
 const EXPOSE_RESET_TOKEN =
@@ -175,6 +177,34 @@ async function resetMfaCounters(db: DbClient, userId: string): Promise<void> {
     .update(users)
     .set({ mfa_failed_count: 0, mfa_locked_until: null })
     .where(eq(users.id, userId));
+}
+
+// A cleanly-rotated token whose replacement is still the unused head is a
+// lost-rotation retry (client never persisted the replacement), not a replay.
+async function resolveRotationGraceChild(
+  db: DbClient,
+  sessionId: string,
+  token: Pick<RefreshTokenRow, 'rotated_to' | 'replay_detected_at'>,
+): Promise<RefreshTokenRow | null> {
+  if (token.rotated_to == null || token.replay_detected_at != null) return null;
+  const child = (
+    await db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.id, token.rotated_to))
+      .limit(1)
+  )[0];
+  if (
+    !child ||
+    child.session_id !== sessionId ||
+    child.rotated_to != null ||
+    child.revoked_at != null ||
+    child.replay_detected_at != null ||
+    child.expires_at.getTime() < Date.now()
+  ) {
+    return null;
+  }
+  return child;
 }
 
 function publicRateLimit() {
@@ -731,7 +761,7 @@ export function authRouter(db: DbClient): Router {
           return;
         }
 
-        const handleReplay = async () => {
+        const handleReplay = async (replayTokenId: string) => {
           const now = new Date();
           await db.transaction(async (tx) => {
             await tx
@@ -746,22 +776,31 @@ export function authRouter(db: DbClient): Router {
             await tx
               .update(refreshTokens)
               .set({ replay_detected_at: now })
-              .where(eq(refreshTokens.id, tokenRow.id));
+              .where(eq(refreshTokens.id, replayTokenId));
           });
           console.warn('[auth] refresh_token_replay_detected', {
             session_id: tokenRow.session_id,
             user_id: tokenRow.user_id,
-            token_id: tokenRow.id,
+            token_id: replayTokenId,
           });
           err(res, 401, 'token_replay_detected');
         };
 
+        let activeToken: RefreshTokenRow = tokenRow;
         if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
-          await handleReplay();
-          return;
+          const graceChild = await resolveRotationGraceChild(
+            db,
+            tokenRow.session_id,
+            tokenRow,
+          );
+          if (!graceChild) {
+            await handleReplay(tokenRow.id);
+            return;
+          }
+          activeToken = graceChild;
         }
 
-        if (tokenRow.expires_at.getTime() < Date.now()) {
+        if (activeToken.expires_at.getTime() < Date.now()) {
           err(res, 401, 'Unauthorized');
           return;
         }
@@ -778,65 +817,84 @@ export function authRouter(db: DbClient): Router {
           return;
         }
 
-        const payload = {
-          sub: decoded.sub,
-          sid: decoded.sid,
-          role: freshUser.role,
-          email: freshUser.email,
-          name: freshUser.name,
-          permissions: [...permissionsForRole(freshUser.role)],
-        };
-        const tokens = signTokens(payload);
-        const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+        for (let attempt = 1; ; attempt++) {
+          const payload = {
+            sub: decoded.sub,
+            sid: decoded.sid,
+            role: freshUser.role,
+            email: freshUser.email,
+            name: freshUser.name,
+            permissions: [...permissionsForRole(freshUser.role)],
+          };
+          const tokens = signTokens(payload);
+          const newExpiresAt = new Date(
+            Date.now() + REFRESH_TTL_SECONDS * 1000,
+          );
+          const claimedTokenId = activeToken.id;
 
-        const newToken = await db.transaction(async (tx) => {
-          const claimed = await tx
-            .update(refreshTokens)
-            .set({ revoked_at: new Date() })
-            .where(
-              and(
-                eq(refreshTokens.id, tokenRow.id),
-                isNull(refreshTokens.rotated_to),
-                isNull(refreshTokens.revoked_at),
-              ),
-            )
-            .returning({ id: refreshTokens.id });
-          if (claimed.length === 0) return null;
+          const newToken = await db.transaction(async (tx) => {
+            const claimed = await tx
+              .update(refreshTokens)
+              .set({ revoked_at: new Date() })
+              .where(
+                and(
+                  eq(refreshTokens.id, claimedTokenId),
+                  isNull(refreshTokens.rotated_to),
+                  isNull(refreshTokens.revoked_at),
+                ),
+              )
+              .returning({ id: refreshTokens.id });
+            if (claimed.length === 0) return null;
 
-          const created = (
+            const created = (
+              await tx
+                .insert(refreshTokens)
+                .values({
+                  user_id: tokenRow.user_id,
+                  session_id: tokenRow.session_id,
+                  token_hash: hashRefreshToken(tokens.refresh_token),
+                  expires_at: newExpiresAt,
+                  ip_address: req.ip ?? null,
+                  user_agent: req.get('user-agent') ?? null,
+                })
+                .returning()
+            )[0];
+
             await tx
-              .insert(refreshTokens)
-              .values({
-                user_id: tokenRow.user_id,
-                session_id: tokenRow.session_id,
-                token_hash: hashRefreshToken(tokens.refresh_token),
-                expires_at: newExpiresAt,
-                ip_address: req.ip ?? null,
-                user_agent: req.get('user-agent') ?? null,
-              })
-              .returning()
+              .update(refreshTokens)
+              .set({ rotated_to: created.id })
+              .where(eq(refreshTokens.id, claimedTokenId));
+
+            return created;
+          });
+
+          if (newToken) {
+            res.json({
+              token: tokens.token,
+              access_token: tokens.token,
+              refresh_token: tokens.refresh_token,
+              access_jti: tokens.access_jti,
+              refresh_jti: tokens.refresh_jti,
+            });
+            return;
+          }
+
+          const current = (
+            await db
+              .select()
+              .from(refreshTokens)
+              .where(eq(refreshTokens.id, claimedTokenId))
+              .limit(1)
           )[0];
-
-          await tx
-            .update(refreshTokens)
-            .set({ rotated_to: created.id })
-            .where(eq(refreshTokens.id, tokenRow.id));
-
-          return created;
-        });
-
-        if (!newToken) {
-          await handleReplay();
-          return;
+          const graceChild = current
+            ? await resolveRotationGraceChild(db, tokenRow.session_id, current)
+            : null;
+          if (!graceChild || attempt >= MAX_ROTATION_ATTEMPTS) {
+            await handleReplay(claimedTokenId);
+            return;
+          }
+          activeToken = graceChild;
         }
-
-        res.json({
-          token: tokens.token,
-          access_token: tokens.token,
-          refresh_token: tokens.refresh_token,
-          access_jti: tokens.access_jti,
-          refresh_jti: tokens.refresh_jti,
-        });
       } catch (e) {
         next(e);
       }

@@ -16,12 +16,19 @@ import (
 )
 
 const (
-	LoginMaxAttempts            = 5
-	LoginLockoutMs              = 15 * 60 * 1000
-	ResetTokenTTL               = 30 * time.Minute
-	EmailVerifyTokenTTL         = 24 * time.Hour
-	RevokedRetentionDays        = 30
+	LoginMaxAttempts     = 5
+	LoginLockoutMs       = 15 * 60 * 1000
+	ResetTokenTTL        = 30 * time.Minute
+	EmailVerifyTokenTTL  = 24 * time.Hour
+	RevokedRetentionDays = 30
+	MaxRotationAttempts  = 3
 )
+
+// ErrRotationConflict signals that a rotation claim lost a race — the presented
+// session row was already claimed by a concurrent rotation. The caller decides
+// whether the still-unused replacement is a lost-rotation retry (recover) or a
+// genuine replay (revoke).
+var ErrRotationConflict = errors.New("rotation conflict")
 
 type Service struct {
 	client *ent.Client
@@ -186,6 +193,39 @@ func (s *Service) FindSessionByTokenHash(ctx context.Context, tokenHash string) 
 	return sess, nil
 }
 
+func (s *Service) FindSessionByID(ctx context.Context, id string) (*ent.Session, error) {
+	sess, err := s.client.Session.Query().
+		Where(session.IDEQ(id)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, apperr.Unauthorized("")
+		}
+		return nil, err
+	}
+	return sess, nil
+}
+
+// ResolveRotationGraceChild returns the unused replacement of a cleanly-rotated
+// token (a lost-rotation retry), or nil for a genuine replay.
+func (s *Service) ResolveRotationGraceChild(ctx context.Context, sess *ent.Session) *ent.Session {
+	if sess.RotatedTo == nil || sess.ReplayDetectedAt != nil {
+		return nil
+	}
+	child, err := s.FindSessionByID(ctx, *sess.RotatedTo)
+	if err != nil {
+		return nil
+	}
+	if child.SessionID != sess.SessionID ||
+		child.RotatedTo != nil ||
+		child.RevokedAt != nil ||
+		child.ReplayDetectedAt != nil ||
+		child.ExpiresAt.Before(time.Now()) {
+		return nil
+	}
+	return child
+}
+
 func (s *Service) RotateSession(ctx context.Context, prev *ent.Session, u *ent.User, ip, userAgent string) (*AuthSessionResponse, error) {
 	payload := TokenPayload{
 		Sub:         u.ID,
@@ -202,6 +242,23 @@ func (s *Service) RotateSession(ctx context.Context, prev *ent.Session, u *ent.U
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, err
+	}
+	now := time.Now()
+	claimed, err := tx.Session.Update().
+		Where(
+			session.IDEQ(prev.ID),
+			session.RotatedToIsNil(),
+			session.RevokedAtIsNil(),
+		).
+		SetRevokedAt(now).
+		Save(ctx)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, apperr.FromDB(err, "session")
+	}
+	if claimed == 0 {
+		_ = tx.Rollback()
+		return nil, ErrRotationConflict
 	}
 	newID := uuid.V4()
 	expiresAt := time.Now().Add(RefreshTTL)
@@ -220,7 +277,6 @@ func (s *Service) RotateSession(ctx context.Context, prev *ent.Session, u *ent.U
 	}
 	if _, err := tx.Session.UpdateOneID(prev.ID).
 		SetRotatedTo(newID).
-		SetRevokedAt(time.Now()).
 		Save(ctx); err != nil {
 		_ = tx.Rollback()
 		return nil, apperr.FromDB(err, "session")

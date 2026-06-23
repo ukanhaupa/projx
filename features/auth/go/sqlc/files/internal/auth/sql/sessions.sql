@@ -13,6 +13,16 @@ SELECT id, user_id, refresh_token_hash, parent_session_id, ip_address, user_agen
 FROM auth_sessions
 WHERE id = $1;
 
+-- name: GetChildSession :one
+SELECT id, user_id, refresh_token_hash, parent_session_id, ip_address, user_agent, revoked_at, expires_at, created_at
+FROM auth_sessions
+WHERE parent_session_id = $1;
+
+-- name: ClaimSessionForRotation :execrows
+UPDATE auth_sessions
+SET revoked_at = NOW()
+WHERE id = $1 AND revoked_at IS NULL;
+
 -- name: RevokeSession :exec
 UPDATE auth_sessions
 SET revoked_at = NOW()

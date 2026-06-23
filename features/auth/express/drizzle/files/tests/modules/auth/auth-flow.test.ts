@@ -37,6 +37,7 @@ describe('auth signup -> login -> me flow (express+drizzle)', () => {
   let app: express.Express;
   const email = `test-${Date.now()}@example.com`;
   const raceEmail = `race-${Date.now()}@example.com`;
+  const graceEmail = `grace-${Date.now()}@example.com`;
   const password = 'P@ssw0rd!2025'; // pragma: allowlist secret
 
   beforeAll(async () => {
@@ -53,6 +54,7 @@ describe('auth signup -> login -> me flow (express+drizzle)', () => {
   afterAll(async () => {
     await db.delete(users).where(eq(users.email, email));
     await db.delete(users).where(eq(users.email, raceEmail));
+    await db.delete(users).where(eq(users.email, graceEmail));
   });
 
   it('POST /auth/signup creates a user', async () => {
@@ -111,32 +113,67 @@ describe('auth signup -> login -> me flow (express+drizzle)', () => {
     expect(res.body.refresh_token).not.toBe(oldRefresh);
   });
 
-  it('POST /auth/refresh detects replay of revoked token', async () => {
+  it('POST /auth/refresh detects genuine replay once the chain advanced', async () => {
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ email, password });
-    const refresh_token = loginRes.body.refresh_token;
+    const t1 = loginRes.body.refresh_token as string;
 
     const first = await request(app)
       .post('/auth/refresh')
-      .send({ refresh_token });
+      .send({ refresh_token: t1 });
     expect(first.status).toBe(200);
+    const t2 = first.body.refresh_token as string;
+
+    const second = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t2 });
+    expect(second.status).toBe(200);
 
     const replay = await request(app)
       .post('/auth/refresh')
-      .send({ refresh_token });
+      .send({ refresh_token: t1 });
     expect(replay.status).toBe(401);
     expect(replay.body.detail).toBe('token_replay_detected');
   });
 
-  it('POST /auth/refresh lets exactly one concurrent rotation win', async () => {
+  it('POST /auth/refresh grants rotation grace for a lost-rotation retry', async () => {
+    const signupRes = await request(app)
+      .post('/auth/signup')
+      .send({ email: graceEmail, name: 'Grace User', password });
+    const t1 = signupRes.body.refresh_token as string;
+
+    const first = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(first.status).toBe(200);
+
+    const grace = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(grace.status).toBe(200);
+    expect(grace.body.refresh_token).toBeTruthy();
+
+    const next = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: grace.body.refresh_token });
+    expect(next.status).toBe(200);
+
+    const replayAgain = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(replayAgain.status).toBe(401);
+  });
+
+  it('POST /auth/refresh recovers concurrent rotations of one token', async () => {
     const signupRes = await request(app)
       .post('/auth/signup')
       .send({ email: raceEmail, name: 'Race User', password });
     const refreshToken = signupRes.body.refresh_token as string;
+    const userId = signupRes.body.user.id as string;
 
     const attempts = await Promise.all(
-      Array.from({ length: 8 }, () =>
+      Array.from({ length: 2 }, () =>
         request(app)
           .post('/auth/refresh')
           .send({ refresh_token: refreshToken }),
@@ -144,11 +181,19 @@ describe('auth signup -> login -> me flow (express+drizzle)', () => {
     );
 
     const winners = attempts.filter((r) => r.status === 200);
-    const losers = attempts.filter((r) => r.status === 401);
-    expect(winners).toHaveLength(1);
-    expect(losers).toHaveLength(attempts.length - 1);
-    for (const loser of losers) {
-      expect(loser.body.detail).toBe('token_replay_detected');
-    }
+    expect(winners.length).toBeGreaterThanOrEqual(1);
+
+    const heads = (
+      await db
+        .select()
+        .from(refreshTokens)
+        .where(eq(refreshTokens.user_id, userId))
+    ).filter(
+      (t) =>
+        t.rotated_to === null &&
+        t.revoked_at === null &&
+        t.replay_detected_at === null,
+    );
+    expect(heads).toHaveLength(1);
   });
 });

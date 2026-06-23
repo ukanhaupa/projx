@@ -66,7 +66,7 @@ it('login fails on bad credentials and locks after 5 attempts', function (): voi
     $r->assertStatus(429);
 });
 
-it('login → refresh → refresh-replay revokes the chain', function (): void {
+it('login → refresh → replaying a stale token after the chain advances revokes the chain', function (): void {
     /** @var Tests\TestCase $this */
     $signup = $this->postJson('/api/v1/auth/signup', [
         'email' => 'carol@example.test',
@@ -86,12 +86,86 @@ it('login → refresh → refresh-replay revokes the chain', function (): void {
     $refresh2->assertOk();
 
     $replay = $this->postJson('/api/v1/auth/refresh', [
-        'refresh_token' => $tokens1['refresh_token'],
+        'refresh_token' => $signup['refresh_token'],
     ]);
     $replay->assertStatus(401);
     expect($replay->json('detail'))->toBe('token_replay_detected');
 
     $user = User::query()->where('email', 'carol@example.test')->firstOrFail();
+    $active = Session::query()->where('user_id', $user->id)->whereNull('revoked_at')->count();
+    expect($active)->toBe(0);
+});
+
+it('rotation-grace: replaying a cleanly-rotated token whose replacement is still the unused head recovers the session', function (): void {
+    /** @var Tests\TestCase $this */
+    $signup = $this->postJson('/api/v1/auth/signup', [
+        'email' => 'grace@example.test',
+        'name' => 'Grace',
+        'password' => 'correct horse battery',
+    ])->json();
+
+    $refresh1 = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $signup['refresh_token'],
+    ]);
+    $refresh1->assertOk();
+    $tokens1 = $refresh1->json();
+
+    $user = User::query()->where('email', 'grace@example.test')->firstOrFail();
+    $activeBefore = Session::query()->where('user_id', $user->id)->whereNull('revoked_at')->count();
+    expect($activeBefore)->toBe(1);
+
+    $replay = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $signup['refresh_token'],
+    ]);
+    $replay->assertOk();
+    $tokens2 = $replay->json();
+    expect($tokens2)->toHaveKeys(['token', 'access_token', 'refresh_token']);
+    expect($tokens2['refresh_token'])->not->toBe($tokens1['refresh_token']);
+
+    $activeAfter = Session::query()->where('user_id', $user->id)->whereNull('revoked_at')->count();
+    expect($activeAfter)->toBe(1);
+
+    $next = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $tokens2['refresh_token'],
+    ]);
+    $next->assertOk();
+
+    $stale = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $tokens1['refresh_token'],
+    ]);
+    $stale->assertStatus(401);
+    expect($stale->json('detail'))->toBe('token_replay_detected');
+
+    $activeFinal = Session::query()->where('user_id', $user->id)->whereNull('revoked_at')->count();
+    expect($activeFinal)->toBe(0);
+});
+
+it('rotation-grace denied: replaying a cleanly-rotated token whose replacement was revoked out-of-band still revokes the chain', function (): void {
+    /** @var Tests\TestCase $this */
+    $signup = $this->postJson('/api/v1/auth/signup', [
+        'email' => 'mallory@example.test',
+        'name' => 'Mallory',
+        'password' => 'correct horse battery',
+    ])->json();
+
+    $refresh1 = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $signup['refresh_token'],
+    ]);
+    $refresh1->assertOk();
+    $tokens1 = $refresh1->json();
+
+    $logout = $this->postJson('/api/v1/auth/logout', [], [
+        'Authorization' => 'Bearer '.$tokens1['access_token'],
+    ]);
+    $logout->assertOk();
+
+    $replay = $this->postJson('/api/v1/auth/refresh', [
+        'refresh_token' => $signup['refresh_token'],
+    ]);
+    $replay->assertStatus(401);
+    expect($replay->json('detail'))->toBe('token_replay_detected');
+
+    $user = User::query()->where('email', 'mallory@example.test')->firstOrFail();
     $active = Session::query()->where('user_id', $user->id)->whereNull('revoked_at')->count();
     expect($active)->toBe(0);
 });

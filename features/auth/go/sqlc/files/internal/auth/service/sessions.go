@@ -30,7 +30,7 @@ func New(q Querier, secrets *Secrets) *Service {
 	return &Service{q: q, secrets: secrets}
 }
 
-func (s *Service) Querier() Querier { return s.q }
+func (s *Service) Querier() Querier  { return s.q }
 func (s *Service) Secrets() *Secrets { return s.secrets }
 
 func nullStr(v string) sql.NullString {
@@ -91,28 +91,74 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, ip, ua string) (*Is
 	if session.UserID != claims.RegisteredClaims.Subject || session.ID != claims.SID {
 		return nil, apperr.Unauthorized("invalid refresh token")
 	}
+
+	// A revoked row whose child is still the unused head is a lost-rotation retry
+	// (client never persisted the replacement), not a replay.
+	active := session
 	if session.RevokedAt.Valid {
-		chain, err := s.collectChain(ctx, session.ID)
-		if err == nil {
-			_ = s.q.RevokeSessionChain(ctx, chain)
+		child := s.resolveRotationGraceChild(ctx, session)
+		if child == nil {
+			s.revokeChain(ctx, session.ID)
+			return nil, apperr.Unauthorized("token_replay_detected")
 		}
-		return nil, apperr.Unauthorized("token_replay_detected")
+		active = child
 	}
-	if !session.ExpiresAt.After(time.Now().UTC()) {
+	if !active.ExpiresAt.After(time.Now().UTC()) {
 		return nil, apperr.Unauthorized("refresh token expired")
 	}
 	user, err := s.q.GetUserByID(ctx, session.UserID)
 	if err != nil {
 		return nil, apperr.Unauthorized("user not found")
 	}
-	result, err := s.issueRotated(ctx, IssueSessionInput{User: user, IPAddress: ip, UserAgent: ua}, sql.NullString{Valid: true, String: session.ID})
+
+	for attempt := 1; ; attempt++ {
+		claimed, err := s.q.ClaimSessionForRotation(ctx, active.ID)
+		if err != nil {
+			return nil, err
+		}
+		if claimed > 0 {
+			result, err := s.issueRotated(ctx, IssueSessionInput{User: user, IPAddress: ip, UserAgent: ua}, sql.NullString{Valid: true, String: active.ID})
+			if err != nil {
+				return nil, err
+			}
+			return result, nil
+		}
+
+		current, err := s.q.GetSessionByID(ctx, active.ID)
+		if err != nil {
+			s.revokeChain(ctx, active.ID)
+			return nil, apperr.Unauthorized("token_replay_detected")
+		}
+		child := s.resolveRotationGraceChild(ctx, current)
+		if child == nil || attempt >= MaxRotationAttempts {
+			s.revokeChain(ctx, active.ID)
+			return nil, apperr.Unauthorized("token_replay_detected")
+		}
+		active = child
+	}
+}
+
+// resolveRotationGraceChild returns the still-unused child of a revoked session
+// row when that child is the head of the chain. In the chain model rotation
+// always revokes the parent as it creates the child, so a child whose
+// revoked_at is still NULL is by construction the unused head. A child that is
+// itself revoked means the chain advanced — a genuine replay — and yields nil.
+func (s *Service) resolveRotationGraceChild(ctx context.Context, session *Session) *Session {
+	child, err := s.q.GetChildSession(ctx, session.ID)
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	if err := s.q.RevokeSession(ctx, session.ID); err != nil {
-		return nil, err
+	if child.RevokedAt.Valid || !child.ExpiresAt.After(time.Now().UTC()) {
+		return nil
 	}
-	return result, nil
+	return child
+}
+
+func (s *Service) revokeChain(ctx context.Context, sessionID string) {
+	chain, err := s.collectChain(ctx, sessionID)
+	if err == nil {
+		_ = s.q.RevokeSessionChain(ctx, chain)
+	}
 }
 
 func (s *Service) collectChain(ctx context.Context, sessionID string) ([]string, error) {

@@ -14,6 +14,7 @@ const (
 	AccessTTLSeconds       = 15 * 60
 	RefreshTTLSeconds      = 7 * 24 * 60 * 60
 	MFAChallengeTTLSeconds = 5 * 60
+	MaxRotationAttempts    = 3
 )
 
 type Claims struct {

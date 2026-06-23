@@ -252,7 +252,7 @@ describe('add', () => {
       expect(marker.component).toBe('fastify');
     });
 
-    it('emits CI / pre-commit / setup blocks for both instances', async () => {
+    it('emits CI / setup / compose blocks for both instances', async () => {
       dest = join(tmpdir(), `projx-add-name-templates-${Date.now()}`);
       await scaffold(
         { name: 'my-app', components: ['fastify'], git: true, install: false },
@@ -270,10 +270,6 @@ describe('add', () => {
       expect(ci).toContain('email-ingestor:');
       expect(ci).toContain("'fastify/**'");
       expect(ci).toContain("'email-ingestor/**'");
-
-      const hook = await readFile(join(dest, '.githooks/pre-commit'), 'utf-8');
-      expect(hook).toContain('Formatting fastify');
-      expect(hook).toContain('Formatting email-ingestor');
 
       const setup = await readFile(join(dest, 'scripts/setup.sh'), 'utf-8');
       expect(setup).toMatch(/\(\n\s+cd fastify\n/);

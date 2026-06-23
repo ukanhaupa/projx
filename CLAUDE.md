@@ -135,7 +135,7 @@ Prettier config is unified across `cli/`, `fastify/`, `express/`, `vitejs/`, `e2
 
 [.githooks/pre-commit](.githooks/pre-commit) runs format + lint + typecheck on staged files per template. It does NOT run the full test suite. The template counterpart that scaffolded projects inherit is [cli/src/templates/pre-commit.ejs](cli/src/templates/pre-commit.ejs) — keep both in sync when adding gates.
 
-CLI block scopes by `^cli/.*\.ts$` (including tests). FastAPI block enforces the private cross-module import rule and runs `lint-imports`.
+A secret scan runs first via `gitleaks` (which reads this repo's `.gitleaks.toml`), falling back to a minimal AWS-key grep only when gitleaks isn't installed. CLI block scopes by `^cli/.*\.ts$` (including tests). FastAPI block enforces the private cross-module import rule and runs `lint-imports`.
 
 ## Conventions
 
@@ -217,5 +217,5 @@ Versions live in [cli/package.json](cli/package.json). `prepublishOnly` builds. 
 - **`vi.mock('@clack/prompts')` pollutes the module cache** across test files. Don't use it for the CLI; spy on `utilsModule` instead. See existing CLI test pattern.
 - **Frontend tests live in `tests/`, not `src/`.** Co-located tests under `src/` were migrated to fix [issue #12](https://github.com/ukanhaupa/projx/issues/12) — never re-introduce.
 - **Worktree-isolated subagents do NOT carry uncommitted changes** from the main checkout. Either commit prereqs first or `cp` them into the worktree as step 0.
-- **gitleaks** runs on CI for the projx repo. Test secrets in `.env.test` need an allowlist entry in `.gitleaks.toml`.
+- **gitleaks** runs in the pre-commit hook and on CI for the projx repo. Test secrets in `.env.test` need an allowlist entry in `.gitleaks.toml`.
 - **`prisma migrate dev` needs `DATABASE_URL`** when run via `setup.sh`. The bootstrap step skips silently if it's unset.

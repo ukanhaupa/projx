@@ -50,6 +50,26 @@ const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
+const MAX_ROTATION_ATTEMPTS = 3;
+
+async function resolveRotationGraceChild(
+  sessionId: string,
+  token: RefreshToken,
+): Promise<RefreshToken | null> {
+  if (token.rotated_to == null || token.replay_detected_at != null) return null;
+  const child = await RefreshToken.findOne({ where: { id: token.rotated_to } });
+  if (
+    !child ||
+    child.session_id !== sessionId ||
+    child.rotated_to != null ||
+    child.revoked_at != null ||
+    child.replay_detected_at != null ||
+    child.expires_at.getTime() < Date.now()
+  ) {
+    return null;
+  }
+  return child;
+}
 
 interface MfaChallengePayload {
   sub: string;
@@ -558,7 +578,7 @@ export function authRouter(sequelize: Sequelize): Router {
         return err(res, 401, 'Unauthorized');
       }
 
-      const handleReplay = async () => {
+      const revokeForReplay = async (replayTokenId: string) => {
         const now = new Date();
         await sequelize.transaction(async (t) => {
           await RefreshToken.update(
@@ -570,25 +590,35 @@ export function authRouter(sequelize: Sequelize): Router {
           );
           await RefreshToken.update(
             { replay_detected_at: now },
-            { where: { id: tokenRow.id }, transaction: t },
+            { where: { id: replayTokenId }, transaction: t },
           );
         });
         req.log?.warn?.(
           {
             session_id: tokenRow.session_id,
             user_id: tokenRow.user_id,
-            token_id: tokenRow.id,
+            token_id: replayTokenId,
           },
           'refresh_token_replay_detected',
         );
         return err(res, 401, 'token_replay_detected');
       };
 
+      // A cleanly-rotated token whose replacement is still the unused head is a
+      // lost-rotation retry (client never persisted the replacement), not a replay.
+      let activeToken: RefreshToken = tokenRow;
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
-        return handleReplay();
+        const graceChild = await resolveRotationGraceChild(
+          tokenRow.session_id,
+          tokenRow,
+        );
+        if (!graceChild) {
+          return revokeForReplay(tokenRow.id);
+        }
+        activeToken = graceChild;
       }
 
-      if (tokenRow.expires_at.getTime() < Date.now()) {
+      if (activeToken.expires_at.getTime() < Date.now()) {
         return err(res, 401, 'Unauthorized');
       }
 
@@ -600,52 +630,64 @@ export function authRouter(sequelize: Sequelize): Router {
         return err(res, 401, 'Unauthorized');
       }
 
-      const payload = {
-        sub: decoded.sub,
-        sid: decoded.sid,
-        role: freshUser.role,
-        email: freshUser.email,
-        name: freshUser.name,
-        permissions: [...permissionsForRole(freshUser.role)],
-      };
-      const tokens = signTokens(payload);
-      const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+      for (let attempt = 1; ; attempt++) {
+        const payload = {
+          sub: decoded.sub,
+          sid: decoded.sid,
+          role: freshUser.role,
+          email: freshUser.email,
+          name: freshUser.name,
+          permissions: [...permissionsForRole(freshUser.role)],
+        };
+        const tokens = signTokens(payload);
+        const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+        const claimedTokenId = activeToken.id;
 
-      const newToken = await sequelize.transaction(async (t) => {
-        const [claimed] = await RefreshToken.update(
-          { revoked_at: new Date() },
-          {
-            where: { id: tokenRow.id, rotated_to: null, revoked_at: null },
-            transaction: t,
-          },
-        );
-        if (claimed === 0) return null;
+        const newToken = await sequelize.transaction(async (t) => {
+          const [claimed] = await RefreshToken.update(
+            { revoked_at: new Date() },
+            {
+              where: { id: claimedTokenId, rotated_to: null, revoked_at: null },
+              transaction: t,
+            },
+          );
+          if (claimed === 0) return null;
 
-        const created = await RefreshToken.create(
-          {
-            user_id: tokenRow.user_id,
-            session_id: tokenRow.session_id,
-            token_hash: hashRefreshToken(tokens.refresh_token),
-            expires_at: newExpiresAt,
-            ip_address: req.ip ?? null,
-            user_agent: req.headers['user-agent'] ?? null,
-          },
-          { transaction: t },
-        );
+          const created = await RefreshToken.create(
+            {
+              user_id: tokenRow.user_id,
+              session_id: tokenRow.session_id,
+              token_hash: hashRefreshToken(tokens.refresh_token),
+              expires_at: newExpiresAt,
+              ip_address: req.ip ?? null,
+              user_agent: req.headers['user-agent'] ?? null,
+            },
+            { transaction: t },
+          );
 
-        await RefreshToken.update(
-          { rotated_to: created.id },
-          { where: { id: tokenRow.id }, transaction: t },
-        );
+          await RefreshToken.update(
+            { rotated_to: created.id },
+            { where: { id: claimedTokenId }, transaction: t },
+          );
 
-        return created;
-      });
+          return created;
+        });
 
-      if (!newToken) {
-        return handleReplay();
+        if (newToken) {
+          return res.json({ ...tokens, access_token: tokens.token });
+        }
+
+        const current = await RefreshToken.findOne({
+          where: { id: claimedTokenId },
+        });
+        const graceChild = current
+          ? await resolveRotationGraceChild(tokenRow.session_id, current)
+          : null;
+        if (!graceChild || attempt >= MAX_ROTATION_ATTEMPTS) {
+          return revokeForReplay(claimedTokenId);
+        }
+        activeToken = graceChild;
       }
-
-      return res.json({ ...tokens, access_token: tokens.token });
     }),
   );
 

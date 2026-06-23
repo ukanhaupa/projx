@@ -200,12 +200,18 @@ function makeMockPrisma() {
         refreshTokens.set(row.id, row);
         return { ...row };
       }),
-      findUnique: vi.fn(async (args: { where: { token_hash: string } }) => {
-        for (const t of refreshTokens.values()) {
-          if (t.token_hash === args.where.token_hash) return { ...t };
-        }
-        return null;
-      }),
+      findUnique: vi.fn(
+        async (args: { where: { token_hash: string } | { id: string } }) => {
+          if ('id' in args.where) {
+            const byId = refreshTokens.get(args.where.id);
+            return byId ? { ...byId } : null;
+          }
+          for (const t of refreshTokens.values()) {
+            if (t.token_hash === args.where.token_hash) return { ...t };
+          }
+          return null;
+        },
+      ),
       findMany: vi.fn(
         async (args: {
           where: { user_id: string; revoked_at: null };
@@ -415,7 +421,7 @@ describe('auth signup -> login -> me flow', () => {
     expect(res.body.refresh_token).not.toBe(oldRefresh);
   });
 
-  it('POST /auth/refresh detects replay of revoked token', async () => {
+  it('POST /auth/refresh detects genuine replay once the chain advanced', async () => {
     await request(app)
       .post('/auth/signup')
       .send({ email, name: 'Test User', password });
@@ -423,21 +429,59 @@ describe('auth signup -> login -> me flow', () => {
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ email, password });
-    const { refresh_token } = loginRes.body;
+    const { refresh_token: t1 } = loginRes.body;
 
     const first = await request(app)
       .post('/auth/refresh')
-      .send({ refresh_token });
+      .send({ refresh_token: t1 });
     expect(first.status).toBe(200);
+    const { refresh_token: t2 } = first.body;
+
+    const second = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t2 });
+    expect(second.status).toBe(200);
 
     const replay = await request(app)
       .post('/auth/refresh')
-      .send({ refresh_token });
+      .send({ refresh_token: t1 });
     expect(replay.status).toBe(401);
     expect(replay.body.detail).toBe('token_replay_detected');
   });
 
-  it('POST /auth/refresh lets exactly one concurrent rotation win', async () => {
+  it('POST /auth/refresh grants rotation grace for a lost-rotation retry', async () => {
+    await request(app)
+      .post('/auth/signup')
+      .send({ email, name: 'Test User', password });
+
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ email, password });
+    const { refresh_token: t1 } = loginRes.body;
+
+    const first = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(first.status).toBe(200);
+
+    const grace = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(grace.status).toBe(200);
+    expect(grace.body.refresh_token).toBeTruthy();
+
+    const next = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: grace.body.refresh_token });
+    expect(next.status).toBe(200);
+
+    const replayAgain = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: t1 });
+    expect(replayAgain.status).toBe(401);
+  });
+
+  it('POST /auth/refresh recovers concurrent rotations of one token', async () => {
     await request(app)
       .post('/auth/signup')
       .send({ email, name: 'Test User', password });
@@ -454,12 +498,15 @@ describe('auth signup -> login -> me flow', () => {
     );
 
     const winners = attempts.filter((r) => r.status === 200);
-    const losers = attempts.filter((r) => r.status === 401);
-    expect(winners).toHaveLength(1);
-    expect(losers).toHaveLength(attempts.length - 1);
-    for (const loser of losers) {
-      expect(loser.body.detail).toBe('token_replay_detected');
-    }
+    expect(winners.length).toBeGreaterThanOrEqual(1);
+
+    const heads = [...prisma._state.refreshTokens.values()].filter(
+      (t) =>
+        t.rotated_to === null &&
+        t.revoked_at === null &&
+        t.replay_detected_at === null,
+    );
+    expect(heads).toHaveLength(1);
   });
 
   it('POST /auth/logout revokes the current session', async () => {

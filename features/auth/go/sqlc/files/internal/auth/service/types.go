@@ -91,6 +91,8 @@ type Querier interface {
 	CreateSession(ctx context.Context, p CreateSessionParams) (*Session, error)
 	GetSessionByTokenHash(ctx context.Context, hash string) (*Session, error)
 	GetSessionByID(ctx context.Context, id string) (*Session, error)
+	GetChildSession(ctx context.Context, parentSessionID string) (*Session, error)
+	ClaimSessionForRotation(ctx context.Context, id string) (int64, error)
 	RevokeSession(ctx context.Context, id string) error
 	RevokeSessionsForUser(ctx context.Context, userID string, exceptSessionID sql.NullString) error
 	RevokeSessionChain(ctx context.Context, ids []string) error

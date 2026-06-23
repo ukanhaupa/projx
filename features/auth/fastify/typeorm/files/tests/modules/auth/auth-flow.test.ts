@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import { IsNull } from 'typeorm';
 import errorHandler from '../../../src/plugins/error-handler.js';
 import authPlugin from '../../../src/plugins/auth.js';
 import requestIdPlugin from '../../../src/plugins/request-id.js';
@@ -31,6 +32,7 @@ describe('auth signup -> login -> me flow', () => {
   let app: FastifyInstance;
   const email = `test-${Date.now()}@example.com`;
   const raceEmail = `race-${Date.now()}@example.com`;
+  const graceEmail = `grace-${Date.now()}@example.com`;
   const password = 'P@ssw0rd!2025'; // pragma: allowlist secret
 
   beforeAll(async () => {
@@ -43,6 +45,7 @@ describe('auth signup -> login -> me flow', () => {
   afterAll(async () => {
     await dataSource.getRepository(User).delete({ email });
     await dataSource.getRepository(User).delete({ email: raceEmail });
+    await dataSource.getRepository(User).delete({ email: graceEmail });
     await app.close();
   });
 
@@ -121,40 +124,87 @@ describe('auth signup -> login -> me flow', () => {
     expect(body.refresh_token).not.toBe(oldRefresh);
   });
 
-  it('POST /auth/refresh detects replay of revoked token', async () => {
+  it('POST /auth/refresh detects genuine replay once the chain advanced', async () => {
     const loginRes = await app.inject({
       method: 'POST',
       url: '/auth/login',
       payload: { email, password },
     });
-    const { refresh_token } = loginRes.json();
+    const { refresh_token: t1 } = loginRes.json();
 
     const first = await app.inject({
       method: 'POST',
       url: '/auth/refresh',
-      payload: { refresh_token },
+      payload: { refresh_token: t1 },
     });
     expect(first.statusCode).toBe(200);
+    const { refresh_token: t2 } = first.json();
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refresh_token: t2 },
+    });
+    expect(second.statusCode).toBe(200);
 
     const replay = await app.inject({
       method: 'POST',
       url: '/auth/refresh',
-      payload: { refresh_token },
+      payload: { refresh_token: t1 },
     });
     expect(replay.statusCode).toBe(401);
     expect(replay.json().detail).toBe('token_replay_detected');
   });
 
-  it('POST /auth/refresh lets exactly one concurrent rotation win', async () => {
+  it('POST /auth/refresh grants rotation grace for a lost-rotation retry', async () => {
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email: graceEmail, name: 'Grace User', password },
+    });
+    const { refresh_token: t1 } = signupRes.json();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refresh_token: t1 },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const grace = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refresh_token: t1 },
+    });
+    expect(grace.statusCode).toBe(200);
+    expect(grace.json().refresh_token).toBeTruthy();
+
+    const next = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refresh_token: grace.json().refresh_token },
+    });
+    expect(next.statusCode).toBe(200);
+
+    const replayAgain = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refresh_token: t1 },
+    });
+    expect(replayAgain.statusCode).toBe(401);
+  });
+
+  it('POST /auth/refresh recovers concurrent rotations of one token', async () => {
     const signupRes = await app.inject({
       method: 'POST',
       url: '/auth/signup',
       payload: { email: raceEmail, name: 'Race User', password },
     });
     const { refresh_token } = signupRes.json();
+    const userId = signupRes.json().user.id as string;
 
     const attempts = await Promise.all(
-      Array.from({ length: 8 }, () =>
+      Array.from({ length: 2 }, () =>
         app.inject({
           method: 'POST',
           url: '/auth/refresh',
@@ -164,11 +214,16 @@ describe('auth signup -> login -> me flow', () => {
     );
 
     const winners = attempts.filter((r) => r.statusCode === 200);
-    const losers = attempts.filter((r) => r.statusCode === 401);
-    expect(winners).toHaveLength(1);
-    expect(losers).toHaveLength(attempts.length - 1);
-    for (const loser of losers) {
-      expect(loser.json().detail).toBe('token_replay_detected');
-    }
+    expect(winners.length).toBeGreaterThanOrEqual(1);
+
+    const heads = await dataSource.getRepository(RefreshToken).find({
+      where: {
+        user_id: userId,
+        rotated_to: IsNull(),
+        revoked_at: IsNull(),
+        replay_detected_at: IsNull(),
+      },
+    });
+    expect(heads).toHaveLength(1);
   });
 });

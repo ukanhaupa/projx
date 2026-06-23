@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"projx.local/go/ent"
 	"projx.local/go/internal/apperr"
 	"projx.local/go/internal/auth"
 	authservice "projx.local/go/internal/auth/service"
@@ -44,17 +45,34 @@ func (d *Deps) Refresh(w http.ResponseWriter, r *http.Request) error {
 	if sess.SessionID != sid || sess.UserID != sub {
 		return apperr.Unauthorized("")
 	}
-	if sess.RotatedTo != nil || sess.RevokedAt != nil {
-		if err := d.Service.MarkSessionReplay(ctx, sess); err != nil {
+
+	revokeForReplay := func(replay *ent.Session) error {
+		if err := d.Service.MarkSessionReplay(ctx, replay); err != nil {
 			d.Logger.Error("[auth] mark replay failed", "error", err.Error())
 		}
 		d.Logger.Warn("refresh_token_replay_detected",
-			"session_id", sess.SessionID,
-			"user_id", sess.UserID,
+			"session_id", replay.SessionID,
+			"user_id", replay.UserID,
 		)
 		return apperr.Unauthorized("token_replay_detected")
 	}
-	if sess.ExpiresAt.Before(time.Now()) {
+
+	// A session row that was cleanly rotated (never flagged as a replay) whose
+	// replacement is still the unused head of the chain is a lost-rotation
+	// retry, not an attack: the client never persisted the replacement (app
+	// killed mid-rotation) and re-presents the old token on next launch.
+	// Re-rotating off the still-unused replacement recovers the session instead
+	// of nuking it. A genuine replay — replacement already used/revoked/flagged,
+	// or the chain advanced — falls through to strict reuse-detection.
+	active := sess
+	if sess.RotatedTo != nil || sess.RevokedAt != nil {
+		graceChild := d.Service.ResolveRotationGraceChild(ctx, sess)
+		if graceChild == nil {
+			return revokeForReplay(sess)
+		}
+		active = graceChild
+	}
+	if active.ExpiresAt.Before(time.Now()) {
 		return apperr.Unauthorized("")
 	}
 
@@ -63,11 +81,24 @@ func (d *Deps) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperr.Unauthorized("")
 	}
 
-	resp, err := d.Service.RotateSession(ctx, sess, u, clientIP(r), r.UserAgent())
-	if err != nil {
-		return err
+	for attempt := 1; ; attempt++ {
+		resp, err := d.Service.RotateSession(ctx, active, u, clientIP(r), r.UserAgent())
+		if err == nil {
+			return writeJSON(w, http.StatusOK, resp)
+		}
+		if !errors.Is(err, authservice.ErrRotationConflict) {
+			return err
+		}
+		current, ferr := d.Service.FindSessionByID(ctx, active.ID)
+		if ferr != nil {
+			return revokeForReplay(active)
+		}
+		graceChild := d.Service.ResolveRotationGraceChild(ctx, current)
+		if graceChild == nil || attempt >= authservice.MaxRotationAttempts {
+			return revokeForReplay(current)
+		}
+		active = graceChild
 	}
-	return writeJSON(w, http.StatusOK, resp)
 }
 
 type logoutReq struct {
