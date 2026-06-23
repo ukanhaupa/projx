@@ -47,7 +47,7 @@ pub async fn refresh(
 mod tests {
     use super::*;
     use crate::auth::mailer::Mailer;
-    use crate::auth::models::refresh_token;
+    use crate::auth::models::{refresh_token, user};
     use crate::auth::password::hash_token;
     use crate::auth::service::{Signer, TokenPayload};
     use axum::body::Body;
@@ -112,12 +112,8 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[tokio::test]
-    async fn refresh_replay_returns_401_detail() {
-        let signer = Signer::with_secret(b"refresh-secret".to_vec());
-        let uid = Uuid::new_v4();
-        let sid = Uuid::new_v4();
-        let token = signer
+    async fn signed(signer: &Signer, uid: Uuid, sid: Uuid) -> String {
+        signer
             .issue_tokens(&TokenPayload {
                 sub: uid,
                 sid,
@@ -127,35 +123,113 @@ mod tests {
             })
             .await
             .unwrap()
-            .refresh_token;
-        let row = refresh_token::Model {
+            .refresh_token
+    }
+
+    fn token_row(uid: Uuid, sid: Uuid, token_hash: String) -> refresh_token::Model {
+        refresh_token::Model {
             id: Uuid::new_v4(),
             user_id: uid,
             session_id: sid,
-            token_hash: hash_token(&token),
+            token_hash,
             ip_address: None,
             user_agent: None,
             expires_at: Utc::now() + Duration::days(1),
-            revoked_at: Some(Utc::now()),
-            rotated_to: Some(Uuid::new_v4()),
+            revoked_at: None,
+            rotated_to: None,
             replay_detected_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+        }
+    }
+
+    fn ok_exec(rows_affected: u64) -> MockExecResult {
+        MockExecResult {
+            last_insert_id: 0,
+            rows_affected,
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_genuine_replay_returns_401_detail() {
+        let signer = Signer::with_secret(b"refresh-secret".to_vec());
+        let uid = Uuid::new_v4();
+        let sid = Uuid::new_v4();
+        let token = signed(&signer, uid, sid).await;
+        let child_id = Uuid::new_v4();
+        let presented = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..token_row(uid, sid, hash_token(&token))
+        };
+        let advanced_child = refresh_token::Model {
+            id: child_id,
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(Uuid::new_v4()),
+            ..token_row(uid, sid, "child-hash".into())
         };
         let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([vec![row]])
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }])
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }]);
+            .append_query_results([vec![presented]])
+            .append_query_results([vec![advanced_child]])
+            .append_exec_results([ok_exec(1)])
+            .append_exec_results([ok_exec(1)]);
         let resp = call(state(db), &token).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["detail"], "token_replay_detected");
+    }
+
+    #[tokio::test]
+    async fn refresh_lost_rotation_grace_recovers() {
+        let signer = Signer::with_secret(b"refresh-secret".to_vec());
+        let uid = Uuid::new_v4();
+        let sid = Uuid::new_v4();
+        let token = signed(&signer, uid, sid).await;
+        let child_id = Uuid::new_v4();
+        let presented = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..token_row(uid, sid, hash_token(&token))
+        };
+        let unused_child = refresh_token::Model {
+            id: child_id,
+            ..token_row(uid, sid, "child-hash".into())
+        };
+        let user = user::Model {
+            id: uid,
+            email: "a@b.com".into(),
+            name: "Ann".into(),
+            password_hash: "h".into(),
+            role: "user".into(),
+            email_verified: true,
+            email_verified_at: None,
+            failed_login_count: 0,
+            locked_until: None,
+            mfa_enabled: false,
+            mfa_secret_enc: None,
+            mfa_recovery_codes_enc: None,
+            mfa_verified_at: None,
+            mfa_failed_count: 0,
+            mfa_locked_until: None,
+            last_login: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        };
+        let inserted = token_row(uid, sid, "inserted-hash".into());
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![presented]])
+            .append_query_results([vec![unused_child]])
+            .append_query_results([vec![user]])
+            .append_exec_results([ok_exec(1)])
+            .append_query_results([vec![inserted]])
+            .append_exec_results([ok_exec(1)]);
+        let resp = call(state(db), &token).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(v["access_token"].as_str().is_some_and(|s| !s.is_empty()));
+        assert!(v["refresh_token"].as_str().is_some_and(|s| !s.is_empty()));
     }
 }

@@ -30,6 +30,7 @@ func TestRefreshHappyPath(t *testing.T) {
 	userRows := sqlmock.NewRows([]string{"id", "email", "name", "role"}).AddRow("u1", "u@example.com", "U", "user")
 	mock.ExpectQuery(`SELECT.*FROM\s+users`).WillReturnRows(userRows)
 	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -66,6 +67,43 @@ func TestRefreshReplayDetected(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewReader(body))
 	d.refresh(w, r)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestRefreshRotationGrace(t *testing.T) {
+	d, mock, done := newMockDeps(t)
+	defer done()
+	pair, err := d.Signer.IssueTokens(context.Background(), authservice.TokenPayload{
+		Sub: "u1", SID: "s1", Email: "u@example.com", Name: "U", Role: "user",
+	})
+	require.NoError(t, err)
+	rotatedTo := "rt2"
+	cols := []string{"id", "user_id", "session_id", "token_hash", "expires_at", "revoked_at", "rotated_to", "replay_detected_at"}
+	presented := sqlmock.NewRows(cols).AddRow(
+		"rt1", "u1", "s1", authservice.HashToken(pair.RefreshToken),
+		time.Now().Add(time.Hour), time.Now().Add(-time.Minute), rotatedTo, nil,
+	)
+	mock.ExpectQuery(`SELECT.*FROM\s+refresh_tokens`).WillReturnRows(presented)
+	child := sqlmock.NewRows(cols).AddRow(
+		"rt2", "u1", "s1", "child-hash",
+		time.Now().Add(time.Hour), nil, nil, nil,
+	)
+	mock.ExpectQuery(`SELECT.*FROM\s+refresh_tokens`).WillReturnRows(child)
+	userRows := sqlmock.NewRows([]string{"id", "email", "name", "role"}).AddRow("u1", "u@example.com", "U", "user")
+	mock.ExpectQuery(`SELECT.*FROM\s+users`).WillReturnRows(userRows)
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE\s+refresh_tokens`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	body, _ := json.Marshal(map[string]any{"refresh_token": pair.RefreshToken})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewReader(body))
+	d.refresh(w, r)
+	if w.Code != http.StatusOK {
+		t.Logf("body: %s", w.Body.String())
+	}
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestPasswordResetRequestDBError(t *testing.T) {

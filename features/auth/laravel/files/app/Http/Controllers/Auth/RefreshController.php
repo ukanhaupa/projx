@@ -21,6 +21,8 @@ use Throwable;
 
 class RefreshController
 {
+    private const MAX_ROTATION_ATTEMPTS = 3;
+
     public function __construct(private readonly TokenService $tokens) {}
 
     public function __invoke(RefreshRequest $request): JsonResponse
@@ -52,17 +54,23 @@ class RefreshController
             throw new AppException('Unauthorized', 401);
         }
 
+        $rotatable = $session;
         if ($session->revoked_at !== null) {
-            DB::transaction(function () use ($session): void {
-                $this->revokeChain($session);
-                $session->replay_detected_at = CarbonImmutable::now('UTC');
-                $session->save();
-            });
-            Log::warning('refresh_token_replay_detected', ['session_id' => $session->id, 'user_id' => $session->user_id]);
-            throw new AppException('token_replay_detected', 401);
+            $graceChild = $this->resolveRotationGraceChild($session);
+            if ($graceChild === null) {
+                $this->revokeForReplay($session);
+                Log::warning('refresh_token_replay_detected', ['session_id' => $session->id, 'user_id' => $session->user_id]);
+                throw new AppException('token_replay_detected', 401);
+            }
+            Log::info('refresh_token_rotation_grace_applied', [
+                'session_id' => $session->id,
+                'user_id' => $session->user_id,
+                'grace_session_id' => $graceChild->id,
+            ]);
+            $rotatable = $graceChild;
         }
 
-        if ($session->expires_at !== null && $session->expires_at->isPast()) {
+        if ($rotatable->expires_at !== null && $rotatable->expires_at->isPast()) {
             throw new AppException('Unauthorized', 401);
         }
 
@@ -71,37 +79,99 @@ class RefreshController
             throw new AppException('Unauthorized', 401);
         }
 
-        $newSessionId = (string) Str::uuid();
-        $newRefreshRaw = $this->tokens->generateRefreshToken();
-        $tokens = $this->tokens->signAccessAndRefresh([
-            'sub' => (string) $user->id,
-            'sid' => $newSessionId,
-            'role' => (string) $user->role,
-            'email' => (string) $user->email,
-            'name' => (string) $user->name,
-            'permissions' => $this->tokens->permissionsForRole((string) $user->role),
-        ], $newRefreshRaw);
+        for ($attempt = 1; ; $attempt++) {
+            $newSessionId = (string) Str::uuid();
+            $newRefreshRaw = $this->tokens->generateRefreshToken();
+            $tokens = $this->tokens->signAccessAndRefresh([
+                'sub' => (string) $user->id,
+                'sid' => $newSessionId,
+                'role' => (string) $user->role,
+                'email' => (string) $user->email,
+                'name' => (string) $user->name,
+                'permissions' => $this->tokens->permissionsForRole((string) $user->role),
+            ], $newRefreshRaw);
 
-        DB::transaction(function () use ($session, $newSessionId, $newRefreshRaw, $user, $reqIp, $reqUa): void {
-            $newSession = new Session([
-                'user_id' => $user->id,
-                'parent_session_id' => $session->id,
-                'refresh_token_hash' => $this->tokens->hashRefreshToken($newRefreshRaw),
-                'ip_address' => $reqIp,
-                'user_agent' => $reqUa,
-                'expires_at' => CarbonImmutable::now('UTC')->addSeconds(TokenService::REFRESH_TTL_SECONDS),
-            ]);
-            $newSession->id = $newSessionId;
-            $newSession->save();
-            $session->revoked_at = CarbonImmutable::now('UTC');
+            $rotatableId = (string) $rotatable->id;
+            $claimed = DB::transaction(function () use ($rotatable, $rotatableId, $newSessionId, $newRefreshRaw, $user, $reqIp, $reqUa): bool {
+                $claim = Session::query()
+                    ->whereKey($rotatableId)
+                    ->whereNull('revoked_at')
+                    ->whereNull('replay_detected_at')
+                    ->update(['revoked_at' => CarbonImmutable::now('UTC')]);
+                if ($claim === 0) {
+                    return false;
+                }
+
+                $child = new Session([
+                    'user_id' => $user->id,
+                    'parent_session_id' => $rotatable->id,
+                    'refresh_token_hash' => $this->tokens->hashRefreshToken($newRefreshRaw),
+                    'ip_address' => $reqIp,
+                    'user_agent' => $reqUa,
+                    'expires_at' => CarbonImmutable::now('UTC')->addSeconds(TokenService::REFRESH_TTL_SECONDS),
+                ]);
+                $child->id = $newSessionId;
+                $child->save();
+
+                return true;
+            });
+
+            if ($claimed) {
+                return new JsonResponse([
+                    'token' => $tokens['token'],
+                    'access_token' => $tokens['access_token'],
+                    'refresh_token' => $tokens['refresh_token'],
+                ]);
+            }
+
+            $current = Session::query()->whereKey($rotatableId)->first();
+            $graceChild = $current !== null ? $this->resolveRotationGraceChild($current) : null;
+            if ($graceChild === null || $attempt >= self::MAX_ROTATION_ATTEMPTS) {
+                $this->revokeForReplay($session);
+                Log::warning('refresh_token_concurrent_rotation_detected', ['session_id' => $session->id, 'user_id' => $session->user_id]);
+                throw new AppException('token_replay_detected', 401);
+            }
+            $rotatable = $graceChild;
+        }
+    }
+
+    // A cleanly-rotated token whose replacement is still the unused head is a
+    // lost-rotation retry (client never persisted the replacement), not a replay.
+    private function resolveRotationGraceChild(Session $rotated): ?Session
+    {
+        if ($rotated->revoked_at === null || $rotated->replay_detected_at !== null) {
+            return null;
+        }
+
+        $child = Session::query()
+            ->where('parent_session_id', $rotated->id)
+            ->orderBy('created_at')
+            ->first();
+
+        if ($child === null
+            || (string) $child->user_id !== (string) $rotated->user_id
+            || $child->revoked_at !== null
+            || $child->replay_detected_at !== null
+            || ($child->expires_at !== null && $child->expires_at->isPast())
+        ) {
+            return null;
+        }
+
+        $hasGrandchild = Session::query()->where('parent_session_id', $child->id)->exists();
+        if ($hasGrandchild) {
+            return null;
+        }
+
+        return $child;
+    }
+
+    private function revokeForReplay(Session $session): void
+    {
+        DB::transaction(function () use ($session): void {
+            $this->revokeChain($session);
+            $session->replay_detected_at = CarbonImmutable::now('UTC');
             $session->save();
         });
-
-        return new JsonResponse([
-            'token' => $tokens['token'],
-            'access_token' => $tokens['access_token'],
-            'refresh_token' => $tokens['refresh_token'],
-        ]);
     }
 
     private function revokeChain(Session $session): void

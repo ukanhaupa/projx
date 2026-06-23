@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { User } from '@prisma/client';
+import type { RefreshToken, User } from '@prisma/client';
 import fp from 'fastify-plugin';
 import { Type } from '@sinclair/typebox';
 import { randomUUID } from 'node:crypto';
@@ -40,6 +40,31 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MFA_CHALLENGE_TTL = '5m';
 const PUBLIC_RATE_LIMIT = { max: 5, timeWindow: '1 minute' } as const;
+const MAX_ROTATION_ATTEMPTS = 3;
+
+// A cleanly-rotated token whose replacement is still the unused head is a
+// lost-rotation retry (client never persisted the replacement), not a replay.
+async function resolveRotationGraceChild(
+  fastify: FastifyInstance,
+  sessionId: string,
+  token: Pick<RefreshToken, 'rotated_to' | 'replay_detected_at'>,
+): Promise<RefreshToken | null> {
+  if (token.rotated_to == null || token.replay_detected_at != null) return null;
+  const child = await fastify.prisma.refreshToken.findUnique({
+    where: { id: token.rotated_to },
+  });
+  if (
+    !child ||
+    child.session_id !== sessionId ||
+    child.rotated_to != null ||
+    child.revoked_at != null ||
+    child.replay_detected_at != null ||
+    child.expires_at.getTime() < Date.now()
+  ) {
+    return null;
+  }
+  return child;
+}
 
 interface MfaChallengePayload {
   sub: string;
@@ -610,7 +635,7 @@ export default fp(async (fastify) => {
         return err(reply, request, 401, 'Unauthorized');
       }
 
-      const handleReplay = async () => {
+      const revokeForReplay = async (replayTokenId: string) => {
         const now = new Date();
         await fastify.prisma.$transaction([
           fastify.prisma.refreshToken.updateMany({
@@ -618,7 +643,7 @@ export default fp(async (fastify) => {
             data: { revoked_at: now },
           }),
           fastify.prisma.refreshToken.update({
-            where: { id: tokenRow.id },
+            where: { id: replayTokenId },
             data: { replay_detected_at: now },
           }),
         ]);
@@ -626,18 +651,36 @@ export default fp(async (fastify) => {
           {
             session_id: tokenRow.session_id,
             user_id: tokenRow.user_id,
-            token_id: tokenRow.id,
+            token_id: replayTokenId,
           },
           'refresh_token_replay_detected',
         );
         return err(reply, request, 401, 'token_replay_detected');
       };
 
+      let activeToken: RefreshToken = tokenRow;
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
-        return handleReplay();
+        const graceChild = await resolveRotationGraceChild(
+          fastify,
+          tokenRow.session_id,
+          tokenRow,
+        );
+        if (!graceChild) {
+          return revokeForReplay(tokenRow.id);
+        }
+        activeToken = graceChild;
+        request.log.info(
+          {
+            session_id: tokenRow.session_id,
+            user_id: tokenRow.user_id,
+            stale_token_id: tokenRow.id,
+            grace_token_id: graceChild.id,
+          },
+          'refresh_token_rotation_grace_applied',
+        );
       }
 
-      if (tokenRow.expires_at.getTime() < Date.now()) {
+      if (activeToken.expires_at.getTime() < Date.now()) {
         return err(reply, request, 401, 'Unauthorized');
       }
 
@@ -649,48 +692,64 @@ export default fp(async (fastify) => {
         return err(reply, request, 401, 'Unauthorized');
       }
 
-      const payload = {
-        sub: decoded.sub,
-        sid: decoded.sid,
-        role: freshUser.role,
-        email: freshUser.email,
-        name: freshUser.name,
-        permissions: [...permissionsForRole(freshUser.role)],
-      };
-      const tokens = signTokens(fastify, payload);
-      const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+      for (let attempt = 1; ; attempt++) {
+        const payload = {
+          sub: decoded.sub,
+          sid: decoded.sid,
+          role: freshUser.role,
+          email: freshUser.email,
+          name: freshUser.name,
+          permissions: [...permissionsForRole(freshUser.role)],
+        };
+        const tokens = signTokens(fastify, payload);
+        const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+        const claimedTokenId = activeToken.id;
 
-      const newToken = await fastify.prisma.$transaction(async (tx) => {
-        const claimed = await tx.refreshToken.updateMany({
-          where: { id: tokenRow.id, rotated_to: null, revoked_at: null },
-          data: { revoked_at: new Date() },
+        const newToken = await fastify.prisma.$transaction(async (tx) => {
+          const claimed = await tx.refreshToken.updateMany({
+            where: { id: claimedTokenId, rotated_to: null, revoked_at: null },
+            data: { revoked_at: new Date() },
+          });
+          if (claimed.count === 0) return null;
+
+          const created = await tx.refreshToken.create({
+            data: {
+              user_id: tokenRow.user_id,
+              session_id: tokenRow.session_id,
+              token_hash: hashRefreshToken(tokens.refresh_token),
+              expires_at: newExpiresAt,
+              ip_address: request.ip,
+              user_agent: request.headers['user-agent'] ?? null,
+            },
+          });
+
+          await tx.refreshToken.update({
+            where: { id: claimedTokenId },
+            data: { rotated_to: created.id },
+          });
+
+          return created;
         });
-        if (claimed.count === 0) return null;
 
-        const created = await tx.refreshToken.create({
-          data: {
-            user_id: tokenRow.user_id,
-            session_id: tokenRow.session_id,
-            token_hash: hashRefreshToken(tokens.refresh_token),
-            expires_at: newExpiresAt,
-            ip_address: request.ip,
-            user_agent: request.headers['user-agent'] ?? null,
-          },
+        if (newToken) {
+          return reply.send({ ...tokens, access_token: tokens.token });
+        }
+
+        const current = await fastify.prisma.refreshToken.findUnique({
+          where: { id: claimedTokenId },
         });
-
-        await tx.refreshToken.update({
-          where: { id: tokenRow.id },
-          data: { rotated_to: created.id },
-        });
-
-        return created;
-      });
-
-      if (!newToken) {
-        return handleReplay();
+        const graceChild = current
+          ? await resolveRotationGraceChild(
+              fastify,
+              tokenRow.session_id,
+              current,
+            )
+          : null;
+        if (!graceChild || attempt >= MAX_ROTATION_ATTEMPTS) {
+          return revokeForReplay(claimedTokenId);
+        }
+        activeToken = graceChild;
       }
-
-      return reply.send({ ...tokens, access_token: tokens.token });
     },
   );
 

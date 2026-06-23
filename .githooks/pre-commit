@@ -1,268 +1,229 @@
 #!/usr/bin/env bash
 set -e
 
-# ── Secret detection ──────────────────────────────────────────────
-STAGED_DIFF="$(git diff --cached --diff-filter=ACMR)"
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$STAGED_FILES" ] && exit 0
 
-AKIA_HITS="$(echo "$STAGED_DIFF" | grep -E '(AKIA|ASIA)[A-Z0-9]{16}' | grep -vE '(pragma: allowlist secret|gitleaks:allow)' || true)"
-if [ -n "$AKIA_HITS" ]; then
-  echo "ERROR: Possible AWS access key detected in staged changes:"
-  echo "$AKIA_HITS" | head -5
-  echo "Add 'pragma: allowlist secret' on the line to whitelist if intentional."
-  exit 1
-fi
-
-if echo "$STAGED_DIFF" | grep -qE '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' 2>/dev/null; then
-  REAL_SECRETS="$(echo "$STAGED_DIFF" | grep -E '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' | grep -vE '(test-secret|dev-secret|example|placeholder|your-|changeme|CHANGE_ME|pragma: allowlist secret|gitleaks:allow)' || true)"
-  if [ -n "$REAL_SECRETS" ]; then
-    echo "WARNING: Possible secret detected in staged changes:"
-    echo "$REAL_SECRETS" | head -5
-    echo "Add 'pragma: allowlist secret' on the line to whitelist, or commit with --no-verify if intentional."
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks git --staged --no-banner --redact; then
+    echo "ERROR: gitleaks flagged a potential secret in staged changes (redacted above)."
+    echo "False positive? Add a path/regex to .gitleaks.toml, or append 'gitleaks:allow' on the line."
+    exit 1
+  fi
+else
+  echo "WARNING: gitleaks not installed — minimal AWS-key fallback only ('brew install gitleaks' for full coverage)."
+  AKIA_HITS="$(git diff --cached --diff-filter=ACMR | grep -E '(AKIA|ASIA)[A-Z0-9]{16}' | grep -vE 'gitleaks:allow' || true)"
+  if [ -n "$AKIA_HITS" ]; then
+    echo "ERROR: Possible AWS access key in staged changes:"
+    echo "$AKIA_HITS" | head -5
     exit 1
   fi
 fi
 
-STAGED_ENV_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(\.env$|.*\/\.env$|.*\.env\.(prod|staging|dev)$)' || true)"
+STAGED_ENV_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^(\.env$|.*/\.env$|.*\.env\.(prod|staging|dev)$)' || true)"
 if [ -n "$STAGED_ENV_FILES" ]; then
   echo "ERROR: .env file(s) staged for commit:"
   echo "$STAGED_ENV_FILES"
   exit 1
 fi
 
-# ── Collect staged files per stack ────────────────────────────────
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
-
-FASTAPI_PY=$(echo "$STAGED_FILES" | grep '^fastapi/.*\.py$' || true)
-FASTIFY_TS=$(echo "$STAGED_FILES" | grep '^fastify/.*\.ts$' || true)
-FASTIFY_ALL=$(echo "$STAGED_FILES" | grep '^fastify/' || true)
-GO_FILES=$(echo "$STAGED_FILES" | grep '^go/.*\.go$' || true)
-RUST_FILES=$(echo "$STAGED_FILES" | grep -E '^rust/.*\.rs$' || true)
-LARAVEL_FILES=$(echo "$STAGED_FILES" | grep -E '^laravel/.*\.php$' || true)
-VITEJS_TS=$(echo "$STAGED_FILES" | grep '^vitejs/.*\.tsx\?$' || true)
-VITEJS_ALL=$(echo "$STAGED_FILES" | grep '^vitejs/' || true)
-NEXTJS_TS=$(echo "$STAGED_FILES" | grep '^nextjs/.*\.tsx\?$' || true)
-NEXTJS_ALL=$(echo "$STAGED_FILES" | grep '^nextjs/' || true)
-E2E_TS=$(echo "$STAGED_FILES" | grep '^e2e/.*\.ts$' || true)
-E2E_ALL=$(echo "$STAGED_FILES" | grep '^e2e/' || true)
-MOBILE_DART=$(echo "$STAGED_FILES" | grep '^mobile/.*\.dart$' || true)
-INFRA_TF=$(echo "$STAGED_FILES" | grep '^infra/.*\.tf$' || true)
-ADMIN_PANEL_GO=$(echo "$STAGED_FILES" | grep '^admin-panel/.*\.go$' || true)
-CLI_SRC_TS=$(echo "$STAGED_FILES" | grep '^cli/src/.*\.ts$' || true)
-CLI_TS=$(echo "$STAGED_FILES" | grep '^cli/.*\.ts$' || true)
-CLI_ALL=$(echo "$STAGED_FILES" | grep '^cli/' || true)
-
-# ── FastAPI ───────────────────────────────────────────────────────
-if [ -n "$FASTAPI_PY" ]; then
-  echo "Running quality gates for fastapi..."
-  cd fastapi
-  echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff format
-  echo "$FASTAPI_PY" | sed 's|^fastapi/||' | xargs uv run ruff check --fix
-  uv run mypy
-  if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/ | grep -v 'pragma:.*allow-private-import'; then
-    echo "ERROR: src/ files cannot import from another module's _-prefixed file. Import from the package, or add '# pragma: allow-private-import' on the line if the cycle makes a package import impossible."
-    exit 1
-  fi
-  uv run lint-imports
-  cd ..
-  echo "$FASTAPI_PY" | xargs git add
+MERGE_MARKERS="$(git diff --cached --diff-filter=ACMR | grep -nE '^\+(<{7}|>{7})[ \t]' || true)"
+if [ -n "$MERGE_MARKERS" ]; then
+  echo "ERROR: merge conflict markers in staged changes:"
+  echo "$MERGE_MARKERS" | head
+  exit 1
 fi
 
-# ── Fastify ───────────────────────────────────────────────────────
-if [ -n "$FASTIFY_ALL" ]; then
-  echo "Formatting fastify..."
-  cd fastify
-  echo "$FASTIFY_ALL" | sed 's|^fastify/||' | xargs npx prettier --write --ignore-unknown
-  if [ -n "$FASTIFY_TS" ]; then
-    echo "$FASTIFY_TS" | sed 's|^fastify/||' | xargs npx eslint --fix
-    npx tsc --noEmit
-  fi
-  cd ..
-  echo "$FASTIFY_ALL" | xargs git add
+BIG=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  [ -f "$f" ] || continue
+  sz="$(wc -c < "$f" 2>/dev/null | tr -d ' ')"
+  [ -n "$sz" ] && [ "$sz" -gt 10485760 ] && BIG="${BIG}  ${f} ($((sz / 1048576)) MB)
+"
+done <<< "$STAGED_FILES"
+if [ -n "$BIG" ]; then
+  echo "ERROR: staged file(s) over 10 MB — likely accidental (use git-lfs, or --no-verify if intentional):"
+  printf '%s' "$BIG"
+  exit 1
 fi
 
-# ── Go ────────────────────────────────────────────────────────────
-if [ -n "$GO_FILES" ]; then
-  if command -v go &> /dev/null; then
-    echo "Checking go..."
-    cd go
-    # shellcheck disable=SC2001
-    REL_GO=$(echo "$GO_FILES" | sed 's|^go/||')
-    # shellcheck disable=SC2086
-    UNFORMATTED=$(gofmt -l $REL_GO)
-    if [ -n "$UNFORMATTED" ]; then
-      echo "ERROR: gofmt found unformatted files in go/:"
-      echo "$UNFORMATTED"
-      echo "Run 'gofmt -w' on these files and re-stage."
+nearest_dir() {
+  local dir
+  dir="$(dirname "$1")"
+  while :; do
+    if [ -f "$dir/$2" ]; then
+      [ "$dir" = "." ] && echo "." || echo "${dir#./}"
+      return 0
+    fi
+    case "$dir" in .|/) return 1 ;; esac
+    dir="$(dirname "$dir")"
+  done
+}
+
+owner_dirs() {
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] && { nearest_dir "$f" "$2" || true; }
+  done <<< "$1" | sort -u
+}
+
+members() {
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ "$(nearest_dir "$f" "$2" || true)" = "$3" ] && printf '%s\n' "$f"
+  done <<< "$1"
+  return 0
+}
+
+strip_prefix() {
+  if [ "$1" = "." ]; then cat; else sed "s|^$1/||"; fi
+}
+
+xargs0() {
+  printf '%s\n' "$1" | tr '\n' '\0' | xargs -0 "${@:2}"
+}
+
+find_prettier() {
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    [ -x "$d/node_modules/.bin/prettier" ] && { echo "$d"; return 0; }
+  done <<< "$(find . -maxdepth 3 -name package.json -not -path '*/node_modules/*' -exec dirname {} \; | sed 's#^\./##' | sort -u)"
+  return 1
+}
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" package.json "$pkg")"
+  [ -z "$files" ] && continue
+  echo "==> node: $pkg"
+  rels="$(printf '%s\n' "$files" | strip_prefix "$pkg")"
+  if [ -x "$pkg/node_modules/.bin/prettier" ]; then
+    ( cd "$pkg" && xargs0 "$rels" ./node_modules/.bin/prettier --write --ignore-unknown )
+  else
+    echo "  (prettier not installed in $pkg — run the package manager install)"
+  fi
+  lint="$(printf '%s\n' "$rels" | grep -E '\.(ts|tsx)$' || true)"
+  if [ -n "$lint" ] && [ -x "$pkg/node_modules/.bin/eslint" ]; then
+    ( cd "$pkg" && xargs0 "$lint" ./node_modules/.bin/eslint --fix )
+  fi
+  xargs0 "$files" git add
+  ts="$(printf '%s\n' "$rels" | grep -E '\.(ts|tsx)$' || true)"
+  if [ -n "$ts" ] && [ -f "$pkg/tsconfig.json" ] && [ -x "$pkg/node_modules/.bin/tsc" ]; then
+    ( cd "$pkg" && ./node_modules/.bin/tsc --noEmit )
+  fi
+done <<< "$(owner_dirs "$STAGED_FILES" package.json)"
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" pyproject.toml "$pkg")"
+  pyfiles="$(printf '%s\n' "$files" | grep -E '\.py$' || true)"
+  [ -z "$pyfiles" ] && continue
+  if ! command -v uv >/dev/null 2>&1; then echo "  (uv not installed — skipping $pkg)"; continue; fi
+  echo "==> python: $pkg"
+  rels="$(printf '%s\n' "$pyfiles" | strip_prefix "$pkg")"
+  ( cd "$pkg" && xargs0 "$rels" uv run ruff format )
+  ( cd "$pkg" && xargs0 "$rels" uv run ruff check --fix )
+  xargs0 "$pyfiles" git add
+  if grep -qiE 'mypy' "$pkg/pyproject.toml" 2>/dev/null; then ( cd "$pkg" && uv run mypy ); fi
+  if grep -qiE 'import.?linter' "$pkg/pyproject.toml" 2>/dev/null; then
+    if [ -d "$pkg/src" ] && ( cd "$pkg" && grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/ | grep -v 'pragma:.*allow-private-import' ); then
+      echo "ERROR: $pkg/src imports another module's _-prefixed file. Import from the package, or add '# pragma: allow-private-import' on the line."
       exit 1
     fi
-    go vet ./...
-    if command -v golangci-lint &> /dev/null; then
-      golangci-lint run ./...
-    else
-      echo "Skipping golangci-lint (not installed — \`brew install golangci-lint\` to enable)"
-    fi
-    cd ..
-    echo "$GO_FILES" | xargs git add
+    ( cd "$pkg" && uv run lint-imports )
+  fi
+done <<< "$(owner_dirs "$STAGED_FILES" pyproject.toml)"
+
+while IFS= read -r mod; do
+  [ -z "$mod" ] && continue
+  files="$(members "$STAGED_FILES" go.mod "$mod")"
+  gofiles="$(printf '%s\n' "$files" | grep -E '\.go$' || true)"
+  [ -z "$gofiles" ] && continue
+  if ! command -v go >/dev/null 2>&1; then echo "  (go not installed — skipping $mod)"; continue; fi
+  echo "==> go: $mod"
+  ( cd "$mod" && printf '%s\n' "$gofiles" | strip_prefix "$mod" | tr '\n' '\0' | xargs -0 gofmt -w )
+  xargs0 "$gofiles" git add
+  ( cd "$mod" && go vet ./... )
+  if command -v golangci-lint >/dev/null 2>&1; then ( cd "$mod" && golangci-lint run ./... ); fi
+done <<< "$(owner_dirs "$STAGED_FILES" go.mod)"
+
+while IFS= read -r crate; do
+  [ -z "$crate" ] && continue
+  files="$(members "$STAGED_FILES" Cargo.toml "$crate")"
+  rsfiles="$(printf '%s\n' "$files" | grep -E '\.rs$' || true)"
+  [ -z "$rsfiles" ] && continue
+  if ! command -v cargo >/dev/null 2>&1; then echo "  (cargo not installed — skipping $crate)"; continue; fi
+  echo "==> rust: $crate"
+  ( cd "$crate" && cargo fmt )
+  xargs0 "$rsfiles" git add
+done <<< "$(owner_dirs "$STAGED_FILES" Cargo.toml)"
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" pubspec.yaml "$pkg")"
+  dartfiles="$(printf '%s\n' "$files" | grep -E '\.dart$' || true)"
+  [ -z "$dartfiles" ] && continue
+  if ! command -v dart >/dev/null 2>&1; then echo "  (dart not installed — skipping $pkg)"; continue; fi
+  echo "==> dart: $pkg"
+  ( cd "$pkg" && printf '%s\n' "$dartfiles" | strip_prefix "$pkg" | tr '\n' '\0' | xargs -0 dart format )
+  xargs0 "$dartfiles" git add
+  if command -v flutter >/dev/null 2>&1; then ( cd "$pkg" && dart analyze --fatal-infos ); fi
+done <<< "$(owner_dirs "$STAGED_FILES" pubspec.yaml)"
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" composer.json "$pkg")"
+  phpfiles="$(printf '%s\n' "$files" | grep -E '\.php$' || true)"
+  [ -z "$phpfiles" ] && continue
+  if command -v php >/dev/null 2>&1 && [ -x "$pkg/vendor/bin/pint" ]; then
+    echo "==> php: $pkg"
+    ( cd "$pkg" && printf '%s\n' "$phpfiles" | strip_prefix "$pkg" | tr '\n' '\0' | xargs -0 ./vendor/bin/pint )
+    xargs0 "$phpfiles" git add
+    ( cd "$pkg" && ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M )
   else
-    echo "Skipping go gates (go toolchain not installed)"
+    echo "  (php or vendor/bin/pint unavailable — skipping $pkg; run composer install)"
   fi
-fi
+done <<< "$(owner_dirs "$STAGED_FILES" composer.json)"
 
-# ── Rust ──────────────────────────────────────────────────────────
-if [ -n "$RUST_FILES" ]; then
-  if command -v cargo &>/dev/null; then
-    echo "Checking rust..."
-    cd rust
-    REL_RS=$(echo "$RUST_FILES" | sed 's|^rust/||')
-    # shellcheck disable=SC2086
-    echo "$REL_RS" | xargs cargo fmt --check --
-    cargo clippy -- -D warnings
-    cd ..
-    echo "$RUST_FILES" | xargs git add
+TF_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '\.tf$' || true)"
+if [ -n "$TF_FILES" ]; then
+  if command -v terraform >/dev/null 2>&1; then
+    while IFS= read -r d; do
+      [ -z "$d" ] && continue
+      echo "==> terraform: $d"
+      ( cd "$d" && terraform fmt )
+    done <<< "$(while IFS= read -r f; do [ -n "$f" ] && dirname "$f"; done <<< "$TF_FILES" | sort -u)"
+    xargs0 "$TF_FILES" git add
   else
-    echo "Skipping rust gates (cargo not installed)"
+    echo "  (terraform not installed — skipping fmt)"
   fi
 fi
 
-# ── Laravel ───────────────────────────────────────────────────────
-if [ -n "$LARAVEL_FILES" ]; then
-  if command -v php &>/dev/null && [ -x laravel/vendor/bin/pint ]; then
-    echo "Checking laravel..."
-    cd laravel
-    REL_PHP=$(echo "$LARAVEL_FILES" | sed 's|^laravel/||')
-    # shellcheck disable=SC2086
-    echo "$REL_PHP" | xargs ./vendor/bin/pint
-    ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
-    cd ..
-    echo "$LARAVEL_FILES" | xargs git add
+UNOWNED=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  nearest_dir "$f" package.json >/dev/null 2>&1 && continue
+  nearest_dir "$f" pyproject.toml >/dev/null 2>&1 && continue
+  nearest_dir "$f" go.mod >/dev/null 2>&1 && continue
+  nearest_dir "$f" Cargo.toml >/dev/null 2>&1 && continue
+  nearest_dir "$f" pubspec.yaml >/dev/null 2>&1 && continue
+  nearest_dir "$f" composer.json >/dev/null 2>&1 && continue
+  case "$f" in *.tf) continue ;; esac
+  UNOWNED="${UNOWNED}${f}
+"
+done <<< "$STAGED_FILES"
+UNOWNED="$(printf '%s\n' "$UNOWNED" | grep . || true)"
+if [ -n "$UNOWNED" ]; then
+  RUNNER="$(find_prettier || true)"
+  if [ -n "$RUNNER" ]; then
+    echo "==> root/un-owned (prettier via $RUNNER)"
+    xargs0 "$UNOWNED" "$RUNNER/node_modules/.bin/prettier" --write --ignore-unknown
+    xargs0 "$UNOWNED" git add
   else
-    echo "Skipping laravel gates (php or vendor/bin/pint not available — run 'composer install' in laravel/)"
-  fi
-fi
-
-# ── Vite (React) ──────────────────────────────────────────────────
-if [ -n "$VITEJS_ALL" ]; then
-  echo "Formatting vitejs..."
-  cd vitejs
-  echo "$VITEJS_ALL" | sed 's|^vitejs/||' | xargs npx prettier --write --ignore-unknown
-  if [ -n "$VITEJS_TS" ]; then
-    echo "$VITEJS_TS" | sed 's|^vitejs/||' | xargs npx eslint --fix
-    npx tsc --noEmit
-  fi
-  cd ..
-  echo "$VITEJS_ALL" | xargs git add
-fi
-
-# ── Next.js ───────────────────────────────────────────────────────
-if [ -n "$NEXTJS_ALL" ]; then
-  echo "Formatting nextjs..."
-  cd nextjs
-  echo "$NEXTJS_ALL" | sed 's|^nextjs/||' | xargs npx prettier --write --ignore-unknown
-  if [ -n "$NEXTJS_TS" ]; then
-    echo "$NEXTJS_TS" | sed 's|^nextjs/||' | xargs npx eslint --fix
-    npx tsc --noEmit
-  fi
-  cd ..
-  echo "$NEXTJS_ALL" | xargs git add
-fi
-
-# ── E2E ───────────────────────────────────────────────────────────
-if [ -n "$E2E_ALL" ]; then
-  echo "Formatting e2e..."
-  cd e2e
-  echo "$E2E_ALL" | sed 's|^e2e/||' | xargs npx prettier --write --ignore-unknown
-  if [ -n "$E2E_TS" ]; then
-    echo "$E2E_TS" | sed 's|^e2e/||' | xargs npx eslint --fix
-    npx tsc --noEmit
-  fi
-  cd ..
-  echo "$E2E_ALL" | xargs git add
-fi
-
-# ── Mobile ────────────────────────────────────────────────────────
-if [ -n "$MOBILE_DART" ]; then
-  if command -v dart &> /dev/null; then
-    echo "Formatting mobile..."
-    cd mobile
-    echo "$MOBILE_DART" | sed 's|^mobile/||' | xargs dart format
-    if command -v flutter &> /dev/null; then
-      dart analyze --fatal-infos
-    fi
-    cd ..
-    echo "$MOBILE_DART" | xargs git add
-  else
-    echo "Skipping mobile lint (dart not installed)"
-  fi
-fi
-
-# ── Infra ─────────────────────────────────────────────────────────
-if [ -n "$INFRA_TF" ]; then
-  if command -v terraform &> /dev/null; then
-    echo "Checking infra..."
-    cd infra/stack
-    echo "$INFRA_TF" | sed 's|^infra/stack/||' | xargs terraform fmt
-    [ -d .terraform ] || terraform init -backend=false -input=false >/dev/null
-    terraform validate
-    if command -v tflint &> /dev/null; then
-      tflint --recursive
-    else
-      echo "Skipping tflint (not installed)"
-    fi
-    if command -v trivy &> /dev/null; then
-      trivy config --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .terraform .
-    else
-      echo "Skipping trivy config scan (not installed)"
-    fi
-    cd ../..
-    echo "$INFRA_TF" | xargs git add
-  else
-    echo "Skipping infra lint (terraform not installed)"
-  fi
-fi
-
-# ── Admin Panel ───────────────────────────────────────────────────
-if [ -n "$ADMIN_PANEL_GO" ]; then
-  if command -v go &> /dev/null; then
-    echo "Checking admin-panel..."
-    echo "$ADMIN_PANEL_GO" | sed 's|^admin-panel/||' | (cd admin-panel && xargs gofmt -w)
-    (cd admin-panel && go vet ./...)
-    echo "$ADMIN_PANEL_GO" | xargs git add
-  else
-    echo "Skipping admin-panel checks (go not installed)"
-  fi
-fi
-
-# ── CLI ───────────────────────────────────────────────────────────
-if [ -n "$CLI_ALL" ]; then
-  echo "Formatting & checking CLI..."
-  cd cli
-  echo "$CLI_ALL" | sed 's|^cli/||' | xargs npx prettier --write --ignore-unknown
-  if [ -n "$CLI_TS" ]; then
-    echo "$CLI_TS" | sed 's|^cli/||' | xargs npx eslint --fix
-    npx tsc --noEmit
-  fi
-  if [ -n "$CLI_SRC_TS" ]; then
-    npx tsup src/index.ts --format esm --target node18 --clean
-  fi
-  cd ..
-  echo "$CLI_ALL" | xargs git add
-fi
-
-# ── Addons / Features (overlays) ──────────────────────────────────
-OVERLAY_STAGED=$(echo "$STAGED_FILES" | grep -E '^(addons|features)/' || true)
-if [ -n "$OVERLAY_STAGED" ]; then
-  echo "Formatting addons/features overlays..."
-  OVERLAY_PRETTIER=$(echo "$OVERLAY_STAGED" | grep -E '\.(ts|tsx|js|jsx|json|md|yml|yaml)$' || true)
-  if [ -n "$OVERLAY_PRETTIER" ]; then
-    echo "$OVERLAY_PRETTIER" | xargs npx --prefix cli prettier --write --ignore-unknown
-    echo "$OVERLAY_PRETTIER" | xargs git add
-  fi
-  OVERLAY_RUFF=$(echo "$OVERLAY_STAGED" | grep '^features/auth/fastapi/.*\.py$' || true)
-  if [ -n "$OVERLAY_RUFF" ] && [ -x fastapi/.venv/bin/ruff ]; then
-    # shellcheck disable=SC2086
-    fastapi/.venv/bin/ruff format $OVERLAY_RUFF
-    # shellcheck disable=SC2086
-    fastapi/.venv/bin/ruff check --fix $OVERLAY_RUFF
-    echo "$OVERLAY_RUFF" | xargs git add
+    echo "  (no prettier install found — root/un-owned files left as-is:)"
+    echo "$UNOWNED"
   fi
 fi

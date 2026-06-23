@@ -92,7 +92,7 @@ describe('default-skip — scenario A: fresh scaffold', () => {
     const hookPath = join(dest, '.githooks/pre-commit');
     let hook = await readFile(hookPath, 'utf-8');
     hook = hook.replace(
-      'echo "Formatting fastify..."',
+      'echo "==> node: $pkg"',
       'echo "Custom backend message"',
     );
     await writeFile(hookPath, hook);

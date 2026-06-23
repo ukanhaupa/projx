@@ -11,12 +11,12 @@ import (
 )
 
 type fakeQuerier struct {
-	users        map[string]*User
-	emails       map[string]string
-	sessions     map[string]*Session
-	tokenIndex   map[string]string
-	revokeChain  [][]string
-	revokeCalls  []string
+	users       map[string]*User
+	emails      map[string]string
+	sessions    map[string]*Session
+	tokenIndex  map[string]string
+	revokeChain [][]string
+	revokeCalls []string
 }
 
 func newFake() *fakeQuerier {
@@ -60,8 +60,8 @@ func (f *fakeQuerier) UpdateUserLastLogin(_ context.Context, id string) error {
 func (f *fakeQuerier) RecordLoginFailure(context.Context, string, int, int) (int32, sql.NullTime, error) {
 	return 1, sql.NullTime{}, nil
 }
-func (f *fakeQuerier) SetUserMFA(context.Context, string, bool, sql.NullString) error    { return nil }
-func (f *fakeQuerier) MarkEmailVerified(context.Context, string) error                   { return nil }
+func (f *fakeQuerier) SetUserMFA(context.Context, string, bool, sql.NullString) error { return nil }
+func (f *fakeQuerier) MarkEmailVerified(context.Context, string) error                { return nil }
 
 func (f *fakeQuerier) CreateSession(_ context.Context, p CreateSessionParams) (*Session, error) {
 	s := &Session{
@@ -86,6 +86,22 @@ func (f *fakeQuerier) GetSessionByID(_ context.Context, id string) (*Session, er
 	}
 	return nil, apperr.NotFound("session")
 }
+func (f *fakeQuerier) GetChildSession(_ context.Context, parentSessionID string) (*Session, error) {
+	for _, s := range f.sessions {
+		if s.ParentSessionID.Valid && s.ParentSessionID.String == parentSessionID {
+			return s, nil
+		}
+	}
+	return nil, apperr.NotFound("session")
+}
+func (f *fakeQuerier) ClaimSessionForRotation(_ context.Context, id string) (int64, error) {
+	s, ok := f.sessions[id]
+	if !ok || s.RevokedAt.Valid {
+		return 0, nil
+	}
+	s.RevokedAt = sql.NullTime{Valid: true, Time: time.Now()}
+	return 1, nil
+}
 func (f *fakeQuerier) RevokeSession(_ context.Context, id string) error {
 	if s, ok := f.sessions[id]; ok {
 		s.RevokedAt = sql.NullTime{Valid: true, Time: time.Now()}
@@ -93,7 +109,9 @@ func (f *fakeQuerier) RevokeSession(_ context.Context, id string) error {
 	}
 	return nil
 }
-func (f *fakeQuerier) RevokeSessionsForUser(context.Context, string, sql.NullString) error { return nil }
+func (f *fakeQuerier) RevokeSessionsForUser(context.Context, string, sql.NullString) error {
+	return nil
+}
 func (f *fakeQuerier) RevokeSessionChain(_ context.Context, ids []string) error {
 	f.revokeChain = append(f.revokeChain, append([]string(nil), ids...))
 	for _, id := range ids {
@@ -134,13 +152,13 @@ func (f *fakeQuerier) GetSessionDescendants(_ context.Context, id string) ([]str
 func (f *fakeQuerier) ListActiveSessionsForUser(context.Context, string) ([]*Session, error) {
 	return nil, nil
 }
-func (f *fakeQuerier) DeleteExpiredSessions(context.Context) error              { return nil }
+func (f *fakeQuerier) DeleteExpiredSessions(context.Context) error                       { return nil }
 func (f *fakeQuerier) CreatePasswordResetToken(context.Context, CreateTokenParams) error { return nil }
 func (f *fakeQuerier) GetPasswordResetToken(context.Context, string) (*Token, error) {
 	return nil, errors.New("not impl")
 }
-func (f *fakeQuerier) MarkPasswordResetTokenUsed(context.Context, string) error      { return nil }
-func (f *fakeQuerier) DeleteExpiredPasswordResetTokens(context.Context) error        { return nil }
+func (f *fakeQuerier) MarkPasswordResetTokenUsed(context.Context, string) error        { return nil }
+func (f *fakeQuerier) DeleteExpiredPasswordResetTokens(context.Context) error          { return nil }
 func (f *fakeQuerier) CreateEmailVerifyToken(context.Context, CreateTokenParams) error { return nil }
 func (f *fakeQuerier) GetEmailVerifyToken(context.Context, string) (*Token, error) {
 	return nil, errors.New("not impl")
@@ -151,7 +169,7 @@ func (f *fakeQuerier) CreateRecoveryCode(context.Context, CreateTokenParams) err
 func (f *fakeQuerier) GetUnusedRecoveryCodes(context.Context, string) ([]*RecoveryCode, error) {
 	return nil, nil
 }
-func (f *fakeQuerier) MarkRecoveryCodeUsed(context.Context, string) error      { return nil }
+func (f *fakeQuerier) MarkRecoveryCodeUsed(context.Context, string) error       { return nil }
 func (f *fakeQuerier) DeleteRecoveryCodesForUser(context.Context, string) error { return nil }
 
 func newTestSecrets(t *testing.T) *Secrets {
@@ -204,6 +222,38 @@ func TestRefreshReplayRevokesChain(t *testing.T) {
 		if !f.sessions[id].RevokedAt.Valid {
 			t.Fatalf("session %s must be revoked", id)
 		}
+	}
+}
+
+func TestRefreshRotationGrace(t *testing.T) {
+	f := newFake()
+	svc := New(f, newTestSecrets(t))
+	u, _ := f.CreateUser(context.Background(), CreateUserParams{ID: "u1", Email: "a@b", PasswordHash: "x", Role: "user"})
+	s1, _ := svc.IssueSession(context.Background(), IssueSessionInput{User: u})
+
+	if _, err := svc.Refresh(context.Background(), s1.Tokens.RefreshToken, "", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	graced, err := svc.Refresh(context.Background(), s1.Tokens.RefreshToken, "", "")
+	if err != nil {
+		t.Fatalf("lost-rotation retry must recover, got %v", err)
+	}
+	if graced.Tokens.RefreshToken == "" {
+		t.Fatal("expected a recovered refresh token")
+	}
+
+	if _, err := svc.Refresh(context.Background(), graced.Tokens.RefreshToken, "", ""); err != nil {
+		t.Fatalf("recovered token must be usable, got %v", err)
+	}
+
+	_, err = svc.Refresh(context.Background(), s1.Tokens.RefreshToken, "", "")
+	if err == nil {
+		t.Fatal("replay after the chain advanced must fail")
+	}
+	var ae apperr.AppError
+	if !errors.As(err, &ae) || ae.Detail != "token_replay_detected" {
+		t.Fatalf("expected token_replay_detected, got %v", err)
 	}
 }
 

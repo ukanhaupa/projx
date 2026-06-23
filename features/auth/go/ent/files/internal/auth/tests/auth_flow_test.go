@@ -121,6 +121,21 @@ func TestRefreshRotationAndReplayDetection(t *testing.T) {
 	rec = doJSON(t, router, "POST", "/refresh", map[string]any{"refresh_token": refresh})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
+	// Re-presenting the original token while its replacement is still the
+	// unused head is a lost-rotation retry — the session must recover.
+	rec = doJSON(t, router, "POST", "/refresh", map[string]any{"refresh_token": refresh})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var graced map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &graced))
+	gracedRefresh, _ := graced["refresh_token"].(string)
+	require.NotEmpty(t, gracedRefresh)
+
+	// The graced replacement is usable, which advances the chain past the
+	// original token.
+	rec = doJSON(t, router, "POST", "/refresh", map[string]any{"refresh_token": gracedRefresh})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	// Now the original token is a genuine replay and revokes the session.
 	rec = doJSON(t, router, "POST", "/refresh", map[string]any{"refresh_token": refresh})
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	var payload map[string]any

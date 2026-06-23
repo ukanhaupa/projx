@@ -64,6 +64,18 @@ func TestFullSignupLoginRefreshReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Re-presenting s1 while s2 is still the unused head is a lost-rotation
+	// retry — it must recover (re-rotate off s2), not nuke the chain.
+	graced, err := svc.Refresh(ctx, s1.Tokens.RefreshToken, "", "")
+	if err != nil {
+		t.Fatalf("lost-rotation retry must recover, got %v", err)
+	}
+	if _, err := svc.Refresh(ctx, graced.Tokens.RefreshToken, "", ""); err != nil {
+		t.Fatalf("recovered token must be usable, got %v", err)
+	}
+
+	// The chain has advanced past s1, so re-presenting it is a genuine replay.
 	if _, err := svc.Refresh(ctx, s1.Tokens.RefreshToken, "", ""); err == nil {
 		t.Fatal("expected replay error")
 	} else {

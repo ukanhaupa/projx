@@ -1,235 +1,229 @@
 #!/usr/bin/env bash
 set -e
 
-# ── Secret detection ──────────────────────────────────────────────
-STAGED_DIFF="$(git diff --cached --diff-filter=ACMR)"
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$STAGED_FILES" ] && exit 0
 
-AKIA_HITS="$(echo "$STAGED_DIFF" | grep -E '(AKIA|ASIA)[A-Z0-9]{16}' | grep -vE '(pragma: allowlist secret|gitleaks:allow)' || true)"
-if [ -n "$AKIA_HITS" ]; then
-  echo "ERROR: Possible AWS access key detected in staged changes:"
-  echo "$AKIA_HITS" | head -5
-  echo "Add 'pragma: allowlist secret' on the line to whitelist if intentional."
-  exit 1
-fi
-
-if echo "$STAGED_DIFF" | grep -qE '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' 2>/dev/null; then
-  REAL_SECRETS="$(echo "$STAGED_DIFF" | grep -E '(password|secret|token)\s*[:=]\s*["\x27][^"'\'']{8,}' | grep -vE '(test-secret|dev-secret|example|placeholder|your-|changeme|CHANGE_ME|pragma: allowlist secret|gitleaks:allow)' || true)"
-  if [ -n "$REAL_SECRETS" ]; then
-    echo "WARNING: Possible secret detected in staged changes:"
-    echo "$REAL_SECRETS" | head -5
-    echo "Add 'pragma: allowlist secret' on the line to whitelist, or commit with --no-verify if intentional."
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks git --staged --no-banner --redact; then
+    echo "ERROR: gitleaks flagged a potential secret in staged changes (redacted above)."
+    echo "False positive? Add a path/regex to .gitleaks.toml, or append 'gitleaks:allow' on the line."
+    exit 1
+  fi
+else
+  echo "WARNING: gitleaks not installed — minimal AWS-key fallback only ('brew install gitleaks' for full coverage)."
+  AKIA_HITS="$(git diff --cached --diff-filter=ACMR | grep -E '(AKIA|ASIA)[A-Z0-9]{16}' | grep -vE 'gitleaks:allow' || true)"
+  if [ -n "$AKIA_HITS" ]; then
+    echo "ERROR: Possible AWS access key in staged changes:"
+    echo "$AKIA_HITS" | head -5
     exit 1
   fi
 fi
 
-STAGED_ENV_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(\.env$|.*\/\.env$|.*\.env\.(prod|staging|dev)$)' || true)"
+STAGED_ENV_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^(\.env$|.*/\.env$|.*\.env\.(prod|staging|dev)$)' || true)"
 if [ -n "$STAGED_ENV_FILES" ]; then
   echo "ERROR: .env file(s) staged for commit:"
   echo "$STAGED_ENV_FILES"
   exit 1
 fi
 
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
-<% for (const inst of fastapiInstances) { %>
-
-<%= inst.upper %>_PY=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.py$' || true)
-if [ -n "$<%= inst.upper %>_PY" ]; then
-  echo "Running quality gates for <%= inst.path %>..."
-  cd <%= inst.path %>
-  echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff format
-  echo "$<%= inst.upper %>_PY" | sed 's|^<%= inst.path %>/||' | xargs uv run ruff check --fix
-  uv run mypy
-  if grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/ | grep -v 'pragma:.*allow-private-import'; then
-    echo "ERROR: src/ files cannot import from another module's _-prefixed file. Import from the package, or add '# pragma: allow-private-import' on the line if the cycle makes a package import impossible."
-    exit 1
-  fi
-  uv run lint-imports
-  cd ..
-  echo "$<%= inst.upper %>_PY" | xargs git add
+MERGE_MARKERS="$(git diff --cached --diff-filter=ACMR | grep -nE '^\+(<{7}|>{7})[ \t]' || true)"
+if [ -n "$MERGE_MARKERS" ]; then
+  echo "ERROR: merge conflict markers in staged changes:"
+  echo "$MERGE_MARKERS" | head
+  exit 1
 fi
-<% } %>
-<% for (const inst of fastifyInstances) { %>
 
-<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
-<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
-if [ -n "$<%= inst.upper %>_ALL" ]; then
-  echo "Formatting <%= inst.path %>..."
-  cd <%= inst.path %>
-  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= inst.upper %>_TS" ]; then
-    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
-    <%= pm.exec %> tsc --noEmit
-  fi
-  cd ..
-  echo "$<%= inst.upper %>_ALL" | xargs git add
+BIG=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  [ -f "$f" ] || continue
+  sz="$(wc -c < "$f" 2>/dev/null | tr -d ' ')"
+  [ -n "$sz" ] && [ "$sz" -gt 10485760 ] && BIG="${BIG}  ${f} ($((sz / 1048576)) MB)
+"
+done <<< "$STAGED_FILES"
+if [ -n "$BIG" ]; then
+  echo "ERROR: staged file(s) over 10 MB — likely accidental (use git-lfs, or --no-verify if intentional):"
+  printf '%s' "$BIG"
+  exit 1
 fi
-<% } %>
-<% for (const inst of expressInstances) { %>
 
-<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
-<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
-if [ -n "$<%= inst.upper %>_ALL" ]; then
-  echo "Formatting <%= inst.path %>..."
-  cd <%= inst.path %>
-  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= inst.upper %>_TS" ]; then
-    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
-    <%= pm.exec %> tsc --noEmit
+nearest_dir() {
+  local dir
+  dir="$(dirname "$1")"
+  while :; do
+    if [ -f "$dir/$2" ]; then
+      [ "$dir" = "." ] && echo "." || echo "${dir#./}"
+      return 0
+    fi
+    case "$dir" in .|/) return 1 ;; esac
+    dir="$(dirname "$dir")"
+  done
+}
+
+owner_dirs() {
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] && { nearest_dir "$f" "$2" || true; }
+  done <<< "$1" | sort -u
+}
+
+members() {
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ "$(nearest_dir "$f" "$2" || true)" = "$3" ] && printf '%s\n' "$f"
+  done <<< "$1"
+  return 0
+}
+
+strip_prefix() {
+  if [ "$1" = "." ]; then cat; else sed "s|^$1/||"; fi
+}
+
+xargs0() {
+  printf '%s\n' "$1" | tr '\n' '\0' | xargs -0 "${@:2}"
+}
+
+find_prettier() {
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    [ -x "$d/node_modules/.bin/prettier" ] && { echo "$d"; return 0; }
+  done <<< "$(find . -maxdepth 3 -name package.json -not -path '*/node_modules/*' -exec dirname {} \; | sed 's#^\./##' | sort -u)"
+  return 1
+}
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" package.json "$pkg")"
+  [ -z "$files" ] && continue
+  echo "==> node: $pkg"
+  rels="$(printf '%s\n' "$files" | strip_prefix "$pkg")"
+  if [ -x "$pkg/node_modules/.bin/prettier" ]; then
+    ( cd "$pkg" && xargs0 "$rels" ./node_modules/.bin/prettier --write --ignore-unknown )
+  else
+    echo "  (prettier not installed in $pkg — run the package manager install)"
   fi
-  cd ..
-  echo "$<%= inst.upper %>_ALL" | xargs git add
-fi
-<% } %>
-<% for (const inst of goInstances) { %>
+  lint="$(printf '%s\n' "$rels" | grep -E '\.(ts|tsx)$' || true)"
+  if [ -n "$lint" ] && [ -x "$pkg/node_modules/.bin/eslint" ]; then
+    ( cd "$pkg" && xargs0 "$lint" ./node_modules/.bin/eslint --fix )
+  fi
+  xargs0 "$files" git add
+  ts="$(printf '%s\n' "$rels" | grep -E '\.(ts|tsx)$' || true)"
+  if [ -n "$ts" ] && [ -f "$pkg/tsconfig.json" ] && [ -x "$pkg/node_modules/.bin/tsc" ]; then
+    ( cd "$pkg" && ./node_modules/.bin/tsc --noEmit )
+  fi
+done <<< "$(owner_dirs "$STAGED_FILES" package.json)"
 
-<%= inst.upper %>_GO=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.go$' || true)
-if [ -n "$<%= inst.upper %>_GO" ]; then
-  if command -v go &>/dev/null; then
-    echo "Checking <%= inst.path %>..."
-    cd <%= inst.path %>
-    REL_FILES=$(echo "$<%= inst.upper %>_GO" | sed 's|^<%= inst.path %>/||')
-    UNFORMATTED=$(echo "$REL_FILES" | xargs gofmt -l)
-    if [ -n "$UNFORMATTED" ]; then
-      echo "ERROR: gofmt found unformatted files in <%= inst.path %>:"
-      echo "$UNFORMATTED"
-      echo "Run 'gofmt -w' on these files and re-stage."
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" pyproject.toml "$pkg")"
+  pyfiles="$(printf '%s\n' "$files" | grep -E '\.py$' || true)"
+  [ -z "$pyfiles" ] && continue
+  if ! command -v uv >/dev/null 2>&1; then echo "  (uv not installed — skipping $pkg)"; continue; fi
+  echo "==> python: $pkg"
+  rels="$(printf '%s\n' "$pyfiles" | strip_prefix "$pkg")"
+  ( cd "$pkg" && xargs0 "$rels" uv run ruff format )
+  ( cd "$pkg" && xargs0 "$rels" uv run ruff check --fix )
+  xargs0 "$pyfiles" git add
+  if grep -qiE 'mypy' "$pkg/pyproject.toml" 2>/dev/null; then ( cd "$pkg" && uv run mypy ); fi
+  if grep -qiE 'import.?linter' "$pkg/pyproject.toml" 2>/dev/null; then
+    if [ -d "$pkg/src" ] && ( cd "$pkg" && grep -rEn 'from src\.[a-z_]+(\.[a-z_]+)?\._[a-z_]+ import' src/ | grep -v 'pragma:.*allow-private-import' ); then
+      echo "ERROR: $pkg/src imports another module's _-prefixed file. Import from the package, or add '# pragma: allow-private-import' on the line."
       exit 1
     fi
-    go vet ./...
-    if command -v golangci-lint &>/dev/null; then
-      golangci-lint run ./...
-    else
-      echo "Skipping golangci-lint (not installed — \`brew install golangci-lint\` to enable)"
-    fi
-    cd ..
-    echo "$<%= inst.upper %>_GO" | xargs git add
+    ( cd "$pkg" && uv run lint-imports )
+  fi
+done <<< "$(owner_dirs "$STAGED_FILES" pyproject.toml)"
+
+while IFS= read -r mod; do
+  [ -z "$mod" ] && continue
+  files="$(members "$STAGED_FILES" go.mod "$mod")"
+  gofiles="$(printf '%s\n' "$files" | grep -E '\.go$' || true)"
+  [ -z "$gofiles" ] && continue
+  if ! command -v go >/dev/null 2>&1; then echo "  (go not installed — skipping $mod)"; continue; fi
+  echo "==> go: $mod"
+  ( cd "$mod" && printf '%s\n' "$gofiles" | strip_prefix "$mod" | tr '\n' '\0' | xargs -0 gofmt -w )
+  xargs0 "$gofiles" git add
+  ( cd "$mod" && go vet ./... )
+  if command -v golangci-lint >/dev/null 2>&1; then ( cd "$mod" && golangci-lint run ./... ); fi
+done <<< "$(owner_dirs "$STAGED_FILES" go.mod)"
+
+while IFS= read -r crate; do
+  [ -z "$crate" ] && continue
+  files="$(members "$STAGED_FILES" Cargo.toml "$crate")"
+  rsfiles="$(printf '%s\n' "$files" | grep -E '\.rs$' || true)"
+  [ -z "$rsfiles" ] && continue
+  if ! command -v cargo >/dev/null 2>&1; then echo "  (cargo not installed — skipping $crate)"; continue; fi
+  echo "==> rust: $crate"
+  ( cd "$crate" && cargo fmt )
+  xargs0 "$rsfiles" git add
+done <<< "$(owner_dirs "$STAGED_FILES" Cargo.toml)"
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" pubspec.yaml "$pkg")"
+  dartfiles="$(printf '%s\n' "$files" | grep -E '\.dart$' || true)"
+  [ -z "$dartfiles" ] && continue
+  if ! command -v dart >/dev/null 2>&1; then echo "  (dart not installed — skipping $pkg)"; continue; fi
+  echo "==> dart: $pkg"
+  ( cd "$pkg" && printf '%s\n' "$dartfiles" | strip_prefix "$pkg" | tr '\n' '\0' | xargs -0 dart format )
+  xargs0 "$dartfiles" git add
+  if command -v flutter >/dev/null 2>&1; then ( cd "$pkg" && dart analyze --fatal-infos ); fi
+done <<< "$(owner_dirs "$STAGED_FILES" pubspec.yaml)"
+
+while IFS= read -r pkg; do
+  [ -z "$pkg" ] && continue
+  files="$(members "$STAGED_FILES" composer.json "$pkg")"
+  phpfiles="$(printf '%s\n' "$files" | grep -E '\.php$' || true)"
+  [ -z "$phpfiles" ] && continue
+  if command -v php >/dev/null 2>&1 && [ -x "$pkg/vendor/bin/pint" ]; then
+    echo "==> php: $pkg"
+    ( cd "$pkg" && printf '%s\n' "$phpfiles" | strip_prefix "$pkg" | tr '\n' '\0' | xargs -0 ./vendor/bin/pint )
+    xargs0 "$phpfiles" git add
+    ( cd "$pkg" && ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M )
   else
-    echo "Skipping <%= inst.path %> gates (go toolchain not installed)"
+    echo "  (php or vendor/bin/pint unavailable — skipping $pkg; run composer install)"
   fi
-fi
-<% } %>
-<% for (const inst of rustInstances) { %>
+done <<< "$(owner_dirs "$STAGED_FILES" composer.json)"
 
-<%= inst.upper %>_RS=$(echo "$STAGED_FILES" | grep -E '^<%= inst.path %>/.*\.rs$' || true)
-if [ -n "$<%= inst.upper %>_RS" ]; then
-  if command -v cargo &>/dev/null; then
-    echo "Checking <%= inst.path %>..."
-    cd <%= inst.path %>
-    REL_RS=$(echo "$<%= inst.upper %>_RS" | sed 's|^<%= inst.path %>/||')
-    echo "$REL_RS" | xargs cargo fmt --check --
-    cargo clippy -- -D warnings
-    cd ..
-    echo "$<%= inst.upper %>_RS" | xargs git add
+TF_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '\.tf$' || true)"
+if [ -n "$TF_FILES" ]; then
+  if command -v terraform >/dev/null 2>&1; then
+    while IFS= read -r d; do
+      [ -z "$d" ] && continue
+      echo "==> terraform: $d"
+      ( cd "$d" && terraform fmt )
+    done <<< "$(while IFS= read -r f; do [ -n "$f" ] && dirname "$f"; done <<< "$TF_FILES" | sort -u)"
+    xargs0 "$TF_FILES" git add
   else
-    echo "Skipping <%= inst.path %> gates (cargo not installed)"
+    echo "  (terraform not installed — skipping fmt)"
   fi
 fi
-<% } %>
-<% for (const inst of laravelInstances) { %>
 
-<%= inst.upper %>_PHP=$(echo "$STAGED_FILES" | grep -E '^<%= inst.path %>/.*\.php$' || true)
-if [ -n "$<%= inst.upper %>_PHP" ]; then
-  if command -v php &>/dev/null && [ -x <%= inst.path %>/vendor/bin/pint ]; then
-    echo "Checking <%= inst.path %>..."
-    cd <%= inst.path %>
-    REL_PHP=$(echo "$<%= inst.upper %>_PHP" | sed 's|^<%= inst.path %>/||')
-    echo "$REL_PHP" | xargs ./vendor/bin/pint
-    ./vendor/bin/phpstan analyse --no-progress --level=8 --memory-limit=512M
-    cd ..
-    echo "$<%= inst.upper %>_PHP" | xargs git add
+UNOWNED=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  nearest_dir "$f" package.json >/dev/null 2>&1 && continue
+  nearest_dir "$f" pyproject.toml >/dev/null 2>&1 && continue
+  nearest_dir "$f" go.mod >/dev/null 2>&1 && continue
+  nearest_dir "$f" Cargo.toml >/dev/null 2>&1 && continue
+  nearest_dir "$f" pubspec.yaml >/dev/null 2>&1 && continue
+  nearest_dir "$f" composer.json >/dev/null 2>&1 && continue
+  case "$f" in *.tf) continue ;; esac
+  UNOWNED="${UNOWNED}${f}
+"
+done <<< "$STAGED_FILES"
+UNOWNED="$(printf '%s\n' "$UNOWNED" | grep . || true)"
+if [ -n "$UNOWNED" ]; then
+  RUNNER="$(find_prettier || true)"
+  if [ -n "$RUNNER" ]; then
+    echo "==> root/un-owned (prettier via $RUNNER)"
+    xargs0 "$UNOWNED" "$RUNNER/node_modules/.bin/prettier" --write --ignore-unknown
+    xargs0 "$UNOWNED" git add
   else
-    echo "Skipping <%= inst.path %> gates (php or vendor/bin/pint not available — run 'composer install' in <%= inst.path %>/)"
+    echo "  (no prettier install found — root/un-owned files left as-is:)"
+    echo "$UNOWNED"
   fi
 fi
-<% } %>
-<% for (const inst of vitejsInstances) { %>
-
-<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tsx\?$' || true)
-<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
-if [ -n "$<%= inst.upper %>_ALL" ]; then
-  echo "Formatting <%= inst.path %>..."
-  cd <%= inst.path %>
-  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= inst.upper %>_TS" ]; then
-    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
-    <%= pm.exec %> tsc --noEmit
-  fi
-  cd ..
-  echo "$<%= inst.upper %>_ALL" | xargs git add
-fi
-<% } %>
-<% for (const inst of e2eInstances) { %>
-
-<%= inst.upper %>_TS=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.ts$' || true)
-<%= inst.upper %>_ALL=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/' || true)
-if [ -n "$<%= inst.upper %>_ALL" ]; then
-  echo "Formatting <%= inst.path %>..."
-  cd <%= inst.path %>
-  echo "$<%= inst.upper %>_ALL" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> prettier --write --ignore-unknown
-  if [ -n "$<%= inst.upper %>_TS" ]; then
-    echo "$<%= inst.upper %>_TS" | sed 's|^<%= inst.path %>/||' | xargs <%= pm.exec %> eslint --fix
-    <%= pm.exec %> tsc --noEmit
-  fi
-  cd ..
-  echo "$<%= inst.upper %>_ALL" | xargs git add
-fi
-<% } %>
-<% for (const inst of mobileInstances) { %>
-
-<%= inst.upper %>_DART=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.dart$' || true)
-if [ -n "$<%= inst.upper %>_DART" ]; then
-  if command -v dart &> /dev/null; then
-    echo "Formatting <%= inst.path %>..."
-    cd <%= inst.path %>
-    echo "$<%= inst.upper %>_DART" | sed 's|^<%= inst.path %>/||' | xargs dart format
-    if command -v flutter &> /dev/null; then
-      dart analyze --fatal-infos
-    fi
-    cd ..
-    echo "$<%= inst.upper %>_DART" | xargs git add
-  else
-    echo "Skipping mobile lint (dart not installed)"
-  fi
-fi
-<% } %>
-<% for (const inst of infraInstances) { %>
-
-<%= inst.upper %>_TF=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.tf$' || true)
-if [ -n "$<%= inst.upper %>_TF" ]; then
-  if command -v terraform &> /dev/null; then
-    echo "Checking <%= inst.path %>..."
-    cd <%= inst.path %>/stack
-    echo "$<%= inst.upper %>_TF" | sed 's|^<%= inst.path %>/stack/||' | xargs terraform fmt
-    [ -d .terraform ] || terraform init -backend=false -input=false >/dev/null
-    terraform validate
-    if command -v tflint &> /dev/null; then
-      tflint --recursive
-    else
-      echo "Skipping tflint (not installed)"
-    fi
-    if command -v trivy &> /dev/null; then
-      trivy config --exit-code 1 --severity HIGH,CRITICAL .
-    else
-      echo "Skipping trivy config scan (not installed)"
-    fi
-    cd ../..
-    echo "$<%= inst.upper %>_TF" | xargs git add
-  else
-    echo "Skipping infra lint (terraform not installed)"
-  fi
-fi
-<% } %>
-<% for (const inst of adminPanelInstances) { %>
-
-<%= inst.upper %>_GO=$(echo "$STAGED_FILES" | grep '^<%= inst.path %>/.*\.go$' || true)
-if [ -n "$<%= inst.upper %>_GO" ]; then
-  if command -v go &> /dev/null; then
-    echo "Checking <%= inst.path %>..."
-    echo "$<%= inst.upper %>_GO" | sed 's|^<%= inst.path %>/||' | (cd <%= inst.path %> && xargs gofmt -w)
-    (cd <%= inst.path %> && go vet ./...)
-    echo "$<%= inst.upper %>_GO" | xargs git add
-  else
-    echo "Skipping <%= inst.path %> checks (go not installed)"
-  fi
-fi
-<% } %>

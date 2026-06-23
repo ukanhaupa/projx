@@ -43,6 +43,7 @@ const VERIFICATION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MFA_CHALLENGE_TTL = '5m';
+const MAX_ROTATION_ATTEMPTS = 3;
 
 const PUBLIC_RATE_LIMIT_OPTS = {
   windowMs: 60_000,
@@ -130,7 +131,7 @@ interface UserDelegate {
 interface RefreshTokenDelegate {
   create(args: { data: Partial<RefreshTokenRow> }): Promise<RefreshTokenRow>;
   findUnique(args: {
-    where: { token_hash: string };
+    where: { token_hash: string } | { id: string };
   }): Promise<RefreshTokenRow | null>;
   findMany(args: {
     where: { user_id: string; revoked_at: null };
@@ -236,6 +237,28 @@ const VerifyEmailSchema = z.object({
 const ResendVerificationSchema = z.object({
   email: z.string().email(),
 });
+
+async function resolveRotationGraceChild(
+  db: AuthPrismaClient,
+  sessionId: string,
+  token: Pick<RefreshTokenRow, 'rotated_to' | 'replay_detected_at'>,
+): Promise<RefreshTokenRow | null> {
+  if (token.rotated_to == null || token.replay_detected_at != null) return null;
+  const child = await db.refreshToken.findUnique({
+    where: { id: token.rotated_to },
+  });
+  if (
+    !child ||
+    child.session_id !== sessionId ||
+    child.rotated_to != null ||
+    child.revoked_at != null ||
+    child.replay_detected_at != null ||
+    child.expires_at.getTime() < Date.now()
+  ) {
+    return null;
+  }
+  return child;
+}
 
 function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
   const parsed = schema.safeParse(body);
@@ -729,7 +752,7 @@ export function authRouter(prisma: PrismaLike): Router {
         throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
-      const handleReplay = async (): Promise<never> => {
+      const revokeForReplay = async (replayTokenId: string): Promise<never> => {
         const now = new Date();
         await db.$transaction([
           db.refreshToken.updateMany({
@@ -737,7 +760,7 @@ export function authRouter(prisma: PrismaLike): Router {
             data: { revoked_at: now },
           }),
           db.refreshToken.update({
-            where: { id: tokenRow.id },
+            where: { id: replayTokenId },
             data: { replay_detected_at: now },
           }),
         ]);
@@ -745,7 +768,7 @@ export function authRouter(prisma: PrismaLike): Router {
           {
             session_id: tokenRow.session_id,
             user_id: tokenRow.user_id,
-            token_id: tokenRow.id,
+            token_id: replayTokenId,
           },
           'refresh_token_replay_detected',
         );
@@ -756,11 +779,31 @@ export function authRouter(prisma: PrismaLike): Router {
         );
       };
 
+      // A cleanly-rotated token whose replacement is still the unused head is a
+      // lost-rotation retry (client never persisted the replacement), not a replay.
+      let activeToken: RefreshTokenRow = tokenRow;
       if (tokenRow.rotated_to != null || tokenRow.revoked_at != null) {
-        await handleReplay();
+        const graceChild = await resolveRotationGraceChild(
+          db,
+          tokenRow.session_id,
+          tokenRow,
+        );
+        if (!graceChild) {
+          return revokeForReplay(tokenRow.id);
+        }
+        activeToken = graceChild;
+        req.log?.info?.(
+          {
+            session_id: tokenRow.session_id,
+            user_id: tokenRow.user_id,
+            stale_token_id: tokenRow.id,
+            grace_token_id: graceChild.id,
+          },
+          'refresh_token_rotation_grace_applied',
+        );
       }
 
-      if (tokenRow.expires_at.getTime() < Date.now()) {
+      if (activeToken.expires_at.getTime() < Date.now()) {
         throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
@@ -771,42 +814,57 @@ export function authRouter(prisma: PrismaLike): Router {
         throw new ApiError(401, 'Unauthorized', 'unauthorized');
       }
 
-      const payload = {
-        sub: decoded.sub,
-        sid: decoded.sid,
-        role: freshUser.role,
-        email: freshUser.email,
-        name: freshUser.name,
-        permissions: [...permissionsForRole(freshUser.role)],
-      };
-      const tokens = signTokens(payload);
-      const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+      for (let attempt = 1; ; attempt++) {
+        const payload = {
+          sub: decoded.sub,
+          sid: decoded.sid,
+          role: freshUser.role,
+          email: freshUser.email,
+          name: freshUser.name,
+          permissions: [...permissionsForRole(freshUser.role)],
+        };
+        const tokens = signTokens(payload);
+        const newExpiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
+        const claimedTokenId = activeToken.id;
 
-      const claimed = await db.refreshToken.updateMany({
-        where: { id: tokenRow.id, rotated_to: null, revoked_at: null },
-        data: { revoked_at: new Date() },
-      });
-      if (claimed.count === 0) {
-        await handleReplay();
+        const claimed = await db.refreshToken.updateMany({
+          where: { id: claimedTokenId, rotated_to: null, revoked_at: null },
+          data: { revoked_at: new Date() },
+        });
+
+        if (claimed.count === 0) {
+          const current = await db.refreshToken.findUnique({
+            where: { id: claimedTokenId },
+          });
+          const graceChild = current
+            ? await resolveRotationGraceChild(db, tokenRow.session_id, current)
+            : null;
+          if (!graceChild || attempt >= MAX_ROTATION_ATTEMPTS) {
+            return revokeForReplay(claimedTokenId);
+          }
+          activeToken = graceChild;
+          continue;
+        }
+
+        const newToken = await db.refreshToken.create({
+          data: {
+            user_id: tokenRow.user_id,
+            session_id: tokenRow.session_id,
+            token_hash: hashRefreshToken(tokens.refresh_token),
+            expires_at: newExpiresAt,
+            ip_address: req.ip ?? null,
+            user_agent: req.headers['user-agent'] ?? null,
+          },
+        });
+
+        await db.refreshToken.update({
+          where: { id: claimedTokenId },
+          data: { rotated_to: newToken.id },
+        });
+
+        res.json({ ...tokens, access_token: tokens.token });
+        return;
       }
-
-      const newToken = await db.refreshToken.create({
-        data: {
-          user_id: tokenRow.user_id,
-          session_id: tokenRow.session_id,
-          token_hash: hashRefreshToken(tokens.refresh_token),
-          expires_at: newExpiresAt,
-          ip_address: req.ip ?? null,
-          user_agent: req.headers['user-agent'] ?? null,
-        },
-      });
-
-      await db.refreshToken.update({
-        where: { id: tokenRow.id },
-        data: { rotated_to: newToken.id },
-      });
-
-      res.json({ ...tokens, access_token: tokens.token });
     } catch (err) {
       next(err);
     }

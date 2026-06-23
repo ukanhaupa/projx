@@ -23,6 +23,8 @@ pub const MFA_CHALLENGE_TTL_MINUTES: i64 = 5;
 pub const LOGIN_MAX_ATTEMPTS: i32 = 5;
 pub const LOGIN_LOCKOUT_MINUTES: i64 = 15;
 
+pub const MAX_ROTATION_ATTEMPTS: u32 = 3;
+
 const JWT_SECRET_CONFIG_KEY: &str = "jwt_secret";
 
 #[cfg(test)]
@@ -235,6 +237,37 @@ impl Sessions {
         Ok(pair)
     }
 
+    // A cleanly-rotated token whose replacement is still the unused head is a
+    // lost-rotation retry (client never persisted the replacement), not a replay.
+    async fn resolve_rotation_grace_child(
+        &self,
+        session_id: Uuid,
+        token: &refresh_token::Model,
+    ) -> Result<Option<refresh_token::Model>, AppError> {
+        let Some(child_id) = token.rotated_to else {
+            return Ok(None);
+        };
+        if token.replay_detected_at.is_some() {
+            return Ok(None);
+        }
+        let child = refresh_token::Entity::find_by_id(child_id)
+            .one(self.db.as_ref())
+            .await
+            .map_err(|e| from_db(e, "refresh_token"))?;
+        match child {
+            Some(c)
+                if c.session_id == session_id
+                    && c.rotated_to.is_none()
+                    && c.revoked_at.is_none()
+                    && c.replay_detected_at.is_none()
+                    && c.expires_at >= Utc::now() =>
+            {
+                Ok(Some(c))
+            }
+            _ => Ok(None),
+        }
+    }
+
     pub async fn rotate(
         &self,
         refresh_token_raw: &str,
@@ -261,56 +294,108 @@ impl Sessions {
             return Err(AppError::Unauthorized("invalid refresh token".into()));
         }
 
+        let mut active = row.clone();
         if row.rotated_to.is_some() || row.revoked_at.is_some() {
-            self.handle_replay(&row).await?;
-            return Err(AppError::Unauthorized("token_replay_detected".into()));
+            match self.resolve_rotation_grace_child(sid, &row).await? {
+                Some(child) => {
+                    tracing::info!(
+                        session_id = %sid,
+                        user_id = %row.user_id,
+                        stale_token_id = %row.id,
+                        grace_token_id = %child.id,
+                        "refresh_token_rotation_grace_applied"
+                    );
+                    active = child;
+                }
+                None => {
+                    self.handle_replay(&row).await?;
+                    tracing::warn!(
+                        session_id = %sid,
+                        user_id = %row.user_id,
+                        token_id = %row.id,
+                        "refresh_token_replay_detected"
+                    );
+                    return Err(AppError::Unauthorized("token_replay_detected".into()));
+                }
+            }
         }
 
-        if row.expires_at < Utc::now() {
+        if active.expires_at < Utc::now() {
             return Err(AppError::Unauthorized("invalid refresh token".into()));
         }
 
-        let u = user::Entity::find_by_id(row.user_id)
+        let u = user::Entity::find_by_id(active.user_id)
             .one(self.db.as_ref())
             .await
             .map_err(|e| from_db(e, "user"))?
             .ok_or_else(|| AppError::Unauthorized("invalid refresh token".into()))?;
 
-        let pair = self
-            .signer
-            .issue_tokens(&TokenPayload {
-                sub: u.id,
-                sid: row.session_id,
-                email: u.email.clone(),
-                name: u.name.clone(),
-                role: u.role.clone(),
-            })
-            .await?;
+        for attempt in 1..=MAX_ROTATION_ATTEMPTS {
+            let pair = self
+                .signer
+                .issue_tokens(&TokenPayload {
+                    sub: u.id,
+                    sid: active.session_id,
+                    email: u.email.clone(),
+                    name: u.name.clone(),
+                    role: u.role.clone(),
+                })
+                .await?;
+            let claimed_id = active.id;
 
-        let new_row = refresh_token::Model::active(
-            u.id,
-            row.session_id,
-            hash_token(&pair.refresh_token),
-            args.ip_address.clone(),
-            args.user_agent.clone(),
-            Utc::now() + Duration::days(REFRESH_TTL_DAYS),
-        );
+            if self
+                .claim_and_rotate(claimed_id, &u, &active, &pair, args)
+                .await?
+            {
+                return Ok(pair);
+            }
 
+            let current = refresh_token::Entity::find_by_id(claimed_id)
+                .one(self.db.as_ref())
+                .await
+                .map_err(|e| from_db(e, "refresh_token"))?;
+            let grace = match &current {
+                Some(c) => {
+                    self.resolve_rotation_grace_child(active.session_id, c)
+                        .await?
+                }
+                None => None,
+            };
+            match grace {
+                Some(child) if attempt < MAX_ROTATION_ATTEMPTS => {
+                    active = child;
+                }
+                _ => {
+                    self.handle_replay(&active).await?;
+                    tracing::warn!(
+                        session_id = %active.session_id,
+                        user_id = %active.user_id,
+                        token_id = %claimed_id,
+                        "refresh_token_concurrent_rotation_detected"
+                    );
+                    return Err(AppError::Unauthorized("token_replay_detected".into()));
+                }
+            }
+        }
+
+        Err(AppError::Unauthorized("token_replay_detected".into()))
+    }
+
+    async fn claim_and_rotate(
+        &self,
+        claimed_id: Uuid,
+        u: &user::Model,
+        active: &refresh_token::Model,
+        pair: &TokenPair,
+        args: &IssueArgs,
+    ) -> Result<bool, AppError> {
         let txn = self
             .db
             .begin()
             .await
             .map_err(|e| from_db(e, "refresh_token"))?;
-        let inserted = new_row
-            .insert(&txn)
-            .await
-            .map_err(|e| from_db(e, "refresh_token"))?;
         let now = Utc::now();
-        refresh_token::Entity::update_many()
-            .col_expr(
-                refresh_token::Column::RotatedTo,
-                sea_orm::sea_query::Expr::value(Some(inserted.id)),
-            )
+        let claim = refresh_token::Entity::update_many()
             .col_expr(
                 refresh_token::Column::RevokedAt,
                 sea_orm::sea_query::Expr::value(Some(now)),
@@ -319,15 +404,43 @@ impl Sessions {
                 refresh_token::Column::UpdatedAt,
                 sea_orm::sea_query::Expr::value(now),
             )
-            .filter(refresh_token::Column::Id.eq(row.id))
+            .filter(refresh_token::Column::Id.eq(claimed_id))
+            .filter(refresh_token::Column::RotatedTo.is_null())
+            .filter(refresh_token::Column::RevokedAt.is_null())
+            .exec(&txn)
+            .await
+            .map_err(|e| from_db(e, "refresh_token"))?;
+        if claim.rows_affected == 0 {
+            txn.rollback()
+                .await
+                .map_err(|e| from_db(e, "refresh_token"))?;
+            return Ok(false);
+        }
+        let new_row = refresh_token::Model::active(
+            u.id,
+            active.session_id,
+            hash_token(&pair.refresh_token),
+            args.ip_address.clone(),
+            args.user_agent.clone(),
+            now + Duration::days(REFRESH_TTL_DAYS),
+        );
+        let inserted = new_row
+            .insert(&txn)
+            .await
+            .map_err(|e| from_db(e, "refresh_token"))?;
+        refresh_token::Entity::update_many()
+            .col_expr(
+                refresh_token::Column::RotatedTo,
+                sea_orm::sea_query::Expr::value(Some(inserted.id)),
+            )
+            .filter(refresh_token::Column::Id.eq(claimed_id))
             .exec(&txn)
             .await
             .map_err(|e| from_db(e, "refresh_token"))?;
         txn.commit()
             .await
             .map_err(|e| from_db(e, "refresh_token"))?;
-
-        Ok(pair)
+        Ok(true)
     }
 
     async fn handle_replay(&self, row: &refresh_token::Model) -> Result<(), AppError> {
@@ -536,6 +649,9 @@ mod tests {
         assert!(!token.is_empty());
     }
 
+    // ENV_LOCK serialises process-env mutation across tests; holding it across
+    // the secret() await is the intended mutual exclusion, not a real deadlock.
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn secret_errors_without_config_or_env() {
         let _guard = crate::auth::service::ENV_LOCK.lock().unwrap();
@@ -604,8 +720,32 @@ mod tests {
         assert!(matches!(err, AppError::Unauthorized(_)));
     }
 
+    fn token_row(uid: Uuid, sid: Uuid, token_hash: String) -> refresh_token::Model {
+        refresh_token::Model {
+            id: Uuid::new_v4(),
+            user_id: uid,
+            session_id: sid,
+            token_hash,
+            ip_address: None,
+            user_agent: None,
+            expires_at: Utc::now() + Duration::days(1),
+            revoked_at: None,
+            rotated_to: None,
+            replay_detected_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn ok_exec(rows_affected: u64) -> MockExecResult {
+        MockExecResult {
+            last_insert_id: 0,
+            rows_affected,
+        }
+    }
+
     #[tokio::test]
-    async fn rotate_detects_replay_on_already_rotated_row() {
+    async fn rotate_detects_genuine_replay_when_chain_advanced() {
         let signer = signer_env();
         let uid = Uuid::new_v4();
         let sid = Uuid::new_v4();
@@ -619,31 +759,180 @@ mod tests {
             })
             .await
             .unwrap();
-        let row = refresh_token::Model {
-            id: Uuid::new_v4(),
-            user_id: uid,
-            session_id: sid,
-            token_hash: hash_token(&pair.refresh_token),
-            ip_address: None,
-            user_agent: None,
-            expires_at: Utc::now() + Duration::days(1),
+        let child_id = Uuid::new_v4();
+        let presented = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..token_row(uid, sid, hash_token(&pair.refresh_token))
+        };
+        let advanced_child = refresh_token::Model {
+            id: child_id,
             revoked_at: Some(Utc::now()),
             rotated_to: Some(Uuid::new_v4()),
-            replay_detected_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            ..token_row(uid, sid, "child-hash".into())
         };
         let db = Arc::new(
             MockDatabase::new(DatabaseBackend::Postgres)
-                .append_query_results([vec![row]])
-                .append_exec_results([MockExecResult {
-                    last_insert_id: 0,
-                    rows_affected: 1,
-                }])
-                .append_exec_results([MockExecResult {
-                    last_insert_id: 0,
-                    rows_affected: 1,
-                }])
+                .append_query_results([vec![presented]])
+                .append_query_results([vec![advanced_child]])
+                .append_exec_results([ok_exec(1)])
+                .append_exec_results([ok_exec(1)])
+                .into_connection(),
+        );
+        let sessions = Sessions::new(db, signer);
+        let err = sessions
+            .rotate(
+                &pair.refresh_token,
+                &IssueArgs {
+                    ip_address: None,
+                    user_agent: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.detail(), "token_replay_detected");
+    }
+
+    #[tokio::test]
+    async fn rotate_grace_recovers_from_lost_rotation() {
+        let signer = signer_env();
+        let u = sample_user();
+        let sid = Uuid::new_v4();
+        let pair = signer
+            .issue_tokens(&TokenPayload {
+                sub: u.id,
+                sid,
+                email: u.email.clone(),
+                name: u.name.clone(),
+                role: u.role.clone(),
+            })
+            .await
+            .unwrap();
+        let child_id = Uuid::new_v4();
+        let presented = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..token_row(u.id, sid, hash_token(&pair.refresh_token))
+        };
+        let unused_child = refresh_token::Model {
+            id: child_id,
+            ..token_row(u.id, sid, "child-hash".into())
+        };
+        let inserted = token_row(u.id, sid, "inserted-hash".into());
+        let db = Arc::new(
+            MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([vec![presented]])
+                .append_query_results([vec![unused_child]])
+                .append_query_results([vec![u.clone()]])
+                .append_exec_results([ok_exec(1)])
+                .append_query_results([vec![inserted]])
+                .append_exec_results([ok_exec(1)])
+                .into_connection(),
+        );
+        let sessions = Sessions::new(db, signer);
+        let out = sessions
+            .rotate(
+                &pair.refresh_token,
+                &IssueArgs {
+                    ip_address: None,
+                    user_agent: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!out.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotate_concurrent_claim_loss_recovers_via_grace() {
+        let signer = signer_env();
+        let u = sample_user();
+        let sid = Uuid::new_v4();
+        let pair = signer
+            .issue_tokens(&TokenPayload {
+                sub: u.id,
+                sid,
+                email: u.email.clone(),
+                name: u.name.clone(),
+                role: u.role.clone(),
+            })
+            .await
+            .unwrap();
+        let presented = token_row(u.id, sid, hash_token(&pair.refresh_token));
+        let child_id = Uuid::new_v4();
+        let claimed_by_racer = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..presented.clone()
+        };
+        let unused_child = refresh_token::Model {
+            id: child_id,
+            ..token_row(u.id, sid, "child-hash".into())
+        };
+        let inserted = token_row(u.id, sid, "inserted-hash".into());
+        let db = Arc::new(
+            MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([vec![presented]])
+                .append_query_results([vec![u.clone()]])
+                .append_exec_results([ok_exec(0)])
+                .append_query_results([vec![claimed_by_racer]])
+                .append_query_results([vec![unused_child]])
+                .append_exec_results([ok_exec(1)])
+                .append_query_results([vec![inserted]])
+                .append_exec_results([ok_exec(1)])
+                .into_connection(),
+        );
+        let sessions = Sessions::new(db, signer);
+        let out = sessions
+            .rotate(
+                &pair.refresh_token,
+                &IssueArgs {
+                    ip_address: None,
+                    user_agent: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!out.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotate_concurrent_claim_loss_without_grace_revokes() {
+        let signer = signer_env();
+        let u = sample_user();
+        let sid = Uuid::new_v4();
+        let pair = signer
+            .issue_tokens(&TokenPayload {
+                sub: u.id,
+                sid,
+                email: u.email.clone(),
+                name: u.name.clone(),
+                role: u.role.clone(),
+            })
+            .await
+            .unwrap();
+        let presented = token_row(u.id, sid, hash_token(&pair.refresh_token));
+        let child_id = Uuid::new_v4();
+        let claimed_by_racer = refresh_token::Model {
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(child_id),
+            ..presented.clone()
+        };
+        let used_child = refresh_token::Model {
+            id: child_id,
+            revoked_at: Some(Utc::now()),
+            rotated_to: Some(Uuid::new_v4()),
+            ..token_row(u.id, sid, "child-hash".into())
+        };
+        let db = Arc::new(
+            MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([vec![presented]])
+                .append_query_results([vec![u.clone()]])
+                .append_exec_results([ok_exec(0)])
+                .append_query_results([vec![claimed_by_racer]])
+                .append_query_results([vec![used_child]])
+                .append_exec_results([ok_exec(1)])
+                .append_exec_results([ok_exec(1)])
                 .into_connection(),
         );
         let sessions = Sessions::new(db, signer);
@@ -675,20 +964,7 @@ mod tests {
             })
             .await
             .unwrap();
-        let row = refresh_token::Model {
-            id: Uuid::new_v4(),
-            user_id: u.id,
-            session_id: sid,
-            token_hash: hash_token(&pair.refresh_token),
-            ip_address: None,
-            user_agent: None,
-            expires_at: Utc::now() + Duration::days(1),
-            revoked_at: None,
-            rotated_to: None,
-            replay_detected_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
+        let row = token_row(u.id, sid, hash_token(&pair.refresh_token));
         let new_inserted = refresh_token::Model {
             id: Uuid::new_v4(),
             ..row.clone()
@@ -697,11 +973,9 @@ mod tests {
             MockDatabase::new(DatabaseBackend::Postgres)
                 .append_query_results([vec![row]])
                 .append_query_results([vec![u.clone()]])
+                .append_exec_results([ok_exec(1)])
                 .append_query_results([vec![new_inserted]])
-                .append_exec_results([MockExecResult {
-                    last_insert_id: 0,
-                    rows_affected: 1,
-                }])
+                .append_exec_results([ok_exec(1)])
                 .into_connection(),
         );
         let sessions = Sessions::new(db, signer);

@@ -446,7 +446,7 @@ describe('update — pre-commit / ci.yml rename rendering', () => {
       });
   });
 
-  it('generates AI_PY/BACKEND_TS bash vars when dirs are renamed (after unpinning pre-commit)', async () => {
+  it('pre-commit hook stays dir-agnostic — bakes in no per-instance vars after rename (post-unpin)', async () => {
     dest = join(tmpdir(), `projx-pathsupper-${Date.now()}`);
     await scaffold(
       {
@@ -479,11 +479,11 @@ describe('update — pre-commit / ci.yml rename rendering', () => {
       join(dest, '.githooks/pre-commit'),
       'utf-8',
     );
-    expect(preCommit).toContain('AI_PY=');
-    expect(preCommit).toContain('BACKEND_TS=');
-    expect(preCommit).toContain('BACKEND_ALL=');
+    expect(preCommit).toContain('nearest_dir');
+    expect(preCommit).toContain('owner_dirs');
+    expect(preCommit).not.toContain('AI_PY=');
+    expect(preCommit).not.toContain('BACKEND_TS=');
     expect(preCommit).not.toContain('FASTAPI_PY=');
-    expect(preCommit).not.toContain('FASTIFY_TS=');
   });
 
   it('ci.yml uses path-derived job keys when renamed (after unpinning ci.yml)', async () => {

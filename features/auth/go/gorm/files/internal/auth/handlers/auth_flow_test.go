@@ -116,6 +116,25 @@ func TestSignupLoginRefreshLogoutFlow(t *testing.T) {
 	require.NotEmpty(t, rotated["refresh_token"])
 	require.NotEqual(t, login["refresh_token"], rotated["refresh_token"])
 
+	// Re-presenting the original token while its replacement is still the
+	// unused head is a lost-rotation retry — the session must recover, not be
+	// nuked.
+	resp, body = doReq(t, http.MethodPost, srv.URL+"/api/v1/auth/refresh", "", map[string]any{
+		"refresh_token": login["refresh_token"],
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	var graced map[string]string
+	require.NoError(t, json.Unmarshal(body, &graced))
+	require.NotEmpty(t, graced["refresh_token"])
+
+	// The graced replacement is usable.
+	resp, body = doReq(t, http.MethodPost, srv.URL+"/api/v1/auth/refresh", "", map[string]any{
+		"refresh_token": graced["refresh_token"],
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+	// The chain has now advanced past the original token, so re-presenting it
+	// is a genuine replay and revokes the session.
 	resp, body = doReq(t, http.MethodPost, srv.URL+"/api/v1/auth/refresh", "", map[string]any{
 		"refresh_token": login["refresh_token"],
 	})
