@@ -2,6 +2,16 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2026-06-23
+
+### Security
+
+- **Refresh-token rotation grace + replay detection** — hardened across the entire `auth` feature matrix (**fastify** + **express** × {prisma, drizzle, sequelize, typeorm}, **fastapi**, **go** × {gorm, sqlc, ent}, **rust** seaorm, **laravel** eloquent). A genuine reuse of a rotated refresh token now revokes every token in the session and stamps `replay_detected_at`, returning a uniform replay error instead of silently issuing a new pair. To avoid logging users out on flaky networks, a bounded grace window (`MaxRotationAttempts`) distinguishes a _lost-rotation retry_ — where the server rotated the token but the client never received the response and retries with the old one — from a true replay: the retry transparently re-serves the already-minted, still-unused replacement child rather than tripping the alarm. Same external surface and error shape on every backend; per-ORM regression suites cover both the grace path and the revoke-on-replay path.
+
+### Changed
+
+- **Stack-agnostic pre-commit hook** — both the projx repo's own `.githooks/pre-commit` and the scaffolded template (`cli/src/templates/pre-commit.ejs`) are rewritten to route staged files by their nearest manifest (`package.json` / `pyproject.toml` / `go.mod` / `Cargo.toml` / `pubspec.yaml` / `composer.json`) instead of baking in per-instance, per-package-manager blocks. The rendered output is now byte-identical for every scaffolded project regardless of which components it has, invokes local `./node_modules/.bin/*` binaries directly (package-manager-agnostic), and leaves no un-owned file unformatted. Secret scan (gitleaks), `.env`-staged guard, merge-marker guard, and large-file guard run first, unchanged.
+
 ## [1.9.2] - 2026-06-22
 
 ### Added
