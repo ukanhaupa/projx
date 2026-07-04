@@ -40,7 +40,7 @@
     "swc-plugin-coverage-instrument": "0.0.32",
     "typescript": "5.9.3",
     "typescript-eslint": "8.61.0",
-    "vitest": "4.1.8"
+    "vitest": "4.1.9"
   },
   "pnpm": {
     "overrides": {
