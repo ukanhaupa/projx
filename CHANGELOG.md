@@ -2,6 +2,16 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] - 2026-07-10
+
+### Fixed
+
+- **CLI was a silent no-op when run via `npx` or an installed `bin` symlink** — the most-used entry path was completely broken. Package managers install the executable as a symlink (`node_modules/.bin/create-projx` → `../create-projx/dist/index.js`); when invoked through it, `process.argv[1]` is the symlink path while `import.meta.url` is the resolved real path, so the `isEntrypoint` guard compared unequal, `main()` never ran, and every command (`create`, `init`, `add`, `update`, `--help`, …) exited `0` with no output. The guard now resolves the invoked path with `realpathSync` before comparing. Latent since v1.7.4 and undetected because CI, the scaffold fuzzer, the dispatch tests, and the documented dev loop all invoke the CLI by its **real** file path (`node cli/dist/index.js`) or import its functions directly — never through the bin symlink an end user hits. A new integration test now drives the built binary **through a symlink**, closing the coverage gap.
+
+### Security
+
+- **`go` templates — cleared two code-reachable `govulncheck` findings.** Bumped `github.com/jackc/pgx/v5` to **v5.9.2** across all four Go modules (`go/`, `admin-panel/`, and the `sqlc` + `ent` ORM addons; previously v5.5.5 / v5.7.2), closing **GO-2026-5004** (SQL injection via placeholder confusion with dollar-quoted string literals, reachable via `db.Open` → `SanitizeSQL`), and bumped the `go.mod` toolchain to **go1.26.5** (previously go1.26.4 / go1.25.11), closing **GO-2026-5856** (`crypto/tls`, standard library). `go`'s `govulncheck ./...` gate is clean again, and the gorm/sqlc/ent scaffold-compile checks stay green.
+
 ## [1.9.3] - 2026-06-23
 
 ### Security
