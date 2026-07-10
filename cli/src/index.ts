@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -547,11 +547,17 @@ async function main(): Promise<void> {
   await scaffold(opts, dest, localRepo);
 }
 
-const isEntrypoint =
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+function isMainEntrypoint(): boolean {
+  const invokedPath = process.argv[1];
+  if (invokedPath === undefined) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(invokedPath)).href;
+  } catch {
+    return false;
+  }
+}
 
-if (isEntrypoint) {
+if (isMainEntrypoint()) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

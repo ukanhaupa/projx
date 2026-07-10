@@ -37,6 +37,7 @@
 
 - **Never `vi.mock('@clack/prompts')`** — it pollutes the module cache across files. Spy on `utilsModule` instead (see existing suites).
 - Mirror one `tests/<name>.test.ts` per `src/<name>.ts`. New behavior ships with a failing test first (root §"TDD").
+- **The entrypoint guard is only exercisable via the built binary** — `tests/entrypoint.test.ts` runs `dist/index.js` **through a symlink** (the `npx`/`.bin` path); function-importing unit tests bypass it. Build first, and never assert CLI behavior only by real-path invocation.
 
 ## Quality gates (root §"Local development loop")
 
@@ -46,3 +47,4 @@
 
 - `pnpm exec` after a pipe (`| tail`/`head`) masks exit codes — use `${PIPESTATUS[0]}` or no pipe when verifying success.
 - The 80% coverage threshold is hard — new `src/` code without tests drops the aggregate and fails the gate.
+- **In production the CLI is only reached through a `bin` symlink** (`npx create-projx`, `npm create projx`, a global install → `node_modules/.bin/create-projx` → `dist/index.js`), but every gate invokes it by its **real path** (`node cli/dist/index.js` — the dev loop, `scripts/scaffold-fuzz.py`, the dispatch tests) or imports its functions directly. So an entrypoint break is invisible to CI. The `isMainEntrypoint()` guard in `src/index.ts` **must `realpathSync(process.argv[1])` before comparing to `import.meta.url`** — through a symlink the two differ, a naive compare is always false, and `main()` never runs, so every command silently exits 0 with no output. This was latent from v1.7.4 to v1.9.3. Regression-guarded by `tests/entrypoint.test.ts`.
