@@ -34,7 +34,7 @@ function localWebServers(): NonNullable<PlaywrightTestConfig['webServer']> {
 
   const frontendCommand = isProdBuild
     ? 'cd ../frontend && pnpm exec vite build --outDir dist-e2e && pnpm exec vite preview --outDir dist-e2e --port 4173 --strictPort'
-    : 'cd ../frontend && npm run dev';
+    : 'cd ../frontend && pnpm dev';
 
   return [
     {

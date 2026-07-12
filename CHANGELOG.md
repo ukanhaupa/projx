@@ -2,6 +2,12 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5] - 2026-07-10
+
+### Changed
+
+- **pnpm is now the default package manager for scaffolded JS projects.** `create` (both the interactive prompt default and the non-interactive path), `init`, and the base scaffold now default to **pnpm** instead of npm; npm / yarn / bun remain fully selectable. Each scaffolded JS component (`fastify`, `express`, `vitejs`, `nextjs`, `e2e`) gets `"packageManager": "pnpm@10.33.0"` stamped into its `package.json` (corepack pinning that mirrors the Docker/CI setup) — single-sourced from `pmCommands('pnpm').version`, which also feeds the Dockerfile `corepack prepare` line. Non-pnpm scaffolds are unaffected (no `packageManager` field is written). **Existing projects are untouched**: `add` / `update` / `gen` still resolve the package manager recorded in each project's `.projx` (legacy projects without the field continue to default to npm). Swept the last hardcoded npm-isms in the JS templates — the E2E Playwright dev `webServer` command and the Prisma migration-drift hint now use pnpm.
+
 ## [1.9.4] - 2026-07-10
 
 ### Fixed

@@ -42,7 +42,7 @@ RUN apk add --no-cache openssl ca-certificates
 <% if (pm.name === 'pnpm') { %>
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN corepack enable && corepack prepare pnpm@<%= pm.version %> --activate
 <% } else if (pm.name === 'yarn') { %>
 RUN corepack enable
 <% } %>

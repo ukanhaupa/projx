@@ -96,6 +96,9 @@ export const BACKEND_COMPONENTS = [
 export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 
+export const DEFAULT_PACKAGE_MANAGER: PackageManager = 'pnpm';
+export const PNPM_VERSION = '10.33.0';
+
 export const ORM_PROVIDERS = [
   'prisma',
   'drizzle',
@@ -164,6 +167,7 @@ export function resolveInstanceOrm(
 
 export interface PmCommands {
   name: PackageManager;
+  version: string;
   install: string;
   ci: string;
   run: string;
@@ -180,6 +184,7 @@ export function pmCommands(pm: PackageManager): PmCommands {
     case 'npm':
       return {
         name: 'npm',
+        version: '',
         install: 'npm install',
         ci: 'npm ci',
         run: 'npm run',
@@ -193,6 +198,7 @@ export function pmCommands(pm: PackageManager): PmCommands {
     case 'pnpm':
       return {
         name: 'pnpm',
+        version: PNPM_VERSION,
         install: 'pnpm install',
         ci: 'pnpm install --frozen-lockfile',
         run: 'pnpm',
@@ -206,6 +212,7 @@ export function pmCommands(pm: PackageManager): PmCommands {
     case 'yarn':
       return {
         name: 'yarn',
+        version: '',
         install: 'yarn',
         ci: 'yarn --frozen-lockfile',
         run: 'yarn',
@@ -219,6 +226,7 @@ export function pmCommands(pm: PackageManager): PmCommands {
     case 'bun':
       return {
         name: 'bun',
+        version: '',
         install: 'bun install',
         ci: 'bun install --frozen-lockfile',
         run: 'bun run',

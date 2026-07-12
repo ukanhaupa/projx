@@ -17,6 +17,7 @@ import {
   type ComponentInstance,
   type ComponentPaths,
   type OrmProvider,
+  type PmCommands,
   BACKEND_COMPONENTS,
   DEFAULT_COMPONENT_SKIP_PATTERNS,
   GO_ORM_PROVIDERS,
@@ -579,6 +580,27 @@ interface WriteOneOpts {
   instanceOrmOverride?: OrmProvider;
 }
 
+const PACKAGE_MANAGER_STAMP_COMPONENTS: readonly Component[] = [
+  'fastify',
+  'express',
+  'vitejs',
+  'nextjs',
+  'e2e',
+];
+
+async function stampPackageManager(
+  pkgPath: string,
+  pm: PmCommands | undefined,
+): Promise<void> {
+  if (!pm?.version || !existsSync(pkgPath)) return;
+  const pkg = JSON.parse(await readFile(pkgPath, 'utf-8')) as Record<
+    string,
+    unknown
+  >;
+  pkg.packageManager = `${pm.name}@${pm.version}`;
+  await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+}
+
 async function writeOneInstance(
   inst: ComponentInstance,
   opts: WriteOneOpts,
@@ -651,6 +673,13 @@ async function writeOneInstance(
     nameSnake,
     vars.nameOverrides,
   );
+
+  if (PACKAGE_MANAGER_STAMP_COMPONENTS.includes(type)) {
+    await stampPackageManager(
+      join(outDir, 'package.json'),
+      vars.pm as PmCommands | undefined,
+    );
+  }
 }
 
 async function applyOrmProviderToInstance(

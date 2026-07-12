@@ -8,6 +8,7 @@ import {
   type Options,
   type PackageManager,
   PACKAGE_MANAGERS,
+  DEFAULT_PACKAGE_MANAGER,
 } from './utils.js';
 
 const ORM_LABELS: Record<OrmProvider, string> = {
@@ -84,7 +85,7 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
   );
   const hasGoBackend = components.includes('go');
   let orm: OrmProvider = hasGoBackend && !hasNodeBackend ? 'gorm' : 'prisma';
-  let packageManager: PackageManager = 'npm';
+  let packageManager: PackageManager = DEFAULT_PACKAGE_MANAGER;
 
   if (hasNodeBackend) {
     const choice = (await p.select({
@@ -116,7 +117,7 @@ export async function runPrompts(nameArg?: string): Promise<Options> {
     const pm = (await p.select({
       message: 'Package manager',
       options: PACKAGE_MANAGERS.map((pm) => ({ value: pm, label: pm })),
-      initialValue: 'npm' as PackageManager,
+      initialValue: DEFAULT_PACKAGE_MANAGER,
     })) as PackageManager | symbol;
 
     if (p.isCancel(pm)) process.exit(0);

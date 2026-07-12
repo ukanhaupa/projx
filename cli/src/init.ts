@@ -8,6 +8,7 @@ import {
   type ComponentPaths,
   type PackageManager,
   PACKAGE_MANAGERS,
+  DEFAULT_PACKAGE_MANAGER,
   cleanupRepo,
   detectPackageManager,
   detectPackageManagerFromComponents,
@@ -79,7 +80,7 @@ export async function init(cwd: string, localRepo?: string): Promise<void> {
   const hasJs = components.some((c) =>
     ['fastify', 'express', 'vitejs', 'nextjs', 'e2e'].includes(c),
   );
-  let pm: PackageManager = 'npm';
+  let pm: PackageManager = DEFAULT_PACKAGE_MANAGER;
 
   if (hasJs) {
     const detected = detectPackageManagerFromComponents(cwd, paths);
