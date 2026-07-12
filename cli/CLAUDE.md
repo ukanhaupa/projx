@@ -32,6 +32,7 @@
 - **The template engine is intentionally minimal** — `render()` in `src/utils.ts` supports only `<% if %>`, `<% for %>`, `<%= expr %>`. **Do not add a dependency on real EJS.**
 - **Subcommands, flags, ORM addons, and feature templates** are documented once in root — extend there when adding behavior. Adding an ORM/feature touches `ORM_PROVIDERS`/`KNOWN_FEATURES` in `src/utils.ts` and the help string in `src/index.ts`.
 - **Addons / features / component dirs are fetched from the repo tarball at runtime**, not bundled — use `--local <path>` during dev.
+- **pnpm is the default package manager** (`DEFAULT_PACKAGE_MANAGER` in `src/utils.ts`) for new JS scaffolds — `create`/`init` default to it; npm/yarn/bun stay selectable. On scaffold, JS components get `"packageManager": "pnpm@<PNPM_VERSION>"` stamped into `package.json` (`stampPackageManager` in `src/baseline.ts`, pnpm-only). The pinned version lives once as `pmCommands(pm).version` (`PNPM_VERSION`) and also renders the Dockerfile `corepack prepare` line — don't re-hardcode it. Back-compat: `add`/`update`/`gen`/`diff` still read the PM from the project's `.projx` (missing field → npm), so existing projects never flip.
 
 ## Testing — the CLI test pattern
 

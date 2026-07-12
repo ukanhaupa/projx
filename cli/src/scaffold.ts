@@ -7,6 +7,7 @@ import {
   type ComponentPaths,
   type Options,
   type PackageManager,
+  DEFAULT_PACKAGE_MANAGER,
   cleanupRepo,
   downloadRepo,
   ensureGitIdentity,
@@ -28,7 +29,7 @@ export async function scaffold(
   localRepo?: string,
 ): Promise<void> {
   const name = toKebab(opts.name);
-  const pm: PackageManager = opts.packageManager ?? 'npm';
+  const pm: PackageManager = opts.packageManager ?? DEFAULT_PACKAGE_MANAGER;
   const paths = Object.fromEntries(
     opts.components.map((c) => [c, c]),
   ) as ComponentPaths;

@@ -99,7 +99,7 @@ describe('runPrompts', () => {
     const opts = await runPrompts('py-only');
 
     expect(p.select).not.toHaveBeenCalled();
-    expect(opts.packageManager).toBe('npm');
+    expect(opts.packageManager).toBe('pnpm');
     expect(opts.orm).toBe('prisma');
     expect(opts.components).toEqual(['fastapi', 'infra']);
   });

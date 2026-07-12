@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { scaffold } from '../src/scaffold.js';
 import * as utilsModule from '../src/utils.js';
-import { type PackageManager, pmCommands } from '../src/utils.js';
+import { type PackageManager, pmCommands, PNPM_VERSION } from '../src/utils.js';
 
 const REPO_DIR = join(import.meta.dirname, '../..');
 
@@ -650,16 +650,21 @@ describe('scaffold', () => {
     expect(pkg.name).toBe('my-app-fastify');
   });
 
-  it('defaults to npm when no packageManager specified', async () => {
+  it('defaults to pnpm when no packageManager specified', async () => {
     dest = join(tmpdir(), `projx-scaffold-${Date.now()}`);
     await scaffold(
-      { name: 'npm-app', components: ['fastify'], git: true, install: false },
+      { name: 'pnpm-app', components: ['fastify'], git: true, install: false },
       dest,
       REPO_DIR,
     );
 
     const config = JSON.parse(await readFile(join(dest, '.projx'), 'utf-8'));
-    expect(config.packageManager).toBe('npm');
+    expect(config.packageManager).toBe('pnpm');
+
+    const pkg = JSON.parse(
+      await readFile(join(dest, 'fastify/package.json'), 'utf-8'),
+    );
+    expect(pkg.packageManager).toBe('pnpm@10.33.0');
   });
 
   it('does not create docker-compose without backend or frontend', async () => {
@@ -858,6 +863,32 @@ describe.each(PMS)('scaffold with %s', (pm) => {
 
     const config = JSON.parse(await readFile(join(dest, '.projx'), 'utf-8'));
     expect(config.packageManager).toBe(pm);
+  });
+
+  it('stamps packageManager into JS package.json only for pnpm', async () => {
+    dest = join(tmpdir(), `projx-pmfield-${pm}-${Date.now()}`);
+    await scaffold(
+      {
+        name: `${pm}-app`,
+        components: ['fastify', 'vitejs'],
+        git: true,
+        install: false,
+        packageManager: pm,
+      },
+      dest,
+      REPO_DIR,
+    );
+
+    for (const c of ['fastify', 'vitejs']) {
+      const pkg = JSON.parse(
+        await readFile(join(dest, c, 'package.json'), 'utf-8'),
+      );
+      if (pm === 'pnpm') {
+        expect(pkg.packageManager).toBe(`pnpm@${PNPM_VERSION}`);
+      } else {
+        expect(pkg.packageManager).toBeUndefined();
+      }
+    }
   });
 
   it('setup.sh uses correct install command', async () => {

@@ -14,6 +14,8 @@ import {
   replaceInDir,
   detectPackageManager,
   pmCommands,
+  DEFAULT_PACKAGE_MANAGER,
+  PNPM_VERSION,
   suggestComponent,
   normalizeComponent,
   readComponentMarker,
@@ -701,6 +703,14 @@ describe('pmCommands', () => {
     expect(cmd.exec).toBe('npx');
     expect(cmd.lockfile).toBe('package-lock.json');
     expect(cmd.audit).toBe('npm audit --omit=dev');
+  });
+
+  it('defaults to pnpm and pins its version, leaving other PMs unpinned', () => {
+    expect(DEFAULT_PACKAGE_MANAGER).toBe('pnpm');
+    expect(pmCommands('pnpm').version).toBe(PNPM_VERSION);
+    expect(pmCommands('npm').version).toBe('');
+    expect(pmCommands('yarn').version).toBe('');
+    expect(pmCommands('bun').version).toBe('');
   });
 
   it('returns correct pnpm commands', () => {
