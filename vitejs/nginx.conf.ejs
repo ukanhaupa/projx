@@ -30,7 +30,7 @@ server {
     resolver 127.0.0.11 valid=10s ipv6=off;
     set $backend_upstream backend;
 <% if (components.includes('admin-panel')) { %>
-    set $admin_panel_upstream admin-panel;
+    set $admin_panel_upstream <%= paths['admin-panel'] %>;
 <% } %>
     ssl_certificate     /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;

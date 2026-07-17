@@ -28,6 +28,7 @@ import {
   readComponentMarker,
   readProjxConfig,
   renderEjsInDir,
+  resolvePrimarySourceDirs,
   replaceInFile,
   replaceInDir,
   toSnake,
@@ -656,7 +657,11 @@ async function writeOneInstance(
     ...componentPaths,
     [type]: targetDir,
   };
-  await renderEjsInDir(outDir, { ...vars, paths: instancePaths });
+  await renderEjsInDir(outDir, {
+    ...vars,
+    paths: instancePaths,
+    ...resolvePrimarySourceDirs(instancePaths),
+  });
   await applyOrmProviderToInstance(repoDir, outDir, type, resolvedOrm, vars);
 
   await upsertComponentMarker(
@@ -941,6 +946,7 @@ function ormNodeDockerfileSource(
     exec?: string;
     run?: string;
     lockfile?: string;
+    version?: string;
   };
   const pmName = pm.name ?? 'npm';
   const lockfile = pm.lockfile ?? 'package-lock.json';
@@ -956,7 +962,7 @@ function ormNodeDockerfileSource(
     pmName === 'pnpm'
       ? `ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN corepack enable && corepack prepare pnpm@${pm.version} --activate
 `
       : pmName === 'yarn'
         ? 'RUN corepack enable\n'

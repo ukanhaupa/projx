@@ -115,18 +115,12 @@ function infraTemplateVars(vars: GeneratorVars): GeneratorVars {
     `${projectName}/backend`,
     `${projectName}/frontend`,
   ];
-  const hasBackendMigrations = vars.components.some(
-    (c) => c === 'fastify' || c === 'express',
-  );
-  const hasAdminPanelMigrations = vars.components.includes('admin-panel');
   return {
     ...vars,
     productionDomain,
     awsRegion,
     githubOwner,
     ecrRepos,
-    hasBackendMigrations,
-    hasAdminPanelMigrations,
     displayName: projectName.charAt(0).toUpperCase() + projectName.slice(1),
   };
 }
@@ -136,7 +130,7 @@ export async function generateRollback(vars: GeneratorVars): Promise<string> {
 }
 
 export async function generateCodeowners(vars: GeneratorVars): Promise<string> {
-  return renderShared('codeowners.ejs', infraTemplateVars(vars));
+  return renderShared('codeowners.ejs', withInstances(infraTemplateVars(vars)));
 }
 
 export async function generateRunbook(vars: GeneratorVars): Promise<string> {

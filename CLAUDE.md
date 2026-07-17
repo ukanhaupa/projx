@@ -193,6 +193,17 @@ Base templates carry `// projx-anchor: imports`, `// projx-anchor: plugins`, `//
 
 Strip docstrings, TODOs, and explainer comments from lifted code. Well-named identifiers carry the meaning. The only comments that belong are: a workaround for a specific bug, a subtle invariant, behaviour that would surprise a reader.
 
+### Never hard-code a component directory in a shipped artifact
+
+A component can live at any directory (`add <type> --name <dir>`, or several instances of one type). Its real directory is recorded in the per-dir `.projx-component` marker and resolved by `discoverComponentsFromMarkers` in [cli/src/utils.ts](cli/src/utils.ts). Anything copied into or generated for a scaffold must resolve the directory, never assume `fastify/` / `vitejs/` / `fastapi/` / `infra/` / `admin-panel/`:
+
+- **Rendered `.ejs`** (shared templates and per-component files rendered by `renderEjsInDir`) emit `<%= paths.<type> %>` / iterate the `*Instances` arrays — same as `ci.yml.ejs` / `docker-compose.yml.ejs`. For the single "primary" backend/frontend (infra's one-pipeline assumption), `resolvePrimarySourceDirs(paths)` is injected into every component render as `backendSourceDir` / `frontendSourceDir`.
+- **Static shell copied verbatim** (`scripts/ci-local.sh`, both `setup-ssl.sh`, `validate-nginx-config.sh`) source **`scripts/projx-dirs.sh`** — a `bash 3.2`-safe resolver (`projx_dirs_of_type`, `projx_first_dir_of_type`, `projx_has_type`, `projx_primary_*`) that scans the markers and falls back to conventional directory names when none exist (so the projx repo, which has no markers, behaves unchanged). It is in the static-copy list in `utils.ts`.
+- **Runtime `.ts`** (`e2e/playwright.config.ts`) resolves sibling directories from their markers at load time.
+- **Infra** parameterizes the backend/frontend source dir via the `backend_source_dir` / `frontend_source_dir` Terraform variables, overridden per scaffold by the rendered `infra/stack/projx.auto.tfvars`.
+
+The projx repo's own `ci-local.sh` / gates use the conventional-name fallback, so they stay green while scaffolds get the resolved directories. Regression-guarded by `cli/tests/instance-aware-dirs.test.ts` and the `--name` scaffold path.
+
 ## Feature templates (opt-in modules)
 
 The standard is in [docs/feature-templates.md](docs/feature-templates.md). Key points:

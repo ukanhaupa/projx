@@ -11,7 +11,7 @@
 - **Validation** — `@sinclair/typebox`
 - **ORM / DB** — Prisma + Postgres (default ORM; Drizzle / Sequelize / TypeORM come via `addons/orms/<orm>/` overlays — see root)
 - **Auth** — JWT verified via `jose` (`src/lib/jwt-verifier.ts`) + `@fastify/jwt`
-- **Package manager** — pnpm
+- **Package manager** — pnpm 11 (per-project overrides / security pins + build-script approvals live in `pnpm-workspace.yaml`, **not** the package.json `pnpm` field — pnpm 11 stopped reading it)
 - **Test** — Vitest against **real Postgres** (`tests/global-setup.ts`), v8 coverage
 - **Logging** — Fastify/pino logger, `request_id` correlation; `pino-pretty` in dev
 

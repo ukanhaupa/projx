@@ -50,8 +50,26 @@ def check_file(path: Path) -> list[str]:
     return violations
 
 
+def resolve_frontend_srcs() -> list[str]:
+    srcs: list[str] = []
+    for entry in sorted(Path(".").iterdir()):
+        if not entry.is_dir():
+            continue
+        marker = entry / ".projx-component"
+        kind: str | None = None
+        if marker.is_file():
+            raw = marker.read_text()
+            match = re.search(r'"component"\s*:\s*"([^"]+)"', raw)
+            kind = match.group(1) if match else raw.strip()
+        elif entry.name in {"vitejs", "nextjs"}:
+            kind = entry.name
+        if kind in {"vitejs", "nextjs"} and (entry / "src").is_dir():
+            srcs.append(str(entry / "src"))
+    return srcs
+
+
 def main() -> int:
-    paths = sys.argv[1:] or ["vitejs/src"]
+    paths = sys.argv[1:] or resolve_frontend_srcs() or ["vitejs/src"]
     violations: list[str] = []
     for path in iter_css_files(paths):
         violations.extend(check_file(path))

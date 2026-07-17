@@ -4,7 +4,7 @@ React 19 + TypeScript SPA shell with auth, theming, and design tokens. Build you
 
 ## Quick Start
 
-Prerequisites: Node.js 20+, pnpm 10+ (`corepack enable && corepack prepare pnpm@latest --activate`)
+Prerequisites: Node.js 20+, pnpm 11+ (`corepack enable && corepack prepare pnpm@latest --activate`)
 
 ```bash
 cp .env.example .env     # set VITE_API_URL
