@@ -53,7 +53,7 @@ phases:
           timeout "$DOCKER_STEP_TIMEOUT" docker build \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             --cache-from "$ECR_REPOSITORY_URL:latest" \
-            -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" fastapi
+            -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" "$FOLDER_PATH"
           trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$ECR_REPOSITORY_URL:$IMAGE_TAG"
           timeout "$DOCKER_STEP_TIMEOUT" docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
           docker tag "$ECR_REPOSITORY_URL:$IMAGE_TAG" "$ECR_REPOSITORY_URL:latest"

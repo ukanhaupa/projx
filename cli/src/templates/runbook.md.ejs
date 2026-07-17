@@ -7,7 +7,7 @@ Single source of truth for production recovery, deploys, rollbacks, and incident
 - Single EC2 (Ubuntu 24.04, `<%= awsRegion %>`) running Docker Compose
 - RDS Postgres, isolated subnets, PITR enabled, `deletion_protection=true`
 - Container registry: ECR
-- IaC: Terraform in [`infra/`](infra/), state in S3 + DynamoDB lock
+- IaC: Terraform in [`<%= paths.infra %>/`](<%= paths.infra %>/), state in S3 + DynamoDB lock
 
 ## Deploy
 

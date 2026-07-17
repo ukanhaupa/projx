@@ -17,10 +17,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
 
+# shellcheck source=scripts/projx-dirs.sh disable=SC1091
+. "$SCRIPT_DIR/projx-dirs.sh"
+FRONTEND_SERVICE="$(projx_first_dir_of_type vitejs "$PROJECT_DIR" || true)"
+if [ -z "$FRONTEND_SERVICE" ]; then
+  echo "ERROR: no vitejs frontend component found — SSL setup targets the nginx-served frontend."
+  exit 1
+fi
+
 echo "=== Pre-flight checks ==="
 
-if ! docker compose -f "$COMPOSE_FILE" ps --status running | grep -q vitejs; then
-  echo "ERROR: vitejs container is not running. Run 'docker compose up -d' first."
+if ! docker compose -f "$COMPOSE_FILE" ps --status running | grep -q "$FRONTEND_SERVICE"; then
+  echo "ERROR: $FRONTEND_SERVICE container is not running. Run 'docker compose up -d' first."
   exit 1
 fi
 
@@ -87,14 +95,14 @@ if docker run --rm \
     --non-interactive \
     --keep-until-expiring; then
 
-  echo "=== Restarting vitejs to pick up new cert ==="
-  docker compose -f "$COMPOSE_FILE" restart vitejs
+  echo "=== Restarting $FRONTEND_SERVICE to pick up new cert ==="
+  docker compose -f "$COMPOSE_FILE" restart "$FRONTEND_SERVICE"
 else
   echo "WARNING: Certbot failed. Self-signed cert remains active."
 fi
 
 echo "=== Setting up auto-renewal cron ==="
-CRON_CMD="0 3 * * * docker run --rm -v $LE_VOLUME:/etc/letsencrypt -v $CW_VOLUME:/var/www/certbot certbot/certbot renew --quiet && docker compose -f $COMPOSE_FILE restart vitejs"
+CRON_CMD="0 3 * * * docker run --rm -v $LE_VOLUME:/etc/letsencrypt -v $CW_VOLUME:/var/www/certbot certbot/certbot renew --quiet && docker compose -f $COMPOSE_FILE restart $FRONTEND_SERVICE"
 EXISTING=$(crontab -l 2>/dev/null || true)
 echo "$EXISTING" | grep -v "certbot renew" | { cat; echo "$CRON_CMD"; } | crontab -
 

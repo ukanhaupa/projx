@@ -97,7 +97,8 @@ export const PACKAGE_MANAGERS = ['npm', 'pnpm', 'yarn', 'bun'] as const;
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
 
 export const DEFAULT_PACKAGE_MANAGER: PackageManager = 'pnpm';
-export const PNPM_VERSION = '10.33.0';
+export const PNPM_VERSION =
+  '11.5.2+sha512.71c631e382066efc25625d5cf029075de07b61b37f6e27350fbd84b1bda5864c8c1967adc280776b45c30a715c0359a3be08fef42d5bb09e2b99029979692916';
 
 export const ORM_PROVIDERS = [
   'prisma',
@@ -453,12 +454,14 @@ export async function copyStaticFiles(
   }
 
   const staticScripts = [
+    'projx-dirs.sh',
     'ci-local.sh',
     'ci-runner-gc.sh',
     'check-bundle-size.sh',
     'setup-docker.sh',
     'setup-ssl.sh',
     'style-check.py',
+    'validate-nginx-config.sh',
   ];
   const scriptsSrc = join(tpl, 'scripts');
   if (existsSync(scriptsSrc)) {
@@ -688,12 +691,14 @@ export const DEFAULT_ROOT_SKIP_PATTERNS: string[] = [
   'README.md',
   '.githooks/pre-commit',
   '.github/workflows/ci.yml',
+  'scripts/projx-dirs.sh',
   'scripts/ci-local.sh',
   'scripts/ci-runner-gc.sh',
   'scripts/check-bundle-size.sh',
   'scripts/setup.sh',
   'scripts/setup-docker.sh',
   'scripts/setup-ssl.sh',
+  'scripts/validate-nginx-config.sh',
 ];
 
 export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
@@ -707,6 +712,33 @@ export const DEFAULT_COMPONENT_SKIP_PATTERNS: Partial<
   e2e: ['package.json'],
   mobile: ['pubspec.yaml'],
 };
+
+const BACKEND_SOURCE_PRIORITY: Component[] = [
+  'fastapi',
+  'fastify',
+  'express',
+  'go',
+  'rust',
+  'laravel',
+];
+const FRONTEND_SOURCE_PRIORITY: Component[] = ['vitejs', 'nextjs'];
+
+export function resolvePrimarySourceDirs(paths: ComponentPaths): {
+  backendSourceDir: string;
+  frontendSourceDir: string;
+} {
+  const pick = (priority: Component[], fallback: string): string => {
+    for (const type of priority) {
+      const dir = paths[type];
+      if (dir) return dir;
+    }
+    return fallback;
+  };
+  return {
+    backendSourceDir: pick(BACKEND_SOURCE_PRIORITY, 'backend'),
+    frontendSourceDir: pick(FRONTEND_SOURCE_PRIORITY, 'frontend'),
+  };
+}
 
 export async function discoverComponentPaths(
   cwd: string,

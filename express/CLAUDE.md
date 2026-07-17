@@ -11,7 +11,7 @@
 - **Validation** — `zod`
 - **ORM / DB** — Prisma + Postgres (default ORM; alternates via `addons/orms/<orm>/`)
 - **Auth** — JWT via `jose` + `jsonwebtoken` (`src/lib/jwt-verifier.ts`, `src/middlewares/authenticate.ts`)
-- **Package manager** — pnpm
+- **Package manager** — pnpm 11 (per-project overrides / security pins + build-script approvals live in `pnpm-workspace.yaml`, **not** the package.json `pnpm` field — pnpm 11 stopped reading it)
 - **Test** — Vitest + `supertest` against **real Postgres** (`tests/global-setup.ts`), v8 coverage
 - **Logging** — `pino-http`, `request_id` correlation
 

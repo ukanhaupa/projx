@@ -32,6 +32,7 @@
 - **Secrets never in code** — runtime creds resolve at boot, not committed plaintext. `.env.<env>` files are gitignored (and excluded from the CLI copy).
 - **Variables carry `description` + `type`**; tag every resource (`Project`, `Environment`, `ManagedBy`).
 - **Destructive resources** (RDS, KMS) get `lifecycle { prevent_destroy = true }` in prod.
+- **App source dirs are resolved, never hard-coded** (root [`../CLAUDE.md`](../CLAUDE.md) §"Never hard-code a component directory"). The backend/frontend CodeBuild `FOLDER_PATH` change-detector and the `docker build` context read `var.backend_source_dir` / `var.frontend_source_dir` (defaults `backend`/`frontend`, overridden per scaffold by the projx-rendered `stack/projx.auto.tfvars`); the backend/frontend buildspecs are referenced via `file("${path.module}/../cicd/…")` so a renamed `infra/` dir still resolves. Don't reintroduce literal `fastapi`/`frontend` build contexts.
 
 ## Quality gates
 

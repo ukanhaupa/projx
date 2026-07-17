@@ -30,6 +30,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ROOT_DIR
 cd "$ROOT_DIR" || exit 1
 
+# shellcheck source=scripts/projx-dirs.sh disable=SC1091
+. "$ROOT_DIR/scripts/projx-dirs.sh"
+
 LOGS_DIR="${LOGS_DIR:-${TMPDIR:-/tmp}/projx-ci-local.$$}"
 mkdir -p "$LOGS_DIR"
 export LOGS_DIR
@@ -200,15 +203,22 @@ sec_secrets() {
 }
 
 sec_fastapi() {
-  cd "$ROOT_DIR/fastapi" || exit 1
-  run_step "fastapi install" uv sync --group dev
-  run_step "fastapi format" uv run ruff format src tests
-  run_step "fastapi lint" uv run ruff check src tests
-  run_step "fastapi typecheck" uv run mypy
-  if [ -d tests ]; then
-    run_step "fastapi tests" uv run pytest
-  fi
-  run_step "fastapi audit" bash audit.sh
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      run_step "$dir install" uv sync --group dev
+      run_step "$dir format" uv run ruff format src tests
+      run_step "$dir lint" uv run ruff check src tests
+      run_step "$dir typecheck" uv run mypy
+      if [ -d tests ]; then
+        run_step "$dir tests" uv run pytest
+      fi
+      run_step "$dir audit" bash audit.sh
+    ) || rc=1
+  done < <(projx_dirs_of_type fastapi)
+  return "$rc"
 }
 
 sec_cli() {
@@ -223,12 +233,20 @@ sec_cli() {
   run_step "cli audit" pm_audit
 }
 
-sec_fastify() { run_js_component fastify; }
+sec_fastify() {
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    run_js_component "$dir" || rc=1
+  done < <(projx_dirs_of_type fastify)
+  return "$rc"
+}
 
 express_boot_smoke() {
-  cd "$ROOT_DIR/express" || exit 1
+  local dir="$1"
+  cd "$ROOT_DIR/$dir" || exit 1
   [ -f .env.test ] || {
-    xfail "express/.env.test missing — cannot boot express for smoke"
+    xfail "$dir/.env.test missing — cannot boot express for smoke"
     return 1
   }
   command -v curl >/dev/null 2>&1 || {
@@ -247,22 +265,22 @@ express_boot_smoke() {
   fi
   local port
   port="$(pick_free_port)"
-  printf '\n==> %s\n' "express boot smoke (:$port/api/health)"
-  start_background "express-boot" bash -c \
-    "cd '$ROOT_DIR/express' && set -a && . ./.env.test && set +a && $(declare -f pm_exec detect_pm); PORT='$port' HOST='127.0.0.1' pm_exec tsx src/server.ts"
+  printf '\n==> %s\n' "$dir boot smoke (:$port/api/health)"
+  start_background "$dir-boot" bash -c \
+    "cd '$ROOT_DIR/$dir' && set -a && . ./.env.test && set +a && $(declare -f pm_exec detect_pm); PORT='$port' HOST='127.0.0.1' pm_exec tsx src/server.ts"
   local boot_pid="$LAST_PID"
   local tries=60
   local rc=0
   until curl -fsS "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; do
     if ! kill -0 "$boot_pid" 2>/dev/null; then
-      xfail "express boot smoke: server exited before becoming healthy"
-      tail -25 "$LOGS_DIR/express-boot.log" >&2 || true
+      xfail "$dir boot smoke: server exited before becoming healthy"
+      tail -25 "$LOGS_DIR/$dir-boot.log" >&2 || true
       return 1
     fi
     tries=$((tries - 1))
     if [ "$tries" -le 0 ]; then
-      xfail "express boot smoke: never healthy on :$port/api/health"
-      tail -25 "$LOGS_DIR/express-boot.log" >&2 || true
+      xfail "$dir boot smoke: never healthy on :$port/api/health"
+      tail -25 "$LOGS_DIR/$dir-boot.log" >&2 || true
       rc=1
       break
     fi
@@ -273,85 +291,122 @@ express_boot_smoke() {
 }
 
 sec_express() {
-  run_js_component express || return 1
-  express_boot_smoke
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    run_js_component "$dir" || {
+      rc=1
+      continue
+    }
+    express_boot_smoke "$dir" || rc=1
+  done < <(projx_dirs_of_type express)
+  return "$rc"
 }
 
 sec_go() {
-  [ -d "$ROOT_DIR/go" ] || return 0
-  cd "$ROOT_DIR/go" || exit 1
-  local gobin
-  gobin="$(go env GOPATH)/bin"
-  export PATH="$PATH:$gobin"
-  run_step "go install" go mod download
-  gofmt -w .
-  local go_unformatted
-  go_unformatted="$(gofmt -l .)"
-  if [ -n "$go_unformatted" ]; then
-    xfail "gofmt could not normalize: $go_unformatted"
-    return 1
-  fi
-  run_step "go vet" go vet ./...
-  run_step "go build" go build ./...
-  command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-  run_step "go lint" golangci-lint run ./...
-  command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-  run_step "govulncheck" govulncheck ./...
-  run_step "go test" go test -race -coverprofile=coverage.out ./...
-  run_step "go coverage" bash scripts/check-coverage.sh
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      gobin="$(go env GOPATH)/bin"
+      export PATH="$PATH:$gobin"
+      run_step "$dir install" go mod download
+      gofmt -w .
+      go_unformatted="$(gofmt -l .)"
+      if [ -n "$go_unformatted" ]; then
+        xfail "gofmt could not normalize: $go_unformatted"
+        exit 1
+      fi
+      run_step "$dir vet" go vet ./...
+      run_step "$dir build" go build ./...
+      command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      run_step "$dir lint" golangci-lint run ./...
+      command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      run_step "$dir govulncheck" govulncheck ./...
+      run_step "$dir test" go test -race -coverprofile=coverage.out ./...
+      run_step "$dir coverage" bash scripts/check-coverage.sh
+    ) || rc=1
+  done < <(projx_dirs_of_type go)
+  return "$rc"
 }
 
 sec_rust() {
-  [ -d "$ROOT_DIR/rust" ] || return 0
-  if ! command -v cargo >/dev/null 2>&1; then
-    warn "rust toolchain not installed, skipping (install: https://rustup.rs)"
-    return 0
-  fi
-  cd "$ROOT_DIR/rust" || exit 1
-  run_step "rust format" cargo fmt
-  run_step "rust lint" cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
-  git diff --quiet -- . 2>/dev/null || warn "rust: cargo fmt/clippy rewrote files — commit them before push (CI runs check-mode on the committed tree)"
-  run_step "rust test" cargo test --all-features
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    if ! command -v cargo >/dev/null 2>&1; then
+      warn "rust toolchain not installed, skipping (install: https://rustup.rs)"
+      continue
+    fi
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      run_step "$dir format" cargo fmt
+      run_step "$dir lint" cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+      git diff --quiet -- . 2>/dev/null || warn "$dir: cargo fmt/clippy rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+      run_step "$dir test" cargo test --all-features
+    ) || rc=1
+  done < <(projx_dirs_of_type rust)
+  return "$rc"
 }
 
 sec_laravel() {
-  [ -d "$ROOT_DIR/laravel" ] || return 0
-  if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1; then
-    warn "php/composer not installed, skipping (install: https://www.php.net + https://getcomposer.org)"
-    return 0
-  fi
-  cd "$ROOT_DIR/laravel" || exit 1
-  run_step "laravel install" composer install --no-interaction
-  run_step "laravel format" ./vendor/bin/pint
-  git diff --quiet -- . 2>/dev/null || warn "laravel: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
-  run_step "laravel lint" ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
-  local pg_user pg_host pg_port
-  pg_user="${PGUSER:-$(whoami)}"
-  pg_host="${PGHOST:-localhost}"
-  pg_port="${PGPORT:-5432}"
-  createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_audit_laravel 2>/dev/null || true
-  run_step "laravel tests" env \
-    AUDIT_DB_HOST="$pg_host" AUDIT_DB_PORT="$pg_port" \
-    AUDIT_DB_DATABASE=projx_audit_laravel AUDIT_DB_USERNAME="$pg_user" \
-    ./vendor/bin/pest --no-coverage
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1; then
+      warn "php/composer not installed, skipping (install: https://www.php.net + https://getcomposer.org)"
+      continue
+    fi
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      run_step "$dir install" composer install --no-interaction
+      run_step "$dir format" ./vendor/bin/pint
+      git diff --quiet -- . 2>/dev/null || warn "$dir: pint rewrote files — commit them before push (CI runs check-mode on the committed tree)"
+      run_step "$dir lint" ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+      pg_user="${PGUSER:-$(whoami)}"
+      pg_host="${PGHOST:-localhost}"
+      pg_port="${PGPORT:-5432}"
+      createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_audit_laravel 2>/dev/null || true
+      run_step "$dir tests" env \
+        AUDIT_DB_HOST="$pg_host" AUDIT_DB_PORT="$pg_port" \
+        AUDIT_DB_DATABASE=projx_audit_laravel AUDIT_DB_USERNAME="$pg_user" \
+        ./vendor/bin/pest --no-coverage
+    ) || rc=1
+  done < <(projx_dirs_of_type laravel)
+  return "$rc"
 }
 
 sec_vitejs() {
   export VITE_OIDC_URL="${VITE_OIDC_URL:-http://localhost:8080}"
   export VITE_OIDC_REALM="${VITE_OIDC_REALM:-master}"
   export VITE_OIDC_CLIENT_ID="${VITE_OIDC_CLIENT_ID:-frontend}"
-  run_js_component vitejs
-  if [ -d "$ROOT_DIR/vitejs/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
-    (cd "$ROOT_DIR/vitejs" && run_step "vitejs bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh")
-  fi
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    run_js_component "$dir" || rc=1
+    if [ -d "$ROOT_DIR/$dir/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
+      (cd "$ROOT_DIR/$dir" && run_step "$dir bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh") || rc=1
+    fi
+  done < <(projx_dirs_of_type vitejs)
+  return "$rc"
 }
 
-sec_nextjs() { run_js_component nextjs; }
+sec_nextjs() {
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    run_js_component "$dir" || rc=1
+  done < <(projx_dirs_of_type nextjs)
+  return "$rc"
+}
 
 sec_e2e() {
-  if [ ! -d "$ROOT_DIR/e2e" ]; then return 0; fi
+  local e2e_dir backend_dir="" frontend_dir
+  e2e_dir="$(projx_first_dir_of_type e2e)"
+  if [ -z "$e2e_dir" ]; then return 0; fi
   if [ -n "${E2E_SKIP_REAL:-}" ]; then
-    run_js_component e2e
+    run_js_component "$e2e_dir"
     return $?
   fi
 
@@ -365,67 +420,66 @@ sec_e2e() {
   local health_path="${E2E_HEALTH_PATH:-/api/health}"
   local e2e_jwt_secret="${E2E_JWT_SECRET:-}" # pragma: allowlist secret
 
-  if [ -d "$ROOT_DIR/fastapi" ]; then
-    backend_kind="fastapi"
-  elif [ -d "$ROOT_DIR/fastify" ]; then
-    backend_kind="fastify"
-  elif [ -d "$ROOT_DIR/express" ]; then
-    backend_kind="express"
-  fi
+  for backend_kind in fastapi fastify express; do
+    backend_dir="$(projx_first_dir_of_type "$backend_kind")"
+    if [ -n "$backend_dir" ]; then break; fi
+    backend_kind=""
+  done
 
   if [ -z "$backend_kind" ]; then
     xfail "no backend directory found for e2e (expected fastapi, fastify, or express)"
     return 1
   fi
+  frontend_dir="$(projx_first_dir_of_type vitejs)"
 
   if [ "$backend_kind" = "fastapi" ]; then
     if ! command -v uv >/dev/null 2>&1; then
       xfail "uv not installed — cannot boot fastapi backend for e2e"
       return 1
     fi
-    [ -f "$ROOT_DIR/fastapi/.env.test" ] || {
-      xfail "fastapi/.env.test missing — cannot boot fastapi backend for e2e"
+    [ -f "$ROOT_DIR/$backend_dir/.env.test" ] || {
+      xfail "$backend_dir/.env.test missing — cannot boot fastapi backend for e2e"
       return 1
     }
-    (cd "$ROOT_DIR/fastapi" && uv sync --group dev) || return 1
+    (cd "$ROOT_DIR/$backend_dir" && uv sync --group dev) || return 1
     if [ -z "$e2e_jwt_secret" ]; then
       e2e_jwt_secret="$(
-        bash -c "set -a; . '$ROOT_DIR/fastapi/.env.test'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
+        bash -c "set -a; . '$ROOT_DIR/$backend_dir/.env.test'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
       )"
     fi
     local base_uri e2e_uri
-    base_uri="$(bash -c "set -a; . '$ROOT_DIR/fastapi/.env.test'; set +a; printf '%s' \"\${SQLALCHEMY_DATABASE_URI:-}\"")"
+    base_uri="$(bash -c "set -a; . '$ROOT_DIR/$backend_dir/.env.test'; set +a; printf '%s' \"\${SQLALCHEMY_DATABASE_URI:-}\"")"
     e2e_uri="${base_uri%/*}/projx_test_e2e"
     createdb -U "${PGUSER:-$(whoami)}" -h "${PGHOST:-localhost}" -p "${PGPORT:-5432}" projx_test_e2e 2>/dev/null || true
-    bash -c "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && exec uv run python migrate.py" || return 1
-    rm -f "$ROOT_DIR/fastapi"/.coverage*
+    bash -c "cd '$ROOT_DIR/$backend_dir' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && exec uv run python migrate.py" || return 1
+    rm -f "$ROOT_DIR/$backend_dir"/.coverage*
     start_background "e2e-backend" bash -c \
-      "cd '$ROOT_DIR/fastapi' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && export CORS_ALLOW_ORIGINS='http://127.0.0.1:$frontend_port' && exec uv run coverage run --parallel-mode --source=src -m uvicorn src.app:app --host 127.0.0.1 --port '$port'"
+      "cd '$ROOT_DIR/$backend_dir' && set -a && . ./.env.test && set +a && export SQLALCHEMY_DATABASE_URI='$e2e_uri' && export CORS_ALLOW_ORIGINS='http://127.0.0.1:$frontend_port' && exec uv run coverage run --parallel-mode --source=src -m uvicorn src.app:app --host 127.0.0.1 --port '$port'"
   elif [ "$backend_kind" = "fastify" ]; then
-    (cd "$ROOT_DIR/fastify" && pm_install) || return 1
-    if [ -f "$ROOT_DIR/fastify/prisma/schema.prisma" ]; then
-      (cd "$ROOT_DIR/fastify" && pm_exec prisma generate) || return 1
-      (cd "$ROOT_DIR/fastify" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
+    (cd "$ROOT_DIR/$backend_dir" && pm_install) || return 1
+    if [ -f "$ROOT_DIR/$backend_dir/prisma/schema.prisma" ]; then
+      (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma generate) || return 1
+      (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
     fi
-    [ -f "$ROOT_DIR/fastify/.env" ] || {
-      xfail "fastify/.env missing — cannot boot fastify backend for e2e"
+    [ -f "$ROOT_DIR/$backend_dir/.env" ] || {
+      xfail "$backend_dir/.env missing — cannot boot fastify backend for e2e"
       return 1
     }
     if [ -z "$e2e_jwt_secret" ]; then
       e2e_jwt_secret="$(
-        bash -c "set -a; . '$ROOT_DIR/fastify/.env'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
+        bash -c "set -a; . '$ROOT_DIR/$backend_dir/.env'; set +a; printf '%s' \"\${JWT_SECRET:-}\""
       )"
     fi
     start_background "e2e-backend" bash -c \
-      "cd '$ROOT_DIR/fastify' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx --env-file=.env src/server.ts"
+      "cd '$ROOT_DIR/$backend_dir' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx --env-file=.env src/server.ts"
   else
-    (cd "$ROOT_DIR/express" && pm_install) || return 1
-    if [ -f "$ROOT_DIR/express/prisma/schema.prisma" ]; then
-      (cd "$ROOT_DIR/express" && pm_exec prisma generate) || return 1
-      (cd "$ROOT_DIR/express" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
+    (cd "$ROOT_DIR/$backend_dir" && pm_install) || return 1
+    if [ -f "$ROOT_DIR/$backend_dir/prisma/schema.prisma" ]; then
+      (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma generate) || return 1
+      (cd "$ROOT_DIR/$backend_dir" && pm_exec prisma db push --skip-generate --accept-data-loss) || return 1
     fi
     start_background "e2e-backend" bash -c \
-      "cd '$ROOT_DIR/express' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx src/server.ts"
+      "cd '$ROOT_DIR/$backend_dir' && $(declare -f pm_exec detect_pm); PORT='$port' pm_exec tsx src/server.ts"
   fi
   local backend_pid="$LAST_PID"
 
@@ -444,14 +498,14 @@ sec_e2e() {
     done
   fi
 
-  [ -d "$ROOT_DIR/vitejs" ] || {
-    xfail "frontend directory missing — cannot run e2e"
+  if [ -z "$frontend_dir" ] || [ ! -d "$ROOT_DIR/$frontend_dir" ]; then
+    xfail "no vitejs frontend directory found — cannot run e2e"
     kill -- "-$backend_pid" 2>/dev/null || kill "$backend_pid" 2>/dev/null || true
     return 1
-  }
+  fi
 
   (
-    cd "$ROOT_DIR/vitejs" || exit 1
+    cd "$ROOT_DIR/$frontend_dir" || exit 1
     run_step "frontend install (e2e)" pm_install
     run_step "frontend build (e2e)" bash -c \
       "$(declare -f pm_exec detect_pm); VITE_API_URL='http://127.0.0.1:$port' VITE_COVERAGE=1 pm_exec vite build --outDir dist-e2e"
@@ -461,7 +515,7 @@ sec_e2e() {
   }
 
   start_background "e2e-frontend" bash -c \
-    "cd '$ROOT_DIR/vitejs' && $(declare -f pm_exec detect_pm); pm_exec vite preview --outDir dist-e2e --host 127.0.0.1 --port '$frontend_port' --strictPort"
+    "cd '$ROOT_DIR/$frontend_dir' && $(declare -f pm_exec detect_pm); pm_exec vite preview --outDir dist-e2e --host 127.0.0.1 --port '$frontend_port' --strictPort"
   local frontend_pid="$LAST_PID"
 
   if command -v curl >/dev/null 2>&1; then
@@ -478,10 +532,10 @@ sec_e2e() {
     done
   fi
 
-  rm -rf "$ROOT_DIR/e2e/.nyc_output"
+  rm -rf "$ROOT_DIR/$e2e_dir/.nyc_output"
   local rc=0
   (
-    cd "$ROOT_DIR/e2e" || exit 1
+    cd "$ROOT_DIR/$e2e_dir" || exit 1
     run_step "e2e install" pm_install
     run_step "e2e playwright install" pm_exec playwright install --with-deps chromium firefox webkit
     run_step "e2e format" pm_exec prettier --write .
@@ -503,25 +557,25 @@ sec_e2e() {
   if [ "$rc" -eq 0 ]; then
     local cov="$LOGS_DIR/e2e-coverage"
     mkdir -p "$cov/fe"
-    if [ -d "$ROOT_DIR/e2e/.nyc_output" ]; then
-      (cd "$ROOT_DIR/e2e" && pm_exec nyc report --cwd "$ROOT_DIR" --temp-dir "$ROOT_DIR/e2e/.nyc_output" --reporter=lcovonly --report-dir "$cov/fe") || true
+    if [ -d "$ROOT_DIR/$e2e_dir/.nyc_output" ]; then
+      (cd "$ROOT_DIR/$e2e_dir" && pm_exec nyc report --cwd "$ROOT_DIR" --temp-dir "$ROOT_DIR/$e2e_dir/.nyc_output" --reporter=lcovonly --report-dir "$cov/fe") || true
       if [ ! -s "$cov/fe/lcov.info" ] || ! grep -q '^SF:' "$cov/fe/lcov.info"; then
         xfail "e2e frontend coverage empty — instrumented __coverage__ scrape produced no lcov"
         rc=1
       else
-        run_step "e2e frontend reachability" bash "$ROOT_DIR/e2e/scripts/check-coverage.sh" "$cov/fe/lcov.info" "$ROOT_DIR/vitejs/src/pages" || rc=1
+        run_step "e2e frontend reachability" bash "$ROOT_DIR/$e2e_dir/scripts/check-coverage.sh" "$cov/fe/lcov.info" "$ROOT_DIR/$frontend_dir/src/pages" || rc=1
       fi
     else
       xfail "e2e frontend coverage missing — no .nyc_output (frontend not instrumented)"
       rc=1
     fi
     if [ "$backend_kind" = "fastapi" ]; then
-      (cd "$ROOT_DIR/fastapi" && uv run coverage combine && uv run coverage lcov -o "$cov/e2e-backend.lcov") || true
+      (cd "$ROOT_DIR/$backend_dir" && uv run coverage combine && uv run coverage lcov -o "$cov/e2e-backend.lcov") || true
       if [ ! -s "$cov/e2e-backend.lcov" ] || ! grep -q '^SF:' "$cov/e2e-backend.lcov"; then
         xfail "e2e backend coverage empty — coverage.py produced no lcov (did the server flush on SIGTERM?)"
         rc=1
       else
-        run_step "e2e backend coverage" bash -c "cd '$ROOT_DIR/fastapi' && uv run coverage report --fail-under=${E2E_BACKEND_COV_MIN:-30}" || rc=1
+        run_step "e2e backend coverage" bash -c "cd '$ROOT_DIR/$backend_dir' && uv run coverage report --fail-under=${E2E_BACKEND_COV_MIN:-30}" || rc=1
       fi
     fi
   fi
@@ -529,46 +583,61 @@ sec_e2e() {
 }
 
 sec_infra() {
-  cd "$ROOT_DIR/infra/stack" || exit 1
+  local dir
+  dir="$(projx_first_dir_of_type infra)"
+  cd "$ROOT_DIR/$dir/stack" || exit 1
   run_step "terraform fmt" terraform fmt -check -recursive
   run_step "terraform init" terraform init -backend=false -reconfigure
   run_step "terraform validate" terraform validate
 }
 
 sec_mobile() {
-  cd "$ROOT_DIR/mobile" || exit 1
-  if ! command -v flutter >/dev/null 2>&1; then
-    warn "flutter not installed — skipping mobile section (install Flutter SDK)"
-    return 0
-  fi
-  run_step "mobile pub get" flutter pub get
-  run_step "mobile format" dart format --set-exit-if-changed .
-  run_step "mobile analyze" dart analyze --fatal-infos
-  run_step "mobile tests" flutter test --coverage
-  run_step "mobile coverage" bash scripts/check-coverage.sh 80
-  warn "mobile integration_test SKIPPED — requires a connected device or simulator."
-  warn "Run manually: cd mobile && flutter test integration_test/"
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    if ! command -v flutter >/dev/null 2>&1; then
+      warn "flutter not installed — skipping mobile section (install Flutter SDK)"
+      continue
+    fi
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      run_step "$dir pub get" flutter pub get
+      run_step "$dir format" dart format --set-exit-if-changed .
+      run_step "$dir analyze" dart analyze --fatal-infos
+      run_step "$dir tests" flutter test --coverage
+      run_step "$dir coverage" bash scripts/check-coverage.sh 80
+    ) || rc=1
+    warn "mobile integration_test SKIPPED — requires a connected device or simulator."
+    warn "Run manually: cd $dir && flutter test integration_test/"
+  done < <(projx_dirs_of_type mobile)
+  return "$rc"
 }
 
 sec_admin_panel() {
-  cd "$ROOT_DIR/admin-panel" || exit 1
-  if ! command -v go >/dev/null 2>&1; then
-    warn "go not installed — skipping admin-panel section (install Go from go.dev)"
-    return 0
-  fi
-  run_step "admin-panel gofmt" bash scripts/check-gofmt.sh
-  run_step "admin-panel vet" go vet ./...
-  run_step "admin-panel build" go build ./...
-  local pg_user pg_host pg_port db
-  pg_user="${PGUSER:-$(whoami)}"
-  pg_host="${PGHOST:-localhost}"
-  pg_port="${PGPORT:-5432}"
-  createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_test_admin_panel 2>/dev/null || true
-  db="postgresql://${pg_user}@${pg_host}:${pg_port}/projx_test_admin_panel?sslmode=disable"
-  local cover="$LOGS_DIR/admin-panel-cover.out"
-  run_step "admin-panel tests" env TEST_DATABASE_URL="$db" bash scripts/test.sh "$cover"
-  run_step "admin-panel coverage" bash scripts/check-coverage.sh "$cover" 80
-  rm -f "$cover"
+  local dir rc=0
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    if ! command -v go >/dev/null 2>&1; then
+      warn "go not installed — skipping admin-panel section (install Go from go.dev)"
+      continue
+    fi
+    (
+      cd "$ROOT_DIR/$dir" || exit 1
+      run_step "$dir gofmt" bash scripts/check-gofmt.sh
+      run_step "$dir vet" go vet ./...
+      run_step "$dir build" go build ./...
+      pg_user="${PGUSER:-$(whoami)}"
+      pg_host="${PGHOST:-localhost}"
+      pg_port="${PGPORT:-5432}"
+      createdb -U "$pg_user" -h "$pg_host" -p "$pg_port" projx_test_admin_panel 2>/dev/null || true
+      db="postgresql://${pg_user}@${pg_host}:${pg_port}/projx_test_admin_panel?sslmode=disable"
+      cover="$LOGS_DIR/$dir-cover.out"
+      run_step "$dir tests" env TEST_DATABASE_URL="$db" bash scripts/test.sh "$cover"
+      run_step "$dir coverage" bash scripts/check-coverage.sh "$cover" 80
+      rm -f "$cover"
+    ) || rc=1
+  done < <(projx_dirs_of_type admin-panel)
+  return "$rc"
 }
 
 sec_scaffold_matrix() {
@@ -616,19 +685,21 @@ sec_scripts() {
 
 available_sections() {
   local -a found=("secrets")
+  local infra_dir
   [ -d "$ROOT_DIR/cli" ] && found+=("cli")
-  [ -d "$ROOT_DIR/fastapi" ] && found+=("fastapi")
-  [ -d "$ROOT_DIR/fastify" ] && found+=("fastify")
-  [ -d "$ROOT_DIR/express" ] && found+=("express")
-  [ -d "$ROOT_DIR/go" ] && found+=("go")
-  [ -d "$ROOT_DIR/rust" ] && found+=("rust")
-  [ -d "$ROOT_DIR/laravel" ] && found+=("laravel")
-  [ -d "$ROOT_DIR/vitejs" ] && found+=("vitejs")
-  [ -d "$ROOT_DIR/nextjs" ] && found+=("nextjs")
-  [ -d "$ROOT_DIR/mobile" ] && found+=("mobile")
-  [ -d "$ROOT_DIR/e2e" ] && found+=("e2e")
-  [ -d "$ROOT_DIR/infra/stack" ] && found+=("infra")
-  [ -d "$ROOT_DIR/admin-panel" ] && found+=("admin_panel")
+  projx_has_type fastapi && found+=("fastapi")
+  projx_has_type fastify && found+=("fastify")
+  projx_has_type express && found+=("express")
+  projx_has_type go && found+=("go")
+  projx_has_type rust && found+=("rust")
+  projx_has_type laravel && found+=("laravel")
+  projx_has_type vitejs && found+=("vitejs")
+  projx_has_type nextjs && found+=("nextjs")
+  projx_has_type mobile && found+=("mobile")
+  projx_has_type e2e && found+=("e2e")
+  infra_dir="$(projx_first_dir_of_type infra)"
+  [ -n "$infra_dir" ] && [ -d "$ROOT_DIR/$infra_dir/stack" ] && found+=("infra")
+  projx_has_type admin-panel && found+=("admin_panel")
   { [ -d "$ROOT_DIR/addons" ] || [ -d "$ROOT_DIR/features" ]; } && found+=("scaffold_matrix")
   [ -f "$ROOT_DIR/scripts/scaffold-fuzz.py" ] && found+=("scaffold_fuzz")
   [ -f "$ROOT_DIR/scripts/ci-gen-compile.sh" ] && found+=("gen_compile")
@@ -646,6 +717,15 @@ changed_files() {
 
 has_changes_in() { changed_files | grep -qE "^$1"; }
 
+has_changes_in_type() {
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    has_changes_in "$d/" && return 0
+  done < <(projx_dirs_of_type "$1")
+  return 1
+}
+
 declare -a SECTIONS
 declare -a AVAILABLE=()
 while IFS= read -r line; do
@@ -659,19 +739,19 @@ elif [[ "${1:-}" == "changed" ]]; then
   for s in "${AVAILABLE[@]}"; do
     case "$s" in
       secrets) SECTIONS+=("$s") ;;
-      infra) has_changes_in "infra/" && SECTIONS+=("$s") ;;
-      admin_panel) has_changes_in "admin-panel/" && SECTIONS+=("$s") ;;
+      infra) has_changes_in_type infra && SECTIONS+=("$s") ;;
+      admin_panel) has_changes_in_type admin-panel && SECTIONS+=("$s") ;;
       scaffold_matrix)
         { has_changes_in "addons/" || has_changes_in "features/" || has_changes_in "cli/"; } && SECTIONS+=("$s") ;;
       scaffold_fuzz)
         { has_changes_in "cli/" || has_changes_in "addons/" || has_changes_in "features/"; } && SECTIONS+=("$s") ;;
       gen_compile)
         { has_changes_in "cli/" || has_changes_in "addons/" || has_changes_in "features/" ||
-          has_changes_in "go/" || has_changes_in "rust/" || has_changes_in "laravel/" ||
-          has_changes_in "fastapi/" || has_changes_in "fastify/" ||
+          has_changes_in_type go || has_changes_in_type rust || has_changes_in_type laravel ||
+          has_changes_in_type fastapi || has_changes_in_type fastify ||
           has_changes_in "scripts/ci-gen-compile.sh"; } && SECTIONS+=("$s") ;;
       scripts) has_changes_in "scripts/" && SECTIONS+=("$s") ;;
-      *) has_changes_in "$s/" && SECTIONS+=("$s") ;;
+      *) has_changes_in_type "$s" && SECTIONS+=("$s") ;;
     esac
   done
 else
@@ -712,7 +792,7 @@ run_wave() {
       xfail "unknown section: $s (valid: ${AVAILABLE[*]})"
       exit 2
     fi
-    start_background "$s" bash -c "set -e; $(declare -f "$fn" run_step run_js_component pm_install pm_exec pm_run pm_audit detect_pm start_background ensure_gitleaks xfail warn express_boot_smoke pick_free_port); $fn"
+    start_background "$s" bash -c "set -e; $(declare -f); $fn"
     NAMES+=("$s")
     printf '  %s↳%s %s started (pid %s) → %s/%s.log\n' "$DIM" "$RESET" "$s" "$LAST_PID" "$LOGS_DIR" "$s"
   done

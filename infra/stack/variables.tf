@@ -9,6 +9,18 @@ variable "alert_emails" {
   default     = []
 }
 
+variable "backend_source_dir" {
+  description = "Repo-root-relative directory of the backend component built by the backend CodeBuild pipeline. Set by projx from the scaffold's component markers."
+  type        = string
+  default     = "backend"
+}
+
+variable "frontend_source_dir" {
+  description = "Repo-root-relative directory of the frontend component built by the frontend CodeBuild pipeline. Set by projx from the scaffold's component markers."
+  type        = string
+  default     = "frontend"
+}
+
 variable "environment" {
   description = "Environment name."
   type        = string

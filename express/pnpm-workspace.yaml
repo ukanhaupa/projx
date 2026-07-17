@@ -1,0 +1,12 @@
+packages:
+  - '.'
+
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+
+overrides:
+  '@opentelemetry/core@<2.8.0': '>=2.8.0'
+  'qs@>=6.11.1 <=6.15.1': '>=6.15.2'

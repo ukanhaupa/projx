@@ -29,6 +29,15 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
   exit 1
 fi
 
+RESOLVER="$(cd "$(dirname "$0")/../.." && pwd)/scripts/projx-dirs.sh"
+# shellcheck source=scripts/projx-dirs.sh disable=SC1091
+. "$RESOLVER"
+FRONTEND_SERVICE="$(projx_first_dir_of_type vitejs "$(dirname "$COMPOSE_FILE")" || true)"
+if [[ -z "$FRONTEND_SERVICE" ]]; then
+  echo "error: no vitejs frontend service found in $COMPOSE_FILE"
+  exit 1
+fi
+
 echo "Requesting Let's Encrypt certificate for $DOMAIN..."
 
 CERTBOT_ARGS=(
@@ -49,8 +58,8 @@ fi
 
 docker compose -f "$COMPOSE_FILE" run --rm certbot "${CERTBOT_ARGS[@]}"
 
-echo "Restarting frontend to pick up new certificate..."
-docker compose -f "$COMPOSE_FILE" exec frontend sh -c "
+echo "Restarting $FRONTEND_SERVICE to pick up new certificate..."
+docker compose -f "$COMPOSE_FILE" exec "$FRONTEND_SERVICE" sh -c "
   SSL_DIR=/etc/nginx/ssl
   LE_DIR=/etc/letsencrypt/live/$DOMAIN
   if [ -f \"\$LE_DIR/fullchain.pem\" ]; then

@@ -102,7 +102,7 @@ describe('scaffold', () => {
     expect(setup).toContain('express/.env created from .env.example.');
 
     const ciLocal = await readFile(join(dest, 'scripts/ci-local.sh'), 'utf-8');
-    expect(ciLocal).toContain('run_js_component express');
+    expect(ciLocal).toContain('projx_dirs_of_type express');
     expect(ciLocal).toContain('gitleaks (tracked + untracked)');
     expect(ciLocal).toContain('--source "$ROOT_DIR"');
     expect(ciLocal).not.toContain('--files-from=-');
@@ -220,6 +220,14 @@ describe('scaffold', () => {
       expect(pkg.devDependencies['drizzle-kit']).toBeTruthy();
       expect(pkg.devDependencies.prisma).toBeUndefined();
       expect(pkg.scripts['db:push']).toBe('drizzle-kit push');
+
+      const dockerfile = await readFile(
+        join(dest, component, 'Dockerfile'),
+        'utf-8',
+      );
+      expect(dockerfile).toContain(
+        `corepack prepare pnpm@${PNPM_VERSION} --activate`,
+      );
     }
 
     const fastifyApp = await readFile(
@@ -664,7 +672,15 @@ describe('scaffold', () => {
     const pkg = JSON.parse(
       await readFile(join(dest, 'fastify/package.json'), 'utf-8'),
     );
-    expect(pkg.packageManager).toBe('pnpm@10.33.0');
+    expect(pkg.packageManager).toBe(`pnpm@${PNPM_VERSION}`);
+    expect(pkg.pnpm).toBeUndefined();
+
+    const workspace = await readFile(
+      join(dest, 'fastify/pnpm-workspace.yaml'),
+      'utf-8',
+    );
+    expect(workspace).toContain('overrides:');
+    expect(workspace).toContain('@opentelemetry/core');
   });
 
   it('does not create docker-compose without backend or frontend', async () => {

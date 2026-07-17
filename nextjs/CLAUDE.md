@@ -36,3 +36,4 @@
 - **`NEXT_PUBLIC_` vars** are the only env exposed to the client; runtime config is server-injected, not build-time inlined — don't reach for `process.env` in client components.
 - **OIDC env required at runtime**: the auth module fails loud without its OIDC config — CI/tests provide it (see the vitejs `VITE_OIDC_*` precedent; nextjs uses `NEXT_PUBLIC_OIDC_*`).
 - **Standalone Docker** serves `node server.js` on port 3000 — no nginx/certbot (unlike `vitejs`).
+- **pnpm 11 config lives in `pnpm-workspace.yaml`** — the `postcss` override and `allowBuilds` (`sharp`/`@sentry/cli` disabled; they ship prebuilt binaries) go there, **not** the package.json `pnpm` field. Adding a native dep with a build script means adding it to `allowBuilds` or pnpm 11 blocks it.

@@ -412,7 +412,7 @@ resource "aws_codebuild_project" "backend" {
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = "infra/cicd/buildspec.backend.yml"
+    buildspec = file("${path.module}/../cicd/buildspec.backend.yml")
   }
 
   artifacts {
@@ -458,7 +458,7 @@ resource "aws_codebuild_project" "backend" {
 
     environment_variable {
       name  = "FOLDER_PATH"
-      value = "backend"
+      value = var.backend_source_dir
     }
 
     environment_variable {
@@ -513,7 +513,7 @@ resource "aws_codebuild_project" "frontend" {
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = "infra/cicd/buildspec.frontend.yml"
+    buildspec = file("${path.module}/../cicd/buildspec.frontend.yml")
   }
 
   artifacts {
@@ -559,7 +559,7 @@ resource "aws_codebuild_project" "frontend" {
 
     environment_variable {
       name  = "FOLDER_PATH"
-      value = "frontend"
+      value = var.frontend_source_dir
     }
 
     environment_variable {

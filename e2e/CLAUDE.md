@@ -20,7 +20,7 @@
 | `eslint.config.js`, `tsconfig.json`, `.prettierrc` | Tooling                                        |
 
 - **Projects** — three browsers: `chromium`, `firefox`, `webkit`.
-- **`webServer`** — booted **only locally** (`process.env.CI ? undefined : localWebServers()`); CI runs against an already-running/external backend + frontend. Don't add a `sleep` — wait on the health endpoint.
+- **`webServer`** — booted **only locally** (`process.env.CI ? undefined : localWebServers()`); CI runs against an already-running/external backend + frontend. Don't add a `sleep` — wait on the health endpoint. It resolves the frontend + backend **sibling directories from their `.projx-component` markers** at load time (`resolveSibling`) and picks the boot command by backend kind — never hard-code `../frontend` / `../fastapi` (root [`../CLAUDE.md`](../CLAUDE.md) §"Never hard-code a component directory").
 
 ## Conventions
 

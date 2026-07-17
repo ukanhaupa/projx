@@ -5,7 +5,7 @@ Fastify + TypeScript backend template with automatic entity discovery, CRUD rout
 ## Prerequisites
 
 - Node.js >= 20
-- pnpm 10.x (`corepack enable && corepack prepare pnpm@10.33.0 --activate`)
+- pnpm 11.x (`corepack enable` — the exact version is pinned in `package.json`'s `packageManager` field)
 - PostgreSQL 16 running locally
 
 ## Quick Start

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Validate frontend/nginx.conf against the same nginx runtime image the
-# Dockerfile uses. Catches unknown directives (like `brotli on;` without
-# ngx_brotli installed) BEFORE deploy — the gate that would have prevented
-# the 2026-06-01 brotli-induced outage.
+# Validate each vitejs frontend's nginx.conf against the same nginx runtime
+# image the Dockerfile uses. Catches unknown directives (like `brotli on;`
+# without ngx_brotli installed) BEFORE deploy — the gate that would have
+# prevented the 2026-06-01 brotli-induced outage.
 #
-# Mechanism: pulls the nginx image declared in frontend/Dockerfile, mounts
-# nginx.conf + security-headers.conf + a dummy self-signed cert pair into the
+# Mechanism: pulls the nginx image declared in the frontend Dockerfile, mounts
+# nginx.conf + security-headers.inc + a dummy self-signed cert pair into the
 # expected paths, then runs `nginx -t`. `nginx -t` parses the full config and
 # validates every directive against the binary's compiled-in module set. If a
 # directive requires a module the image doesn't ship (e.g. ngx_brotli on stock
@@ -19,13 +19,77 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND_DIR="$REPO_ROOT/frontend"
-DOCKERFILE="$FRONTEND_DIR/Dockerfile"
-NGINX_CONF="$FRONTEND_DIR/nginx.conf"
-SECURITY_HEADERS="$FRONTEND_DIR/security-headers.conf"
 
-if [[ ! -f "$DOCKERFILE" || ! -f "$NGINX_CONF" ]]; then
-  echo "validate-nginx-config: no frontend/Dockerfile or frontend/nginx.conf — nothing to validate"
+# shellcheck source=scripts/projx-dirs.sh disable=SC1091
+. "$REPO_ROOT/scripts/projx-dirs.sh"
+
+validate_frontend_dir() {
+  local frontend_dir="$1"
+  local dockerfile="$frontend_dir/Dockerfile"
+  local nginx_conf="$frontend_dir/nginx.conf"
+  local security_headers="$frontend_dir/security-headers.inc"
+
+  if [[ ! -f "$dockerfile" || ! -f "$nginx_conf" ]]; then
+    echo "validate-nginx-config: $frontend_dir has no Dockerfile or nginx.conf — nothing to validate"
+    return 0
+  fi
+
+  local nginx_image
+  nginx_image=$(awk '
+    /^FROM .*nginx:/ { line = $0 }
+    END {
+      sub(/^FROM /, "", line)
+      sub(/ AS .*/, "", line)
+      print line
+    }
+  ' "$dockerfile")
+  if [[ -z "${nginx_image:-}" ]]; then
+    echo "ERROR validate-nginx-config: could not extract nginx image from $dockerfile" >&2
+    return 1
+  fi
+
+  if grep -qE 'apk add[^&]*nginx-mod-|--add-module' "$dockerfile"; then
+    cat >&2 <<EOF
+ERROR validate-nginx-config: $dockerfile installs nginx modules via apk or --add-module.
+      This gate validates against stock $nginx_image only and would miss those modules.
+      Replace it with:
+        docker build --target runtime -t frontend-nginx-validate $frontend_dir
+        docker run --rm -v ... frontend-nginx-validate nginx -t
+EOF
+    return 2
+  fi
+
+  echo "validate-nginx-config: validating $nginx_conf against $nginx_image"
+
+  local ssl_dir
+  ssl_dir=$(mktemp -d)
+  openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+    -keyout "$ssl_dir/privkey.pem" \
+    -out "$ssl_dir/fullchain.pem" \
+    -subj "/CN=test.local" -batch >/dev/null 2>&1
+
+  local rc=0
+  if [[ -f "$security_headers" ]]; then
+    docker run --rm \
+      -v "$nginx_conf:/etc/nginx/conf.d/default.conf:ro" \
+      -v "$security_headers:/etc/nginx/conf.d/security-headers.inc:ro" \
+      -v "$ssl_dir:/etc/nginx/ssl:ro" \
+      "$nginx_image" \
+      nginx -t || rc=$?
+  else
+    docker run --rm \
+      -v "$nginx_conf:/etc/nginx/conf.d/default.conf:ro" \
+      -v "$ssl_dir:/etc/nginx/ssl:ro" \
+      "$nginx_image" \
+      nginx -t || rc=$?
+  fi
+  rm -rf "$ssl_dir"
+  return "$rc"
+}
+
+FRONTENDS="$(projx_dirs_of_type vitejs "$REPO_ROOT" || true)"
+if [[ -z "$FRONTENDS" ]]; then
+  echo "validate-nginx-config: no vitejs frontend component — nothing to validate"
   exit 0
 fi
 
@@ -38,50 +102,11 @@ if ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-NGINX_IMAGE=$(awk '
-  /^FROM .*nginx:/ { line = $0 }
-  END {
-    sub(/^FROM /, "", line)
-    sub(/ AS .*/, "", line)
-    print line
-  }
-' "$DOCKERFILE")
-if [[ -z "${NGINX_IMAGE:-}" ]]; then
-  echo "ERROR validate-nginx-config: could not extract nginx image from $DOCKERFILE" >&2
-  exit 1
-fi
-
-if grep -qE 'apk add[^&]*nginx-mod-|--add-module' "$DOCKERFILE"; then
-  cat >&2 <<EOF
-ERROR validate-nginx-config: $DOCKERFILE installs nginx modules via apk or --add-module.
-      This gate validates against stock $NGINX_IMAGE only and would miss those modules.
-      Replace it with:
-        docker build --target runtime -t frontend-nginx-validate $FRONTEND_DIR
-        docker run --rm -v ... frontend-nginx-validate nginx -t
+rc=0
+while IFS= read -r rel; do
+  [[ -n "$rel" ]] || continue
+  validate_frontend_dir "$REPO_ROOT/$rel" || rc=$?
+done <<EOF
+$FRONTENDS
 EOF
-  exit 2
-fi
-
-echo "validate-nginx-config: validating $NGINX_CONF against $NGINX_IMAGE"
-
-SSL_DIR=$(mktemp -d)
-trap 'rm -rf "$SSL_DIR"' EXIT
-openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
-  -keyout "$SSL_DIR/privkey.pem" \
-  -out "$SSL_DIR/fullchain.pem" \
-  -subj "/CN=test.local" -batch >/dev/null 2>&1
-
-if [[ -f "$SECURITY_HEADERS" ]]; then
-  docker run --rm \
-    -v "$NGINX_CONF:/etc/nginx/conf.d/default.conf:ro" \
-    -v "$SECURITY_HEADERS:/etc/nginx/conf.d/security-headers.inc:ro" \
-    -v "$SSL_DIR:/etc/nginx/ssl:ro" \
-    "$NGINX_IMAGE" \
-    nginx -t
-else
-  docker run --rm \
-    -v "$NGINX_CONF:/etc/nginx/conf.d/default.conf:ro" \
-    -v "$SSL_DIR:/etc/nginx/ssl:ro" \
-    "$NGINX_IMAGE" \
-    nginx -t
-fi
+exit "$rc"

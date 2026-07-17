@@ -1,9 +1,17 @@
 * @<%= githubOwner %>
 
-infra/ @<%= githubOwner %>
+<% for (const inst of infraInstances) { %>
+<%= inst.path %>/ @<%= githubOwner %>
+<% } %>
 .github/workflows/ @<%= githubOwner %>
 scripts/deploy*.sh @<%= githubOwner %>
 scripts/rollback.sh @<%= githubOwner %>
-<% if (hasBackendMigrations) { %>backend/prisma/migrations/ @<%= githubOwner %>
-<% } %><% if (hasAdminPanelMigrations) { %>admin-panel/internal/db/migrations/ @<%= githubOwner %>
+<% for (const inst of fastifyInstances) { %>
+<%= inst.path %>/prisma/migrations/ @<%= githubOwner %>
+<% } %>
+<% for (const inst of expressInstances) { %>
+<%= inst.path %>/prisma/migrations/ @<%= githubOwner %>
+<% } %>
+<% for (const inst of adminPanelInstances) { %>
+<%= inst.path %>/internal/db/migrations/ @<%= githubOwner %>
 <% } %>
