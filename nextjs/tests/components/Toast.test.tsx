@@ -42,8 +42,13 @@ describe('Toast', () => {
     const user = setup();
     await user.click(screen.getByText('success'));
     expect(screen.getByText('Saved')).toBeInTheDocument();
-    expect(screen.getByText('Saved').closest('.toast')).toHaveClass(
-      'toast-success',
+    expect(screen.getByText('Saved').closest('[data-type]')).toHaveAttribute(
+      'data-type',
+      'success',
+    );
+    expect(screen.getByText('Saved').closest('[aria-live]')).toHaveAttribute(
+      'aria-live',
+      'polite',
     );
   });
 
@@ -57,7 +62,10 @@ describe('Toast', () => {
   it('defaults to the info type', async () => {
     const user = setup();
     await user.click(screen.getByText('default'));
-    expect(screen.getByText('FYI').closest('.toast')).toHaveClass('toast-info');
+    expect(screen.getByText('FYI').closest('[data-type]')).toHaveAttribute(
+      'data-type',
+      'info',
+    );
   });
 
   it('auto-dismisses after its duration elapses', async () => {
@@ -85,7 +93,7 @@ describe('Toast', () => {
   it('pauses the dismiss timer on hover and resumes on leave', async () => {
     const user = setup();
     await user.click(screen.getByText('success'));
-    const toast = screen.getByText('Saved').closest('.toast')!;
+    const toast = screen.getByText('Saved').closest('[data-type]')!;
     await user.hover(toast);
     await act(async () => {
       vi.advanceTimersByTime(10000);

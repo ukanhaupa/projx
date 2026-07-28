@@ -88,7 +88,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python3 scripts/style-check.py vitejs/src
+      - run: python3 scripts/style-check.py vitejs/src nextjs/src
 
   cli:
     name: CLI (lint + typecheck + build + test + audit)

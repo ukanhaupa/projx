@@ -7,29 +7,29 @@
 ## Stack
 
 - **Framework** — React (function components + hooks), TypeScript strict
-- **Build** — Vite; `react-router.config.ts` present
-- **Routing** — `react-router-dom`
+- **Build** — Vite (library mode, client-only SPA — no SSR/framework mode)
+- **Routing** — `react-router` v8 (library mode: `BrowserRouter` / `Routes` / `Route`); imports come from `react-router`, not the retired `react-router-dom`
 - **State** — React Context (theme, toast, confirm); no Redux, no TanStack Query
 - **Data** — one fetch wrapper in `src/api.ts` — never `fetch` direct from components
-- **Styling** — CSS custom properties / design tokens in `src/index.css`. **No Tailwind, no raw hex/px** (root §"CSS discipline")
+- **Styling** — Tailwind CSS v4 via `@tailwindcss/vite`; design tokens in the `@theme` block of `src/index.css`, dark theme overrides the same custom properties under `[data-theme='dark']`. **No bracket-arbitrary values, no raw hex/px** (root §"CSS discipline")
 - **Test** — Vitest + React Testing Library + jsdom. **Tests live in `tests/`, not `src/`**
 - **Package manager** — pnpm
 
 ## Layout
 
-| Path                                                         | What it holds                                                                                                |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `src/main.tsx`                                               | DOM mount + provider tree (below)                                                                            |
-| `src/App.tsx`                                                | Router / route definitions                                                                                   |
-| `src/api.ts`                                                 | The only place `fetch` is called — Bearer header, `{ detail, request_id }` error normalization, 401 handling |
-| `src/auth.ts`                                                | JWT decode / `isAuthenticated` (module, not a context provider)                                              |
-| `src/theme.tsx`                                              | `ThemeProvider` — `data-theme` on `<html>`, localStorage, `prefers-color-scheme`                             |
-| `src/index.css`                                              | Design tokens (light + dark), resets                                                                         |
-| `src/components/`                                            | `Layout`, `Toast`, `ConfirmDialog`, `ErrorBoundary`, `ErrorScaffold`                                         |
-| `src/pages/`                                                 | `Dashboard`, `Login`, `NotFound`                                                                             |
-| `tests/`                                                     | `*.test.ts(x)` + `test-setup.ts` — mirrors `src/`                                                            |
-| `nginx.conf`, `security-headers.inc`, `docker-entrypoint.sh` | Prod container serving config                                                                                |
-| `scripts/check-bundle-size.sh`                               | Bundle-size budget gate                                                                                      |
+| Path                                                         | What it holds                                                                                                  |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `src/main.tsx`                                               | DOM mount + provider tree (below)                                                                              |
+| `src/App.tsx`                                                | Router / route definitions                                                                                     |
+| `src/api.ts`                                                 | The only place `fetch` is called — Bearer header, `{ detail, request_id }` error normalization, 401 handling   |
+| `src/auth.ts`                                                | JWT decode / `isAuthenticated` (module, not a context provider)                                                |
+| `src/theme.tsx`                                              | `ThemeProvider` — `data-theme` on `<html>`, localStorage, `prefers-color-scheme`                               |
+| `src/index.css`                                              | `@import 'tailwindcss'`, `@theme` tokens (light) + `[data-theme='dark']` overrides, `@layer base`/`components` |
+| `src/components/`                                            | `Layout`, `Toast`, `ConfirmDialog`, `ErrorBoundary`, `ErrorScaffold`                                           |
+| `src/pages/`                                                 | `Dashboard`, `Login`, `NotFound`                                                                               |
+| `tests/`                                                     | `*.test.ts(x)` + `test-setup.ts` — mirrors `src/`                                                              |
+| `nginx.conf`, `security-headers.inc`, `docker-entrypoint.sh` | Prod container serving config                                                                                  |
+| `scripts/check-bundle-size.sh`                               | Bundle-size budget gate                                                                                        |
 
 ## Provider tree — assembled at the mount (verified)
 

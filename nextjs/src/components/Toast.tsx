@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 className={`toast toast-${t.type}${t.exiting ? ' toast-exit' : ''}`}
                 onMouseEnter={() => pauseTimer(t.id)}
                 onMouseLeave={() => startTimer(t.id, t.type)}
-                role='alert'
+                data-type={t.type}
               >
                 <span className='toast-message'>{t.message}</span>
                 <button
@@ -112,7 +112,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 className={`toast toast-${t.type}${t.exiting ? ' toast-exit' : ''}`}
                 onMouseEnter={() => pauseTimer(t.id)}
                 onMouseLeave={() => startTimer(t.id, t.type)}
-                role='alert'
+                data-type={t.type}
               >
                 <span className='toast-message'>{t.message}</span>
                 <button

@@ -50,7 +50,7 @@ function renderAction(action: ErrorAction, variant: 'primary' | 'secondary') {
   const className = `error-scaffold__action error-scaffold__action--${variant}`;
   if (action.href) {
     return (
-      <a className={className} href={action.href}>
+      <a className={className} data-variant={variant} href={action.href}>
         {action.label}
       </a>
     );
@@ -58,6 +58,7 @@ function renderAction(action: ErrorAction, variant: 'primary' | 'secondary') {
   return (
     <button
       className={className}
+      data-variant={variant}
       onClick={action.onClick}
       disabled={action.disabled}
     >

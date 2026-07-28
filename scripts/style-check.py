@@ -6,16 +6,48 @@ from pathlib import Path
 TARGET_PROPS = {"background", "background-color", "color"}
 RAW_ELEMENT_SELECTOR = re.compile(r"\.[A-Za-z0-9_-][^{,]*(?:\s+|>)\b(?:button|a)\b")
 
+RAW_VALUE = r"#[0-9a-fA-F]{3,8}|(?:rgba?|hsla?)\(|-?[0-9.]+(?:px|rem|em|vh|vw|vmin|vmax|ch|ex|pt|%)"
+ARBITRARY_VALUE = re.compile(rf"[a-zA-Z0-9)\]]-\[\s*(?:{RAW_VALUE})[^\]]*\](?!:)")
+INLINE_RAW_COLOR = re.compile(
+    rf"style=\{{\{{[^}}]*?:\s*['\"`]\s*(?:{RAW_VALUE})", re.DOTALL
+)
+SOURCE_SUFFIXES = {".tsx", ".jsx"}
 
-def iter_css_files(paths: list[str]) -> list[Path]:
+
+def iter_files(paths: list[str], suffixes: set[str]) -> list[Path]:
     files: list[Path] = []
     for raw in paths:
         path = Path(raw)
-        if path.is_file() and path.suffix == ".css":
+        if path.is_file() and path.suffix in suffixes:
             files.append(path)
         elif path.is_dir():
-            files.extend(sorted(path.rglob("*.css")))
-    return files
+            for suffix in sorted(suffixes):
+                files.extend(sorted(path.rglob(f"*{suffix}")))
+    return sorted(set(files))
+
+
+def iter_css_files(paths: list[str]) -> list[Path]:
+    return iter_files(paths, {".css"})
+
+
+def check_arbitrary_values(path: Path) -> list[str]:
+    content = path.read_text()
+    violations: list[str] = []
+    for pattern, message in (
+        (
+            ARBITRARY_VALUE,
+            "Tailwind arbitrary value bypasses the token scale; use a named token utility or request the token",
+        ),
+        (
+            INLINE_RAW_COLOR,
+            "inline style uses a raw value; use a token utility or var(--*)",
+        ),
+    ):
+        for match in pattern.finditer(content):
+            line = content.count("\n", 0, match.start()) + 1
+            snippet = match.group(0).split("\n")[0][:60]
+            violations.append(f"{path}:{line}: {message} -- {snippet}")
+    return violations
 
 
 def declarations(block: str) -> set[str]:
@@ -73,6 +105,8 @@ def main() -> int:
     violations: list[str] = []
     for path in iter_css_files(paths):
         violations.extend(check_file(path))
+    for path in iter_files(paths, SOURCE_SUFFIXES):
+        violations.extend(check_arbitrary_values(path))
     if violations:
         print("\n".join(violations), file=sys.stderr)
         return 1

@@ -167,6 +167,18 @@ run_js_component() {
   )
 }
 
+run_style_check() {
+  local dir="$1"
+  local script="$ROOT_DIR/scripts/style-check.py"
+  [ -f "$script" ] || return 0
+  [ -d "$ROOT_DIR/$dir/src" ] || return 0
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "$dir: python3 not found — skipping style-check (token discipline unverified)"
+    return 0
+  fi
+  run_step "$dir style-check" python3 "$script" "$ROOT_DIR/$dir/src"
+}
+
 ensure_gitleaks() {
   local version="8.24.3"
   local cache_dir="${HOME}/.cache/ci-local"
@@ -385,6 +397,7 @@ sec_vitejs() {
   while IFS= read -r dir; do
     [ -n "$dir" ] || continue
     run_js_component "$dir" || rc=1
+    run_style_check "$dir" || rc=1
     if [ -d "$ROOT_DIR/$dir/dist/assets" ] && [ -x "$ROOT_DIR/scripts/check-bundle-size.sh" ]; then
       (cd "$ROOT_DIR/$dir" && run_step "$dir bundle-size" bash "$ROOT_DIR/scripts/check-bundle-size.sh") || rc=1
     fi
@@ -397,6 +410,7 @@ sec_nextjs() {
   while IFS= read -r dir; do
     [ -n "$dir" ] || continue
     run_js_component "$dir" || rc=1
+    run_style_check "$dir" || rc=1
   done < <(projx_dirs_of_type nextjs)
   return "$rc"
 }

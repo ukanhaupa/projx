@@ -12,6 +12,7 @@
 - **Config** — DB-backed runtime config via server-injected `window.__RUNTIME_CONFIG__` (`src/lib/runtime-config*.ts`); env bootstrap-only, no `NODE_ENV` branching
 - **Errors** — `ErrorScaffold` wired into route-level `error.tsx` / `global-error.tsx` / `not-found.tsx`; API client parses `{detail, request_id}`
 - **Monitoring** — `@sentry/nextjs` (DSN-from-env gated), `instrumentation*.ts` + `sentry.*.config.ts`
+- **Styling** — Tailwind CSS v4 via `@tailwindcss/postcss` (`postcss.config.mjs`); design tokens live in the `@theme` block of `src/app/globals.css`, dark theme overrides the same custom properties under `[data-theme='dark']`
 - **Test** — Vitest + v8 coverage; E2E coverage via SWC instrument (`NEXT_COVERAGE`)
 
 ## Layout
@@ -37,3 +38,6 @@
 - **OIDC env required at runtime**: the auth module fails loud without its OIDC config — CI/tests provide it (see the vitejs `VITE_OIDC_*` precedent; nextjs uses `NEXT_PUBLIC_OIDC_*`).
 - **Standalone Docker** serves `node server.js` on port 3000 — no nginx/certbot (unlike `vitejs`).
 - **pnpm 11 config lives in `pnpm-workspace.yaml`** — the `postcss` override and `allowBuilds` (`sharp`/`@sentry/cli` disabled; they ship prebuilt binaries) go there, **not** the package.json `pnpm` field. Adding a native dep with a build script means adding it to `allowBuilds` or pnpm 11 blocks it.
+- **`@theme` vs `:root` in `globals.css`** — a token goes in `@theme` when Tailwind should generate a utility from it (`--color-*`, `--spacing-*`, `--text-*`, `--radius-*`, `--shadow-*`, `--font-*`, `--font-weight-*`, `--leading-*`). Tokens only ever read by CSS (`--z-*`, `--sidebar-w`, `--transition-*`, `--ring-*`, `--border-width`) stay in `:root` — putting them in `@theme` generates nothing and implies a utility axis that doesn't exist.
+- **Never `@theme inline`** — inline mode bakes the value into each utility, which silently breaks the `[data-theme='dark']` override model. Plain `@theme` emits `var()` references, so flipping a custom property reskins every utility. For the same reason there is no `dark:` variant anywhere in this template.
+- **Tailwind namespaces are load-bearing** — font _weights_ must be `--font-weight-*`, not `--font-*` (that namespace is font-family), and the spacing scale must be `--spacing-*`, not `--space-*`. Getting these wrong generates broken or missing utilities rather than erroring.

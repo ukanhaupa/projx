@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router';
 import { initAuth } from './auth';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
