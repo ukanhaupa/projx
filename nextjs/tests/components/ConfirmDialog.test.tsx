@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConfirmProvider, useConfirm } from '@/components/ConfirmDialog';
@@ -138,10 +138,10 @@ describe('ConfirmDialog', () => {
     );
     await user.click(screen.getByText('Open'));
     expect(screen.getByText('Proceed?')).toBeInTheDocument();
-    const confirmBtn = screen
-      .getAllByText('Confirm')
-      .find((el) => el.classList.contains('confirm-btn'));
-    expect(confirmBtn?.className).toContain('primary');
+    const confirmBtn = within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Confirm',
+    });
+    expect(confirmBtn).toHaveAttribute('data-variant', 'primary');
   });
 
   it('locks body scroll when open and restores on close', async () => {

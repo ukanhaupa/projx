@@ -5,10 +5,15 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-  }: {
+    ...rest
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 import NotFound from '@/app/not-found';

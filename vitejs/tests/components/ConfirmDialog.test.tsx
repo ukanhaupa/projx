@@ -162,7 +162,7 @@ describe('ConfirmDialog', () => {
     // Default confirmLabel is 'Confirm' and default variant is 'primary'
     const confirmBtns = screen.getAllByText('Confirm');
     const confirmBtn = confirmBtns.find(
-      (el) => el.tagName === 'BUTTON' && el.classList.contains('confirm-btn'),
+      (el) => el.tagName === 'BUTTON' && el.hasAttribute('data-variant'),
     );
     expect(confirmBtn?.className).toContain('primary');
   });

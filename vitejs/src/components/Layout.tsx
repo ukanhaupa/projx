@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import { getUserInfo, logout } from '../auth';
 import { useTheme } from '../theme';
 
@@ -65,12 +65,14 @@ export function Layout() {
       {sidebarOpen && (
         <div
           className='sidebar-backdrop'
+          data-sidebar-backdrop=''
           onClick={closeSidebar}
           aria-hidden='true'
         />
       )}
 
       <nav
+        id='sidebar-nav'
         className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}
         aria-label='Main navigation'
       >

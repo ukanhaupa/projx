@@ -6,13 +6,12 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-    className,
-  }: {
+    ...rest
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     children: React.ReactNode;
-    className?: string;
   }) => (
-    <a href={href} className={className}>
+    <a href={href} {...rest}>
       {children}
     </a>
   ),
@@ -52,11 +51,13 @@ describe('ErrorScaffold', () => {
         secondaryAction={{ label: 'Go home', href: '/' }}
       />,
     );
-    expect(screen.getByRole('button', { name: 'Retry' })).toHaveClass(
-      'error-scaffold__action--primary',
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveAttribute(
+      'data-variant',
+      'primary',
     );
-    expect(screen.getByRole('link', { name: 'Go home' })).toHaveClass(
-      'error-scaffold__action--secondary',
+    expect(screen.getByRole('link', { name: 'Go home' })).toHaveAttribute(
+      'data-variant',
+      'secondary',
     );
   });
 
