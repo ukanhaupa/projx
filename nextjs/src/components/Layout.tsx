@@ -72,12 +72,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {sidebarOpen && (
         <div
           className='sidebar-backdrop'
+          data-sidebar-backdrop=''
           onClick={closeSidebar}
           aria-hidden='true'
         />
       )}
 
       <nav
+        id='sidebar-nav'
         className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}
         aria-label='Main navigation'
       >
@@ -108,6 +110,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               role='listitem'
+              aria-current={pathname === item.href ? 'page' : undefined}
               className={pathname === item.href ? 'active' : undefined}
             >
               <span className='nav-icon' aria-hidden='true'>

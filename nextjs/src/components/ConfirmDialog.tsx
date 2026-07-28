@@ -113,6 +113,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <button
                 type='button'
                 className={`confirm-btn ${options.variant ?? 'primary'}`}
+                data-variant={options.variant ?? 'primary'}
                 onClick={() => close(true)}
               >
                 {options.confirmLabel ?? 'Confirm'}

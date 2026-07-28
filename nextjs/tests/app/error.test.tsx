@@ -11,13 +11,12 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-    className,
-  }: {
+    ...rest
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     children: React.ReactNode;
-    className?: string;
   }) => (
-    <a href={href} className={className}>
+    <a href={href} {...rest}>
       {children}
     </a>
   ),

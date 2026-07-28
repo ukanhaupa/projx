@@ -77,3 +77,4 @@ Ships `schema.prisma` only — `prisma/migrations/` carries just `migration_lock
 
 - Tests need a live Postgres — `tests/global-setup.ts` provisions it; a missing `DATABASE_URL` fails the suite, not skips it.
 - `pnpm exec` after a pipe masks exit codes — use `${PIPESTATUS[0]}`.
+- **The `brace-expansion` override in `pnpm-workspace.yaml` is scoped to the 5.x line** (`>=5.0.0 <5.0.8` → `>=5.0.8 <6`) — never a blanket `<5.0.8`. A blanket bound drags `minimatch@9` (pulled by `@vitest/coverage-v8` → `test-exclude` → `glob`) off its native, already-patched `brace-expansion@2.x` onto `5.x`, whose CJS export shape breaks `minimatch.braceExpand` (`TypeError: brace_expansion_1.default is not a function`) and crashes coverage collection. Keep the override 5.x-only.

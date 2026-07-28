@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 vi.mock('../../src/auth', () => ({
   getUserInfo: vi.fn(() => ({ name: 'TestUser', email: 'test@example.com' })),
@@ -82,8 +82,9 @@ describe('Layout', () => {
   it('reads collapsed state from localStorage on mount', () => {
     localStorage.setItem('sidebar-collapsed', 'true');
     renderLayout();
-    const layout = document.querySelector('.layout');
-    expect(layout?.classList.contains('sidebar-collapsed')).toBe(true);
+    expect(
+      screen.getByRole('button', { name: /expand sidebar/i }),
+    ).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('mobile menu button opens sidebar', async () => {
@@ -93,8 +94,7 @@ describe('Layout', () => {
       name: /open navigation menu/i,
     });
     await user.click(menuBtn);
-    const sidebar = document.querySelector('.sidebar');
-    expect(sidebar?.classList.contains('sidebar-open')).toBe(true);
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('escape key closes mobile sidebar', async () => {

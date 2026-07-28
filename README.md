@@ -97,8 +97,8 @@ If this saves you even one hour, it's already paid for itself. (It's free.)
 | `go`          | Go, Chi, GORM / sqlc / ent                                    | Auto-entity CRUD, request_id error envelope, soft-delete, lifecycle hooks                    |
 | `rust`        | Rust, Axum, SeaORM                                            | Auto-entity CRUD, request_id task-local, tower middleware, panic-recoverer, distroless build |
 | `laravel`     | Laravel 11, PHP 8.3+, Eloquent, Sanctum                       | Auto-entity CRUD, request_id envelope, Pest + larastan gates, FrankenPHP runtime             |
-| `vitejs`      | React 19, TypeScript, Vite                                    | Auth, theming, design tokens, light/dark mode                                                |
-| `nextjs`      | React 19, TypeScript, Next.js App Router                      | Auth, theming, design tokens, light/dark mode, `output: 'standalone'` node server            |
+| `vitejs`      | React 19, TypeScript, Vite, Tailwind v4                       | Auth, theming, `@theme` design tokens, light/dark mode                                       |
+| `nextjs`      | React 19, TypeScript, Next.js App Router, Tailwind v4         | Auth, theming, `@theme` design tokens, light/dark mode, `output: 'standalone'` node server   |
 | `mobile`      | Flutter, Riverpod, GoRouter                                   | Auth, biometric, theming, GoRouter shell                                                     |
 | `e2e`         | Playwright                                                    | Page object model, auth fixtures, accessibility scans                                        |
 | `infra`       | Terraform, AWS                                                | EKS, RDS, VPC, ALB, CodePipeline, multi-environment                                          |
@@ -444,7 +444,7 @@ The core idea: define a data model, get everything else for free.
 
 **Field privacy** — Sensitive columns (`password_hash`, `secret`, `api_key`, `mfa_secret`, etc.) are automatically stripped from API responses via a built-in baseline. Add project-specific hidden fields per entity (`__hidden_fields__` in FastAPI, `hiddenFields` in Fastify). Mark entire entities as `__private__` / `private: true` to hide them from the API entirely — no routes registered.
 
-**Frontend** — Ships a React shell with auth, theming, and design tokens. Build your own pages using the generated types from `gen entity`.
+**Frontend** — Ships a React shell with auth, theming, and Tailwind v4 wired to a `@theme` token block. Dark mode overrides the same custom properties under `[data-theme='dark']`, so utilities reskin without a `dark:` variant. Build your own pages using the generated types from `gen entity`.
 
 **Mobile** — Ships a Flutter shell with auth, biometric, and GoRouter scaffolding. Build screens using the generated Dart models from `gen entity`.
 

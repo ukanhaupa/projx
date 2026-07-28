@@ -11,15 +11,12 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-    className,
-    role,
-  }: {
+    ...rest
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     children: React.ReactNode;
-    className?: string;
-    role?: string;
   }) => (
-    <a href={href} className={className} role={role}>
+    <a href={href} {...rest}>
       {children}
     </a>
   ),
@@ -72,7 +69,7 @@ describe('Layout', () => {
         <p>x</p>
       </Layout>,
     );
-    expect(dashboardLink()).toHaveClass('active');
+    expect(dashboardLink()).toHaveAttribute('aria-current', 'page');
   });
 
   it('logs out when the logout button is clicked', async () => {
@@ -110,15 +107,11 @@ describe('Layout', () => {
       name: 'Open navigation menu',
     });
     await user.click(menuBtn);
-    expect(screen.getByLabelText('Main navigation')).toHaveClass(
-      'sidebar-open',
-    );
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'true');
     expect(document.body.style.overflow).toBe('hidden');
 
     await user.keyboard('{Escape}');
-    expect(screen.getByLabelText('Main navigation')).not.toHaveClass(
-      'sidebar-open',
-    );
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'false');
     expect(document.body.style.overflow).toBe('');
   });
 
@@ -129,14 +122,13 @@ describe('Layout', () => {
         <p>x</p>
       </Layout>,
     );
-    await user.click(
-      screen.getByRole('button', { name: 'Open navigation menu' }),
-    );
-    const backdrop = document.querySelector('.sidebar-backdrop')!;
+    const menuBtn = screen.getByRole('button', {
+      name: 'Open navigation menu',
+    });
+    await user.click(menuBtn);
+    const backdrop = document.querySelector('[data-sidebar-backdrop]')!;
     await user.click(backdrop);
-    expect(screen.getByLabelText('Main navigation')).not.toHaveClass(
-      'sidebar-open',
-    );
+    expect(menuBtn).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('persists and restores the collapsed state', async () => {

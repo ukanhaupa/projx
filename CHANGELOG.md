@@ -2,7 +2,43 @@
 
 All notable changes to projx are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Cleared every `pnpm audit --prod` advisory across the four JavaScript templates**, so freshly scaffolded projects (and the projx repo's own CI) start with a clean audit. The CLI fetches templates from `main`, so these reach `create-projx` users on merge — no CLI release required. Each fix pins the patched version where the dependency is declared, or via a `pnpm-workspace.yaml` `overrides` entry for transitive deps:
+  - **`vitejs`** — migrated `react-router-dom@7` → `react-router@8.3.0`. React Router v8 unified the packages (there is no `react-router-dom@8`), so imports now come from `react-router`; the classic library-mode surface the template uses (`BrowserRouter` / `Routes` / `Route` / `NavLink` / `Outlet` / `useLocation` / `MemoryRouter`) is unchanged. Clears the RSC-mode CSRF-bypass advisory ([GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2)), which is patched only in 8.3.0 and has no fix in the v7 line. Removed the vestigial `react-router.config.ts` (framework-mode config importing the uninstalled `@react-router/dev`, never consumed by the Vite build).
+  - **`nextjs`** — `next` 16.2.9 → 16.2.12 (server-function endpoint disclosure), plus `overrides` for `brace-expansion` (5.x-line-scoped `>=5.0.0 <5.0.8` → `>=5.0.8 <6` — same minimatch-CJS constraint as fastify, see below), `fast-uri` (≥3.1.4 <4), and `sharp` (≥0.35.0).
+  - **`fastify`** — `@fastify/swagger-ui` ^5.2.6 → ^6.1.0, plus `overrides` forcing `@fastify/static` ≥10.1.2 ([GHSA-8pvw-jcv7-9cmj](https://github.com/advisories/GHSA-8pvw-jcv7-9cmj), authorization bypass via non-canonical URL paths — no swagger-ui release pulls a patched `@fastify/static` yet), `find-my-way` ≥9.7.0 ([GHSA-c96f-x56v-gq3h](https://github.com/advisories/GHSA-c96f-x56v-gq3h), HTTP/2 DoS), `fast-uri` ≥3.1.4 <4, and `brace-expansion` — the override is **scoped to the 5.x line** (`>=5.0.0 <5.0.8` → `>=5.0.8 <6`), **not** a blanket `<5.0.8`. A blanket override forces `minimatch@9` (pulled by `@vitest/coverage-v8` → `test-exclude` → `glob`) from its native, already-patched `brace-expansion@2.x` onto `5.x`, whose CJS export shape breaks minimatch's `braceExpand` (`TypeError: brace_expansion_1.default is not a function`) and crashes coverage collection. The 5.x-only bound leaves `minimatch@9` on `2.x` and only bumps the genuinely-5.x consumers. The swagger UI registration API (`routePrefix`, `uiConfig`) is unchanged across the v5→v6 bump.
+  - **`express`** — `overrides` forcing `body-parser` ≥2.3.0 ([GHSA-v422-hmwv-36x6](https://github.com/advisories/GHSA-v422-hmwv-36x6), DoS when an invalid limit silently disables body-size enforcement).
+
+### Fixed
+
+- **Three accessibility defects in both frontend templates**, all pre-existing and all invisible because the tests asserted on style classes rather than accessible state:
+  - **Sidebar nav links had no `aria-current`** — the `.active` class was purely visual, so assistive tech could not identify the current page. `nextjs` now sets `aria-current='page'`; `vitejs` gets it free from react-router's `NavLink`.
+  - **`aria-controls='sidebar-nav'` was a dangling IDREF** — no element carried that `id`, failing axe's `aria-valid-attr-value`. The `<nav>` now carries `id='sidebar-nav'`.
+  - **Every toast carried a redundant inner `role='alert'`** nested inside its live-region wrapper. In the polite branch that overrode `aria-live='polite'` and forced assertive announcement of routine success/info messages. The inner roles are gone; the two wrapper regions own announcement.
+- **All 13 remaining CSS-class test assertions rewritten to assert accessible state**, per the house rule that tests never couple to class names. `toHaveClass('sidebar-open')` became `aria-expanded` on the owning control; presentational variants (toast type, action/confirm variant) became semantic `data-type` / `data-variant` attributes that survive a restyle. Without this, a restyle passes its tests for the wrong reason.
+- **The five `next/link` test mocks silently swallowed props** — each destructured only `href`/`className`/`role` and dropped the rest, so any new attribute on a `<Link>` was invisible to assertions. That is precisely what masked the missing `aria-current`. Replaced with one canonical mock that spreads the remaining props, matching real `Link` behaviour.
+- **`scripts/style-check.py` was wired into GitHub Actions for `vitejs` only and into `scripts/ci-local.sh` not at all** — so `nextjs` style violations shipped unchecked and no local gate ever ran the token discipline. Added a `run_style_check` step to both frontend sections of `ci-local.sh` (warning rather than silently skipping when `python3` is absent) and extended the CI invocation to both templates.
+
+### Removed
+
+- **~450 lines per template of dead starter-kit CSS** — 33 class families (`badge*`, `card*`, `entity-table`, `filter-*`, `pagination*`, `skeleton*`, `loading-*`, `table-*`, `field-*`, `search-input`, `empty-state`, `page-header`, `sr-only`) that no component referenced and that `gen entity` never emitted markup for (it generates TypeScript interfaces only). Tailwind supplies these compositions directly and ships `sr-only` as a built-in utility. Every dynamically-composed class was verified present before the sweep (`toast-${type}`, `sidebar-collapsed`, `sidebar-open`, `error-scaffold__action--${variant}`, `.active`, `.toast-exit`). `vitejs` CSS output dropped 32.2 kB → 24.2 kB (gzip 6.4 → 5.3 kB).
+
 ## [1.9.6] - 2026-07-16
+
+### Added
+
+- **Frontend templates now ship Tailwind CSS v4, with the design-token layer as the single source of truth.** Both `vitejs` and `nextjs` previously hand-wrote every style against CSS custom properties and explicitly banned Tailwind. Tailwind v4 removes the reason for that ban: it is CSS-first, so the `@theme` block _is_ a custom-property declaration block, utilities compile to `var()` references, and dark mode stays a variable override rather than a `dark:` variant duplicated at every call site. The token contract other components depend on (including the Flutter theme mapping) is unchanged — the names and values are byte-identical, only the enclosing block moved.
+  - **`nextjs`** — added `tailwindcss` + `@tailwindcss/postcss` (4.3.3, exact-pinned to match the template's convention) and a `postcss.config.mjs`. `src/app/globals.css` restructured to `@import 'tailwindcss'` → `@theme` (utility-generating tokens) → `:root` (CSS-only tokens) → `[data-theme='dark']` → `@layer base` → `@layer components`.
+  - **`vitejs`** — added `tailwindcss` + `@tailwindcss/vite` (caret-ranged to match the template's convention) and registered the plugin in `vite.config.ts`. `src/index.css` restructured identically; the 83 decorative comment lines were dropped in the rewrite (house rule: no decorative section headers).
+  - **Token renames required by Tailwind's namespaces** — `--space-*` → `--spacing-*` (spacing utilities) and `--font-{normal,medium,semibold,bold}` → `--font-weight-*` (the `--font-*` namespace is font-family, so the old names would have generated broken family utilities). `--font-sans` / `--font-mono` are unchanged. All 126 `var(--space-*)` and 19 `var(--font-*)` call sites were rewritten with them.
+  - **Tokens that generate no utility stay in `:root`** — `--z-*`, `--sidebar-w`, `--header-h`, `--content-max-w`, `--transition-*`, `--ring-*`, `--border-width`. Putting them in `@theme` emits the variable but implies a utility axis that does not exist.
+  - **`color-scheme: dark` is now set inside the `[data-theme='dark']` block** so native form controls, scrollbars, and the `light-dark()` function follow the app's theme attribute instead of the OS setting.
+  - Component styles remain hand-written CSS, now inside `@layer components` so Tailwind's `utilities` layer correctly overrides them.
+
+- **`scripts/style-check.py` now enforces the arbitrary-value ban.** With Tailwind in play the token boundary moves from "no raw hex/px in CSS" to "no bracket-arbitrary values in JSX", so the linter gained a JSX/TSX pass that flags `bg-[#1a1a1a]`, `p-[13px]`, `w-[347px]`, `text-[15px]`, and `style={{ color: '#fff' }}`. It deliberately does **not** flag arbitrary _variants_ (`data-[state=open]:`, `[&>*]:`, `min-[320px]:`) — those select, they don't introduce a value. The existing raw-button/anchor-color CSS check is unchanged.
 
 ### Fixed
 

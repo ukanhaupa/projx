@@ -31,11 +31,13 @@ describe('ErrorScaffold', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Retry' })).toHaveClass(
-      'error-scaffold__action--primary',
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveAttribute(
+      'data-variant',
+      'primary',
     );
-    expect(screen.getByRole('link', { name: 'Go home' })).toHaveClass(
-      'error-scaffold__action--secondary',
+    expect(screen.getByRole('link', { name: 'Go home' })).toHaveAttribute(
+      'data-variant',
+      'secondary',
     );
   });
 
