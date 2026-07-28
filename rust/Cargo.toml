@@ -55,7 +55,7 @@ sqlx = { version = "0.8", default-features = false, features = [
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 argon2 = "0.5"
 totp-rs = { version = "5", features = ["gen_secret"] }
 base32 = "0.5"
