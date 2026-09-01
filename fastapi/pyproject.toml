@@ -18,7 +18,7 @@ dependencies = [
     "pydantic>=2.11.7,<3.0.0",
     "aiomysql>=0.2.0,<0.4.0",
     "pyjwt>=2.13.0,<3.0.0",
-    "cryptography>=48.0.1,<49.0.0",
+    "cryptography>=48.0.1,<51.0.0",
     # projx-anchor: deps
     "sentry-sdk>=2.62.0",
     "slowapi>=0.1.9",
